@@ -1,6 +1,6 @@
 use core::{ffi::CStr, mem::size_of};
 
-use alloc::{string::{String, ToString}, vec::Vec};
+use alloc::{string::{String, ToString}, vec::Vec, boxed::Box};
 use anyhow::Context;
 use obfstr::obfstr;
 use valthrun_driver_shared::SearchPattern;
@@ -91,6 +91,17 @@ pub struct KModule {
 }
 
 impl KModule {
+    fn from_module_entry(entry: &_SYSTEM_MODULE_ENTRY) -> Self {
+        Self {
+            file_path: CStr::from_bytes_until_nul(&entry.FullPathName).unwrap_or_default().to_string_lossy().to_string(),
+            file_name: CStr::from_bytes_until_nul(&entry.FullPathName[entry.OffsetToFileName as usize..]).unwrap_or_default().to_string_lossy().to_string(),
+            base_address: entry.ImageBase as usize, 
+            module_size: entry.ImageSize as usize
+        }
+    }
+}
+
+impl KModule {
     fn section_headers(&self) -> anyhow::Result<&'static [IMAGE_SECTION_HEADER]> {
         let header = unsafe { RtlImageNtHeader(self.base_address as PVOID).as_mut() }
             .with_context(|| obfstr!("RtlImageNtHeader failed").to_string())?;
@@ -124,36 +135,35 @@ impl KModule {
         )
     }
 
-    pub fn query_modules() -> anyhow::Result<impl Iterator<Item = KModule>> {
+    pub fn query_modules() -> anyhow::Result<Box<impl Iterator<Item = KModule>>> {
         unsafe {
             let mut bytes = 0;
             ZwQuerySystemInformation(SystemModuleInformation, core::ptr::null_mut(), 0, &mut bytes);
+
+            let mut buffer = Vec::<u8>::with_capacity(bytes as usize);
+            buffer.set_len(bytes as usize);
     
-            let mut buffer = Vec::<u8>::new();
-            buffer.resize(bytes as usize, 0);
-    
-            ZwQuerySystemInformation(SystemModuleInformation, buffer.as_mut_ptr() as *mut (), bytes, core::ptr::null_mut())
+            ZwQuerySystemInformation(SystemModuleInformation, buffer.as_mut_ptr() as *mut (), bytes, &mut bytes)
                 .ok()
                 .map_err(|code| anyhow::anyhow!("{} -> {:X}", obfstr!("ZwQuerySystemInformation query"), code))?;
     
             let info = &*core::mem::transmute::<_, *const _SYSTEM_MODULE_INFORMATION>(buffer.as_ptr());
-            Ok(
+            Ok(Box::new(
                 info.modules()
                     .iter()
-                    .map(|entry| KModule {
-                        file_path: CStr::from_bytes_until_nul(&entry.FullPathName).unwrap_or_default().to_string_lossy().to_string(),
-                        file_name: CStr::from_bytes_until_nul(&entry.FullPathName[entry.OffsetToFileName as usize..]).unwrap_or_default().to_string_lossy().to_string(),
-                        base_address: entry.ImageBase as usize, 
-                        module_size: entry.ImageSize as usize
-                    })
-            )
+                    .map(KModule::from_module_entry)
+            ))
         }
     }
 
     pub fn find_by_name(target: &str) -> anyhow::Result<Option<KModule>> {
-        Ok(
-            Self::query_modules()?
-                .find(|module| module.file_name == target)
-        )
+        /* Not using a closure here as it inflates the stack */
+        for module in Self::query_modules()? {
+            if module.file_name == target {
+                return Ok(Some(module));
+            }
+        }
+
+        Ok(None)
     }
 }

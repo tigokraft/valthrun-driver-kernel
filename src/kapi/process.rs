@@ -2,9 +2,9 @@ use core::ffi::CStr;
 
 use alloc::vec::Vec;
 use valthrun_driver_shared::ModuleInfo;
-use winapi::{km::wdm::PEPROCESS, shared::ntdef::{NT_SUCCESS, PLIST_ENTRY}};
+use winapi::{km::wdm::PEPROCESS, shared::ntdef::NT_SUCCESS};
 
-use crate::{kdef::{KeUnstackDetachProcess, KeStackAttachProcess, _KAPC_STATE, PsLookupProcessByProcessId, ObfDereferenceObject, IoGetCurrentProcess, ObfReferenceObject, PsInitialSystemProcess, PsGetProcessPeb, _LDR_DATA_TABLE_ENTRY, PsGetProcessId}, get_windows_build_number};
+use crate::{kdef::{KeUnstackDetachProcess, KeStackAttachProcess, _KAPC_STATE, PsLookupProcessByProcessId, ObfDereferenceObject, IoGetCurrentProcess, ObfReferenceObject, PsGetProcessPeb, _LDR_DATA_TABLE_ENTRY, PsGetProcessId}, offsets::get_nt_offsets};
 
 use super::UnicodeStringEx;
 
@@ -46,6 +46,15 @@ impl Process {
 
     pub fn get_id(&self) -> i32 {
         unsafe { PsGetProcessId(self.eprocess()) }
+    }
+
+    /// Process image file name (max 14 characters log)!
+    pub fn get_image_file_name(&self) -> Option<&str> {
+        unsafe {
+            CStr::from_ptr(PsGetProcessImageFileName(self.eprocess))
+                .to_str()
+                .ok()
+        }
     }
 
     pub fn attach(&self) -> AttachedProcess {
@@ -114,7 +123,6 @@ impl AttachedProcess<'_> {
             current_entry = unsafe { (*current_entry).Flink };
         }
 
-        log::info!("XXX");
         None
     }
 }
@@ -125,71 +133,34 @@ impl Drop for AttachedProcess<'_> {
     }
 }
 
+extern "system" {
+    fn PsGetProcessImageFileName(Process: PEPROCESS) -> *const i8;
+}
+
 pub fn find_processes_by_name(target_name: &str) -> anyhow::Result<Vec<Process>> {
-    let build_number = get_windows_build_number()
-        .map_err(|status| anyhow::anyhow!("RtlGetVersion {}", status))?;
-
-    let offset_image_file_name;
-    let offset_active_threads;
-    let offset_active_process_links;
-
-    match build_number {
-        22621 => {
-            offset_image_file_name = 0x5a8;
-            offset_active_threads = 0x5f0;
-            offset_active_process_links = 0x448;
-        },
-        _ => anyhow::bail!("missing EPROCESS offsets for build no {build_number}")
-    }
-
-    let pep_system = unsafe { PsInitialSystemProcess };
-    let mut current_pep = pep_system;
-
+     #[allow(non_snake_case)]
+    let PsGetNextProcess = get_nt_offsets().PsGetNextProcess;
+    
     let mut cs2_candidates = Vec::with_capacity(8);
+
+    let mut current_peprocess = core::ptr::null_mut();
     loop {
-        let image_file_name = unsafe {
-            current_pep.byte_offset(offset_image_file_name)
-                .cast::<[u8; 15]>()
-                .read()
-        };
-
-        let name = CStr::from_bytes_until_nul(image_file_name.as_slice())
-            .map(|value| value.to_str().ok())
-            .ok()
-            .flatten();
-
-            
-        let active_threads = unsafe {
-            current_pep.byte_offset(offset_active_threads)
-                .cast::<u32>()
-                .read()
-        };
-
-        let next_pep = unsafe {
-            /*
-            * 1. current_pep->ActiveProcessLinks
-            * 2. ActiveProcessLinks->Flink
-            * 3. next_pep = Flink - offset_active_process_links
-            */
-            current_pep.byte_offset(offset_active_process_links)
-                .cast::<PLIST_ENTRY>()
-                .read()
-                .read()
-                .Flink
-                .byte_offset(-offset_active_process_links)
-                .cast()
-        };
-
-        log::debug!("{:X}: {:?} ({}); Next {:X}", current_pep as u64, name, active_threads, next_pep as u64);
-        if active_threads > 0 && name == Some(target_name) {
-            cs2_candidates.push(
-                Process::from_raw(current_pep, false)
-            );
+        current_peprocess = unsafe { PsGetNextProcess(current_peprocess) };
+        if current_peprocess.is_null() {
+            break;
         }
 
-        current_pep = next_pep;
-        if current_pep == pep_system {
-            break;
+        let image_file_name = unsafe {
+            CStr::from_ptr(PsGetProcessImageFileName(current_peprocess))
+                .to_str()
+                .ok()
+        };
+
+        // log::debug!("{:X}: {:?} ({})", current_peprocess as u64, name, active_threads);
+        if image_file_name == Some(target_name) {
+            cs2_candidates.push(
+                Process::from_raw(current_peprocess, false)
+            );
         }
     }
 

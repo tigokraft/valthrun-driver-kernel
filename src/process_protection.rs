@@ -3,10 +3,10 @@ use anyhow::{anyhow, Context};
 use log::Level;
 use obfstr::obfstr;
 use once_cell::race::OnceBox;
-use valthrun_driver_shared::{ByteSequencePattern, SearchPattern};
-use winapi::{shared::ntdef::{PVOID, UNICODE_STRING}, km::wdm::PEPROCESS};
+use valthrun_driver_shared::ByteSequencePattern;
+use winapi::shared::ntdef::{PVOID, UNICODE_STRING};
 
-use crate::{kdef::{_OB_PRE_OPERATION_INFORMATION, IoGetCurrentProcess, PsGetProcessId, _OB_PRE_CREATE_HANDLE_INFORMATION, _OB_PRE_DUPLICATE_HANDLE_INFORMATION, ObUnRegisterCallbacks, ObRegisterCallbacks, OB_FLT_REGISTRATION_VERSION, _OB_CALLBACK_REGISTRATION, OB_OPERATION_HANDLE_DUPLICATE, OB_OPERATION_HANDLE_CREATE, PsProcessType, _OB_OPERATION_REGISTRATION}, get_process_name, kapi::{FastMutex, UnicodeStringEx, NTStatusEx, KModule}};
+use crate::{kdef::{_OB_PRE_OPERATION_INFORMATION, PsGetProcessId, _OB_PRE_CREATE_HANDLE_INFORMATION, _OB_PRE_DUPLICATE_HANDLE_INFORMATION, ObUnRegisterCallbacks, ObRegisterCallbacks, OB_FLT_REGISTRATION_VERSION, _OB_CALLBACK_REGISTRATION, OB_OPERATION_HANDLE_DUPLICATE, OB_OPERATION_HANDLE_CREATE, PsProcessType, _OB_OPERATION_REGISTRATION}, kapi::{FastMutex, UnicodeStringEx, NTStatusEx, KModule, Process}, offsets::get_nt_offsets};
 
 struct ProtectionState {
     ob_registration: PVOID,
@@ -22,40 +22,6 @@ fn process_protection_state() -> &'static FastMutex<Option<ProtectionState>> {
     PROCESS_PROTECTION.get_or_init(|| Box::new(FastMutex::new(None)))
 }
 
-
-#[allow(non_snake_case)]
-fn find_MmVerifyCallbackFunctionFlags() -> anyhow::Result<unsafe extern "C" fn(callback: PVOID, flags: u32) -> bool> {
-    let kernel_base = KModule::find_by_name(obfstr!("ntoskrnl.exe"))?
-        .with_context(|| obfstr!("failed to find kernel base").to_string())?;
-
-    let pattern = ByteSequencePattern::parse(obfstr!("E8 ?? ?? ?? ?? 85 C0 0F 84 ?? ?? ?? ?? 48 8B 4D 00"))
-        .with_context(|| obfstr!("Failed to compile MmVerifyCallbackFunctionFlags pattern").to_string())?;
-
-    let pattern_match = kernel_base.find_code_sections()?
-        .into_iter()
-        .find_map(|section| {
-            if let Some(offset) = pattern.find(section.raw_data()) {
-                Some(offset + section.raw_data_address())
-            } else {
-                None
-            }
-        })
-        .with_context(|| obfstr!("failed to find MmVerifyCallbackFunctionFlags pattern").to_string())?;
-
-    let offset = unsafe {
-        (pattern_match as *const ())
-            .byte_offset(1)
-            .cast::<i32>()
-            .read_unaligned()
-    };
-
-    let target = pattern_match
-        .wrapping_add_signed(offset as isize)
-        .wrapping_add(0x05);
-
-    unsafe { Ok(core::mem::transmute(target)) }
-}
-
 /*
  * _ctx will point to the method itself as we needed a jump to get here.
  * See ObRegisterCallbacks for more info.
@@ -63,20 +29,22 @@ fn find_MmVerifyCallbackFunctionFlags() -> anyhow::Result<unsafe extern "C" fn(c
 extern "system" fn process_protection_callback(_ctx: PVOID, info: *const _OB_PRE_OPERATION_INFORMATION) -> u32 {
     let info = unsafe { &*info };
 
-    let current_process = unsafe { IoGetCurrentProcess() };
-    if current_process == info.Object || (info.Flags & 0x01) > 0 {
+    let current_process = Process::current();
+    let target_process = Process::from_raw(info.Object, false);
+
+    if current_process.eprocess() == target_process.eprocess()|| (info.Flags & 0x01) > 0 {
         /* own attachments and attachments from the kernel are allowed */
         return 0;
     }
 
+
     let target_process_id = unsafe { PsGetProcessId(info.Object) };
     if log::log_enabled!(target: "ProcessAttachments", Level::Trace) && false {
-        let current_process_name = get_process_name(current_process).unwrap_or_default();
+        let current_process_name = current_process.get_image_file_name().unwrap_or_default();
         if current_process_name != obfstr!("svchost.exe") && current_process_name != obfstr!("WmiPrvSE.exe") {
-            let current_process_id = unsafe { PsGetProcessId(current_process) };
             log::trace!("process_protection_callback. Caller: {:X} ({:?}), Target: {:X} ({:?}) Flags: {:X}, Operation: {:X}", 
-                current_process_id, current_process_name, 
-                target_process_id, get_process_name(info.Object as PEPROCESS), 
+                current_process.get_id(), current_process_name, 
+                target_process_id, target_process.get_image_file_name(), 
                 info.Flags, info.Operation);
         }
     }
@@ -96,11 +64,9 @@ extern "system" fn process_protection_callback(_ctx: PVOID, info: *const _OB_PRE
         return 0;
     }
 
-    let current_process_name = get_process_name(current_process).unwrap_or_default();
-    let current_process_id = unsafe { PsGetProcessId(current_process) };
     log::debug!("Process {:X} ({:?}) tries to open a handle to the protected process {:X} ({:?}) (Operation: {:X})", 
-        current_process_id, current_process_name, 
-        target_process_id, get_process_name(info.Object as PEPROCESS), 
+        current_process.get_id(), current_process.get_image_file_name(), 
+        target_process.get_id(), target_process.get_image_file_name(), 
         info.Operation);
 
     match info.Operation {
@@ -129,7 +95,10 @@ pub fn toggle_protection(target_process_id: i32, target: bool) {
     let mut context = process_protection_state().lock();
     let context = match context.as_mut() {
         Some(ctx) => ctx,
-        None => return,
+        None => {
+            log::warn!("Tried to protect process, but process protection not yet initialized");
+            return
+        },
     };
 
     if target {
@@ -169,10 +138,10 @@ pub fn initialize() -> anyhow::Result<()> {
     let mut reg_handle = core::ptr::null_mut();
     *context = unsafe {
         let pattern = ByteSequencePattern::parse("FF E1")
-            .context("failed to compile jmp rcx pattern")?;
+            .with_context(|| obfstr!("failed to compile jmp rcx pattern").to_string())?;
 
         #[allow(non_snake_case)]
-        let MmVerifyCallbackFunctionFlags = find_MmVerifyCallbackFunctionFlags()?;
+        let MmVerifyCallbackFunctionFlags = get_nt_offsets().MmVerifyCallbackFunctionFlags;
 
 
         let (jmp_module, jmp_target) = KModule::query_modules()?

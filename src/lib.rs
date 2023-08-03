@@ -2,24 +2,28 @@
 #![feature(sync_unsafe_cell)]
 #![feature(pointer_byte_offsets)]
 #![feature(result_flattening)]
+#![feature(new_uninit)]
+#![feature(const_transmute_copy)]
 
-use core::{cell::SyncUnsafeCell, mem::size_of_val, ffi::CStr};
+use core::cell::SyncUnsafeCell;
 
-use alloc::string::{String, ToString};
 use handler::HandlerRegistry;
 use kapi::{DeviceHandle, UnicodeStringEx, NTStatusEx};
 use kdef::{ProbeForRead, ProbeForWrite};
+use obfstr::obfstr;
 use valthrun_driver_shared::requests::{RequestHealthCheck, RequestCSModule, RequestRead, RequestProtectionToggle};
-use winapi::{shared::{ntdef::{UNICODE_STRING, NTSTATUS}, ntstatus::{STATUS_SUCCESS, STATUS_INVALID_PARAMETER, STATUS_FAILED_DRIVER_ENTRY, STATUS_OBJECT_NAME_COLLISION}}, km::wdm::{DRIVER_OBJECT, DEVICE_TYPE, DEVICE_FLAGS, IoCreateSymbolicLink, IoDeleteSymbolicLink, DEVICE_OBJECT, IRP, IoGetCurrentIrpStackLocation, PEPROCESS, DbgPrintEx}};
+use winapi::{shared::{ntdef::{UNICODE_STRING, NTSTATUS}, ntstatus::{STATUS_SUCCESS, STATUS_INVALID_PARAMETER, STATUS_FAILED_DRIVER_ENTRY, STATUS_OBJECT_NAME_COLLISION}}, km::wdm::{DRIVER_OBJECT, DEVICE_TYPE, DEVICE_FLAGS, IoCreateSymbolicLink, IoDeleteSymbolicLink, DEVICE_OBJECT, IRP, IoGetCurrentIrpStackLocation, DbgPrintEx}};
 
-use crate::{logger::APP_LOGGER, handler::{handler_get_modules, handler_read, handler_protection_toggle}, kdef::{DPFLTR_LEVEL, MmSystemRangeStart, IoCreateDriver, KeGetCurrentIrql}, kapi::{IrpEx, Process}};
+use crate::{logger::APP_LOGGER, handler::{handler_get_modules, handler_read, handler_protection_toggle}, kdef::{DPFLTR_LEVEL, MmSystemRangeStart, IoCreateDriver, KeGetCurrentIrql}, kapi::{IrpEx, Process}, offsets::initialize_nt_offsets, winver::{initialize_os_info, OS_VERSION_INFO}};
 
 mod panic_hook;
 mod logger;
 mod handler;
 mod kapi;
 mod kdef;
+mod offsets;
 mod process_protection;
+mod winver;
 
 extern crate alloc;
 
@@ -153,51 +157,6 @@ extern "system" fn irp_control(_device: &mut DEVICE_OBJECT, irp: &mut IRP) -> NT
     }
 }
 
-#[repr(C)]
-#[allow(non_snake_case, non_camel_case_types)]
-struct _OSVERSIONINFOEXW {
-    dwOSVersionInfoSize: u32,
-    dwMajorVersion: u32,
-    dwMinorVersion: u32,
-    dwBuildNumber: u32,
-    dwPlatformId: u32,
-
-    szCSDVersion: [u16; 128],
-    wServicePackMajor: u16,
-    wServicePackMinor: u16,
-    wSuiteMask: u16,
-
-    wProductType: u8,
-    wReserved: u8
-}
-
-extern "system" {
-    fn RtlGetVersion(info: &mut _OSVERSIONINFOEXW) -> NTSTATUS;
-}
-
-pub fn get_windows_build_number() -> anyhow::Result<u32, NTSTATUS> {
-    let mut info: _OSVERSIONINFOEXW = unsafe { core::mem::zeroed() };
-    info.dwOSVersionInfoSize = size_of_val(&info) as u32;
-    unsafe { RtlGetVersion(&mut info) }
-        .ok()
-        .map(|_| info.dwBuildNumber)
-}
-
-// TODO: Move into the process itself?
-fn get_process_name<'a>(handle: PEPROCESS) -> Option<String> {
-    let image_file_name = unsafe {
-        (handle as *const ()).byte_offset(0x5a8) // FIXME: Hardcoded offset ImageFileName
-            .cast::<[u8; 15]>()
-            .read()
-    };
-
-    CStr::from_bytes_until_nul(image_file_name.as_slice())
-        .map(|value| value.to_str().ok())
-        .ok()
-        .flatten()
-        .map(|s| s.to_string())
-}
-
 #[no_mangle]
 pub extern "system" fn driver_entry(driver: *mut DRIVER_OBJECT, registry_path: *const UNICODE_STRING) -> NTSTATUS {
     log::set_max_level(log::LevelFilter::Trace);
@@ -206,6 +165,11 @@ pub extern "system" fn driver_entry(driver: *mut DRIVER_OBJECT, registry_path: *
             DbgPrintEx(0, DPFLTR_LEVEL::ERROR as u32, "[VT] Failed to initialize app logger!\n\0".as_ptr());
         }
 
+        return STATUS_FAILED_DRIVER_ENTRY;
+    }
+
+    if let Err(error) = initialize_os_info() {
+        log::error!("Failed to load OS version info: {:X}", error);
         return STATUS_FAILED_DRIVER_ENTRY;
     }
 
@@ -246,14 +210,19 @@ pub extern "system" fn driver_entry(driver: *mut DRIVER_OBJECT, registry_path: *
 }
 
 extern "C" fn internal_driver_entry(driver: &mut DRIVER_OBJECT, _registry_path: *const UNICODE_STRING) -> NTSTATUS {
-    log::info!("Initialize driver at {:X}.", driver as *mut _ as u64);
+    log::info!("Initialize driver at {:X} (WinVer {}).", driver as *mut _ as u64, OS_VERSION_INFO.dwBuildNumber);
+
+    /* Needs to be done first as it's assumed to be init */
+    if let Err(error) = initialize_nt_offsets() {
+        log::error!("{}: {}", obfstr!("Failed to initialize NT_OFFSETS: {:#}"), error);
+        return STATUS_FAILED_DRIVER_ENTRY;
+    }
 
     driver.DriverUnload = Some(driver_unload);
     driver.MajorFunction[0x00] = Some(irp_create); /* IRP_MJ_CREATE */
     driver.MajorFunction[0x02] = Some(irp_close); /* IRP_MJ_CLOSE */
     driver.MajorFunction[0x0E] = Some(irp_control); /* IRP_MJ_DEVICE_CONTROL */
 
-    
     if let Err(error) = process_protection::initialize() {
         log::error!("Failed to initialized process protection: {:#}", error);
         return STATUS_FAILED_DRIVER_ENTRY;
