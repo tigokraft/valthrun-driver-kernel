@@ -112,7 +112,6 @@ impl AttachedProcess<'_> {
                     .read()
             };
             let base_name = entry.BaseDllName.as_string_lossy();
-            log::info!("Name: '{}'", base_name);
             if base_name == name {
                 return Some(ModuleInfo{
                     base_address: entry.DllBase as usize,
@@ -140,6 +139,9 @@ extern "system" {
 pub fn find_processes_by_name(target_name: &str) -> anyhow::Result<Vec<Process>> {
      #[allow(non_snake_case)]
     let PsGetNextProcess = get_nt_offsets().PsGetNextProcess;
+
+    #[allow(non_snake_case)]
+    let EPROCESS_ThreadListHead = get_nt_offsets().EPROCESS_ThreadListHead;
     
     let mut cs2_candidates = Vec::with_capacity(8);
 
@@ -156,12 +158,28 @@ pub fn find_processes_by_name(target_name: &str) -> anyhow::Result<Vec<Process>>
                 .ok()
         };
 
-        // log::debug!("{:X}: {:?} ({})", current_peprocess as u64, name, active_threads);
-        if image_file_name == Some(target_name) {
-            cs2_candidates.push(
-                Process::from_raw(current_peprocess, false)
-            );
+
+        if image_file_name != Some(target_name) {
+            continue;
         }
+
+        let active_threads = unsafe {
+            current_peprocess
+                /* The ActiveThreads comes after the thread list head. Thread list head has a size of 0x10. */
+                .byte_offset(EPROCESS_ThreadListHead as isize + 0x10)
+                .cast::<u32>()
+                .read_volatile()
+        };
+
+        log::trace!("{} matched {:X}: {:?} ({})", target_name, current_peprocess as u64, image_file_name, active_threads);
+        if active_threads == 0 {
+            /* Process terminated / not running */
+            continue;
+        }
+
+        cs2_candidates.push(
+            Process::from_raw(current_peprocess, false)
+        );
     }
 
     Ok(cs2_candidates)

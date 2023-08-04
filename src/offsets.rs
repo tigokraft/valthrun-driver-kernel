@@ -14,6 +14,8 @@ use crate::kapi::KModule;
 pub struct NtOffsets {
     pub PsGetNextProcess: unsafe extern "C" fn(PVOID) -> PVOID,
     pub MmVerifyCallbackFunctionFlags: unsafe extern "C" fn(callback: PVOID, flags: u32) -> bool,
+
+    pub EPROCESS_ThreadListHead: usize,
 }
 
 static NT_OFFSETS: SyncUnsafeCell<Option<NtOffsets>> = SyncUnsafeCell::new(None);
@@ -46,10 +48,22 @@ pub fn initialize_nt_offsets() -> anyhow::Result<()> {
         )?
     };
 
+    let eprocess_thread_list_head = {
+        let pattern = ByteSequencePattern::parse(obfstr!("4C 8D A9 ? ? ? ? 33 DB"))
+            .with_context(|| obfstr!("Failed to compile _EPROCESS.ThreadListHead pattern").to_string())?;
+
+        NtOffsets::locate_offset(
+            &kernel_base, obfstr!("_EPROCESS.ThreadListHead"), 
+            &pattern, 0x03,
+        )?
+    };
+
     let nt_offsets = unsafe { &mut *NT_OFFSETS.get() };
     *nt_offsets = Some(NtOffsets {
         PsGetNextProcess: ps_get_next_process,
-        MmVerifyCallbackFunctionFlags: mm_verify_callback_function_flags
+        MmVerifyCallbackFunctionFlags: mm_verify_callback_function_flags,
+
+        EPROCESS_ThreadListHead: eprocess_thread_list_head
     });
 
     Ok(())
@@ -91,6 +105,32 @@ impl NtOffsets {
         log::debug!("{}::{} located at {:X}", module.file_name, name, target);
         unsafe { Ok(core::mem::transmute_copy::<_, T>(&target)) }
     }
-}
 
-// static FN_PS_GET_NEXT_PROCESS: SyncUnsafeCell<Option<unsafe extern "C" fn(PVOID) -> PVOID>> = SyncUnsafeCell::new(None);
+    pub fn locate_offset(
+        module: &KModule, 
+        name: &str,
+        pattern: &dyn SearchPattern,
+        inst_offset: isize,
+    ) -> anyhow::Result<usize> {
+        let pattern_match = module.find_code_sections()?
+            .into_iter()
+            .find_map(|section| {
+                if let Some(offset) = pattern.find(section.raw_data()) {
+                    Some(offset + section.raw_data_address())
+                } else {
+                    None
+                }
+            })
+            .with_context(|| format!("failed to find {} pattern", name))?;
+
+        let offset = unsafe {
+            (pattern_match as *const ())
+                .byte_offset(inst_offset)
+                .cast::<u32>()
+                .read_unaligned()
+        };
+
+        log::debug!("{}::{} resolved to {:X}", module.file_name, name, offset);
+        Ok(offset as usize)
+    }
+}

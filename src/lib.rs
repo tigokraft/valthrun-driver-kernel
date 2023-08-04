@@ -7,6 +7,7 @@
 
 use core::cell::SyncUnsafeCell;
 
+use alloc::boxed::Box;
 use handler::HandlerRegistry;
 use kapi::{DeviceHandle, UnicodeStringEx, NTStatusEx};
 use kdef::{ProbeForRead, ProbeForWrite};
@@ -27,7 +28,7 @@ mod winver;
 
 extern crate alloc;
 
-static REQUEST_HANDLER: SyncUnsafeCell<Option<HandlerRegistry>> = SyncUnsafeCell::new(Option::None);
+static REQUEST_HANDLER: SyncUnsafeCell<Option<Box<HandlerRegistry>>> = SyncUnsafeCell::new(Option::None);
 static VARHAL_DEVICE: SyncUnsafeCell<Option<VarhalDevice>> = SyncUnsafeCell::new(Option::None);
 
 struct VarhalDevice {
@@ -238,7 +239,7 @@ extern "C" fn internal_driver_entry(driver: &mut DRIVER_OBJECT, _registry_path: 
     log::debug!("Driver Object at 0x{:X}, Device Object at 0x{:X}", driver as *const _ as u64, device._device.0 as *const _ as u64);
     unsafe { *VARHAL_DEVICE.get() = Some(device) };
 
-    let mut handler = HandlerRegistry::new();
+    let mut handler = Box::new(HandlerRegistry::new());
     handler.register::<RequestHealthCheck>(&|_req, res| {
         res.success = true;
         Ok(())
