@@ -24,3 +24,12 @@ pub use ob::*;
 
 mod irql;
 pub use irql::*;
+
+mod irp;
+pub use irp::*;
+
+mod kbdclass;
+pub use kbdclass::*;
+
+mod mouclass;
+pub use mouclass::*;

@@ -24,5 +24,8 @@ pub use fast_mutex::*;
 mod irp;
 pub use irp::*;
 
+mod object;
+pub use object::*;
+
 mod allocator;
 pub use allocator::POOL_TAG;

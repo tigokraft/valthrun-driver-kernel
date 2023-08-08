@@ -8,14 +8,16 @@
 use core::cell::SyncUnsafeCell;
 
 use alloc::boxed::Box;
+use device_varhal::VarhalDevice;
 use handler::HandlerRegistry;
-use kapi::{DeviceHandle, UnicodeStringEx, NTStatusEx};
-use kdef::{ProbeForRead, ProbeForWrite};
+use kapi::{UnicodeStringEx, NTStatusEx};
+use kb::KeyboardInput;
+use mouse::MouseInput;
 use obfstr::obfstr;
-use valthrun_driver_shared::requests::{RequestHealthCheck, RequestCSModule, RequestRead, RequestProtectionToggle};
-use winapi::{shared::{ntdef::{UNICODE_STRING, NTSTATUS}, ntstatus::{STATUS_SUCCESS, STATUS_INVALID_PARAMETER, STATUS_FAILED_DRIVER_ENTRY, STATUS_OBJECT_NAME_COLLISION}}, km::wdm::{DRIVER_OBJECT, DEVICE_TYPE, DEVICE_FLAGS, IoCreateSymbolicLink, IoDeleteSymbolicLink, DEVICE_OBJECT, IRP, IoGetCurrentIrpStackLocation, DbgPrintEx}};
+use valthrun_driver_shared::requests::{RequestHealthCheck, RequestCSModule, RequestRead, RequestProtectionToggle, RequestMouseMove, RequestKeyboardState};
+use winapi::{shared::{ntdef::{UNICODE_STRING, NTSTATUS}, ntstatus::{STATUS_SUCCESS, STATUS_FAILED_DRIVER_ENTRY, STATUS_OBJECT_NAME_COLLISION}}, km::wdm::{DRIVER_OBJECT, DbgPrintEx}};
 
-use crate::{logger::APP_LOGGER, handler::{handler_get_modules, handler_read, handler_protection_toggle}, kdef::{DPFLTR_LEVEL, MmSystemRangeStart, IoCreateDriver, KeGetCurrentIrql}, kapi::{IrpEx, Process}, offsets::initialize_nt_offsets, winver::{initialize_os_info, OS_VERSION_INFO}};
+use crate::{logger::APP_LOGGER, handler::{handler_get_modules, handler_read, handler_protection_toggle, handler_mouse_move, handler_keyboard_state}, kdef::{DPFLTR_LEVEL, MmSystemRangeStart, IoCreateDriver, KeGetCurrentIrql}, kapi::device_general_irp_handler, offsets::initialize_nt_offsets, winver::{initialize_os_info, OS_VERSION_INFO}};
 
 mod panic_hook;
 mod logger;
@@ -25,54 +27,16 @@ mod kdef;
 mod offsets;
 mod process_protection;
 mod winver;
+mod device_varhal;
+mod kb;
+mod mouse;
 
 extern crate alloc;
 
 static REQUEST_HANDLER: SyncUnsafeCell<Option<Box<HandlerRegistry>>> = SyncUnsafeCell::new(Option::None);
 static VARHAL_DEVICE: SyncUnsafeCell<Option<VarhalDevice>> = SyncUnsafeCell::new(Option::None);
-
-struct VarhalDevice {
-    _device: DeviceHandle,
-    dos_link_name: UNICODE_STRING,
-}
-
-unsafe impl Sync for VarhalDevice {}
-impl VarhalDevice {
-    pub fn create(driver: &mut DRIVER_OBJECT) -> anyhow::Result<Self> {
-        let dos_name = UNICODE_STRING::from_bytes(obfstr::wide!("\\DosDevices\\valthrun"));
-        let device_name = UNICODE_STRING::from_bytes(obfstr::wide!("\\Device\\valthrun"));
-
-        let mut device = DeviceHandle::create(
-            driver,  
-            &device_name, 
-            DEVICE_TYPE::FILE_DEVICE_UNKNOWN, // FILE_DEVICE_UNKNOWN
-            0x00000100, // FILE_DEVICE_SECURE_OPEN
-            false, 
-        )?;
-    
-        unsafe {
-            IoCreateSymbolicLink(&dos_name, &device_name)
-                .ok()
-                .map_err(|err| anyhow::anyhow!("IoCreateSymbolicLink: {}", err))?;
-        };
-    
-        *device.flags_mut() |= DEVICE_FLAGS::DO_DIRECT_IO as u32;
-        device.mark_initialized();
-        Ok(Self {
-            _device: device,
-            dos_link_name: dos_name
-        })
-    }
-}
-
-impl Drop for VarhalDevice {
-    fn drop(&mut self) {
-        let result = unsafe { IoDeleteSymbolicLink(&self.dos_link_name) };
-        if let Err(status) = result.ok() {
-            log::warn!("Failed to unlink dos device: {}", status);
-        }
-    }
-}
+static KEYBOARD_INPUT: SyncUnsafeCell<Option<KeyboardInput>> = SyncUnsafeCell::new(Option::None);
+static MOUSE_INPUT: SyncUnsafeCell<Option<MouseInput>> = SyncUnsafeCell::new(Option::None);
 
 #[no_mangle]
 extern "system" fn driver_unload(_driver: &mut DRIVER_OBJECT) {
@@ -88,74 +52,14 @@ extern "system" fn driver_unload(_driver: &mut DRIVER_OBJECT) {
 
     /* Uninstall process protection */
     process_protection::finalize();
+    
+    let keyboard_input = unsafe { &mut *KEYBOARD_INPUT.get() };
+    let _ = keyboard_input.take();
+    
+    let mouse_input = unsafe { &mut *MOUSE_INPUT.get() };
+    let _ = mouse_input.take();
 
     log::info!("Driver Unloaded");
-}
-
-extern "system" fn irp_create(_device: &mut DEVICE_OBJECT, irp: &mut IRP) -> NTSTATUS {
-    log::debug!("IRP create callback");
-
-    irp.complete_request(STATUS_SUCCESS)
-}
-
-extern "system" fn irp_close(_device: &mut DEVICE_OBJECT, irp: &mut IRP) -> NTSTATUS {
-    log::debug!("IRP close callback");
-
-    /*
-     * Disable process protection for the process which is closing this driver.
-     * A better solution would be to register a process termination callback
-     * and remove the process ids from the protected list.
-     */
-    let current_process = Process::current();
-    process_protection::toggle_protection(current_process.get_id(), false);
-
-    irp.complete_request(STATUS_SUCCESS)
-}
-
-extern "system" fn irp_control(_device: &mut DEVICE_OBJECT, irp: &mut IRP) -> NTSTATUS {
-    let outbuffer = irp.UserBuffer;
-    let stack = unsafe { &mut *IoGetCurrentIrpStackLocation(irp) };
-    let param = unsafe { stack.Parameters.DeviceIoControl() };
-    let request_code = param.IoControlCode;
-
-    let handler = match unsafe { REQUEST_HANDLER.get().as_ref() }.map(Option::as_ref).flatten() {
-        Some(handler) => handler,
-        None => {
-            log::warn!("Missing request handlers");
-            return irp.complete_request(STATUS_INVALID_PARAMETER);
-        }
-    };
-
-    /* Note: We do not lock the buffers as it's a sync call and the user should not be able to free the input buffers. */
-    let inbuffer = unsafe {
-        core::slice::from_raw_parts(param.Type3InputBuffer as *const u8, param.InputBufferLength as usize)
-    };
-    let inbuffer_probe = kapi::try_seh(|| unsafe {
-        ProbeForRead(inbuffer.as_ptr() as *const (), inbuffer.len(), 1);
-    });
-    if let Err(err) = inbuffer_probe {
-        log::warn!("IRP request inbuffer invalid: {}", err);
-        return irp.complete_request(STATUS_INVALID_PARAMETER);
-    }
-
-    let outbuffer = unsafe {
-        core::slice::from_raw_parts_mut(outbuffer as *mut u8, param.OutputBufferLength as usize)
-    };
-    let outbuffer_probe = kapi::try_seh(|| unsafe {
-        ProbeForWrite(outbuffer.as_mut_ptr() as *mut (), outbuffer.len(), 1);
-    });
-    if let Err(err) = outbuffer_probe {
-        log::warn!("IRP request outbuffer invalid: {}", err);
-        return irp.complete_request(STATUS_INVALID_PARAMETER);
-    }
-
-    match handler.handle(request_code, inbuffer, outbuffer) {
-        Ok(_) => irp.complete_request(STATUS_SUCCESS),
-        Err(error) => {
-            log::error!("IRP handle error: {}", error);
-            irp.complete_request(STATUS_INVALID_PARAMETER)
-        }
-    }
 }
 
 #[no_mangle]
@@ -210,8 +114,15 @@ pub extern "system" fn driver_entry(driver: *mut DRIVER_OBJECT, registry_path: *
     }
 }
 
-extern "C" fn internal_driver_entry(driver: &mut DRIVER_OBJECT, _registry_path: *const UNICODE_STRING) -> NTSTATUS {
-    log::info!("Initialize driver at {:X} (WinVer {}).", driver as *mut _ as u64, OS_VERSION_INFO.dwBuildNumber);
+extern "C" fn internal_driver_entry(driver: &mut DRIVER_OBJECT, registry_path: *const UNICODE_STRING) -> NTSTATUS {
+    let registry_path = unsafe { registry_path.as_ref() }.map(|path| path.as_string_lossy());
+    {
+        let registry_path = registry_path.as_ref()
+            .map(|path| path.as_str())
+            .unwrap_or("None");
+
+        log::info!("Initialize driver at {:X} ({:?}). WinVer {}.", driver as *mut _ as u64, registry_path, OS_VERSION_INFO.dwBuildNumber);
+    }
 
     /* Needs to be done first as it's assumed to be init */
     if let Err(error) = initialize_nt_offsets() {
@@ -220,10 +131,30 @@ extern "C" fn internal_driver_entry(driver: &mut DRIVER_OBJECT, _registry_path: 
     }
 
     driver.DriverUnload = Some(driver_unload);
-    driver.MajorFunction[0x00] = Some(irp_create); /* IRP_MJ_CREATE */
-    driver.MajorFunction[0x02] = Some(irp_close); /* IRP_MJ_CLOSE */
-    driver.MajorFunction[0x0E] = Some(irp_control); /* IRP_MJ_DEVICE_CONTROL */
+    for function in driver.MajorFunction.iter_mut() {
+        *function = Some(device_general_irp_handler);
+    }
 
+    match kb::create_keyboard_input() {
+        Err(error) => {
+            log::error!("Failed to initialize keyboard input: {:#}", error);
+            return STATUS_FAILED_DRIVER_ENTRY;
+        },
+        Ok(keyboard) => {
+            unsafe { *KEYBOARD_INPUT.get() = Some(keyboard) };
+        }
+    }
+
+    match mouse::create_mouse_input() {
+        Err(error) => {
+            log::error!("Failed to initialize mouse input: {:#}", error);
+            return STATUS_FAILED_DRIVER_ENTRY;
+        },
+        Ok(mouse) => {
+            unsafe { *MOUSE_INPUT.get() = Some(mouse) };
+        }
+    }
+    
     if let Err(error) = process_protection::initialize() {
         log::error!("Failed to initialized process protection: {:#}", error);
         return STATUS_FAILED_DRIVER_ENTRY;
@@ -236,10 +167,12 @@ extern "C" fn internal_driver_entry(driver: &mut DRIVER_OBJECT, _registry_path: 
             return STATUS_FAILED_DRIVER_ENTRY;
         }
     };
-    log::debug!("Driver Object at 0x{:X}, Device Object at 0x{:X}", driver as *const _ as u64, device._device.0 as *const _ as u64);
+    log::debug!("Varhal device Object at 0x{:X} (Handle at 0x{:X})", 
+        device.device_handle.device as *const _ as u64, &*device.device_handle as *const _ as u64);
     unsafe { *VARHAL_DEVICE.get() = Some(device) };
 
     let mut handler = Box::new(HandlerRegistry::new());
+    
     handler.register::<RequestHealthCheck>(&|_req, res| {
         res.success = true;
         Ok(())
@@ -247,6 +180,8 @@ extern "C" fn internal_driver_entry(driver: &mut DRIVER_OBJECT, _registry_path: 
     handler.register::<RequestCSModule>(&handler_get_modules);
     handler.register::<RequestRead>(&handler_read);
     handler.register::<RequestProtectionToggle>(&handler_protection_toggle);
+    handler.register::<RequestMouseMove>(&handler_mouse_move);
+    handler.register::<RequestKeyboardState>(&handler_keyboard_state);
 
     unsafe { *REQUEST_HANDLER.get() = Some(handler) };
 

@@ -28,4 +28,5 @@ branch = "feature/km"
 features = [
     "wdm",
     "ntstatus",
+    "impl-default"
 ]

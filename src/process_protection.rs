@@ -64,10 +64,11 @@ extern "system" fn process_protection_callback(_ctx: PVOID, info: *const _OB_PRE
         return 0;
     }
 
-    log::debug!("Process {:X} ({:?}) tries to open a handle to the protected process {:X} ({:?}) (Operation: {:X})", 
-        current_process.get_id(), current_process.get_image_file_name(), 
-        target_process.get_id(), target_process.get_image_file_name(), 
-        info.Operation);
+    log::debug!("Process 0x{:X} ({}) tries to open a handle to the protected process 0x{:X} ({}) (Operation: 0x{:0<2X})", 
+        current_process.get_id(), current_process.get_image_file_name().unwrap_or("[[ error ]]"), 
+        target_process.get_id(), target_process.get_image_file_name().unwrap_or("[[ error ]]"), 
+        info.Operation
+    );
 
     match info.Operation {
         OB_OPERATION_HANDLE_CREATE => {

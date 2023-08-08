@@ -1,5 +1,5 @@
 #![allow(unused)]
-use winapi::shared::ntdef::{PVOID, UNICODE_STRING, PCVOID, NTSTATUS};
+use winapi::{shared::ntdef::{PVOID, UNICODE_STRING, PCVOID, NTSTATUS, PCUNICODE_STRING}, um::winnt::ACCESS_MASK, km::wdm::KPROCESSOR_MODE};
 
 use super::POBJECT_TYPE;
 
@@ -54,11 +54,4 @@ pub struct _OB_CALLBACK_REGISTRATION {
     pub Altitude: UNICODE_STRING,
     pub RegistrationContext: PCVOID,
     pub OperationRegistration: *const _OB_OPERATION_REGISTRATION,
-}
-
-#[allow(unused)]
-extern "system" {
-    pub fn ObRegisterCallbacks(CallbackRegistration: *const _OB_CALLBACK_REGISTRATION, RegistrationHandle: *mut PVOID) -> NTSTATUS; 
-    pub fn ObUnRegisterCallbacks(RegistrationHandle: PVOID);
-    pub fn ObGetFilterVersion() -> u16;
 }

@@ -1,5 +1,6 @@
 use core::panic::PanicInfo;
 
+use alloc::format;
 use winapi::km::wdm::{DbgPrintEx, DbgBreakPoint};
 
 use crate::kdef::{DPFLTR_LEVEL, KeBugCheck};
@@ -8,9 +9,10 @@ const BUGCHECK_CODE_RUST_PANIC: u32 = 0xC0210001;
 const BUGCHECK_CODE_CXX_FRAME: u32 = 0xC0210002;
 
 #[panic_handler]
-fn panic(_info: &PanicInfo) -> ! {
+fn panic(info: &PanicInfo) -> ! {
     unsafe {
-        DbgPrintEx(0, DPFLTR_LEVEL::ERROR as u32, "[VT] Driver paniced. Trigger BugCheck.\n\0".as_ptr());
+        DbgPrintEx(0, DPFLTR_LEVEL::ERROR as u32, format!("[VT] Driver {}.\n\0", info).as_ptr());
+        DbgPrintEx(0, DPFLTR_LEVEL::ERROR as u32, "[VT] Trigger BugCheck.\n\0".as_ptr());
         DbgBreakPoint();
         KeBugCheck(BUGCHECK_CODE_RUST_PANIC);
     }

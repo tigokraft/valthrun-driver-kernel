@@ -9,6 +9,9 @@ pub use memory_read::*;
 mod protect;
 pub use protect::*;
 
+mod input;
+pub use input::*;
+
 pub const FUNCTION_CODE_MAX: usize = 0x20;
 
 type RequestHandlerGeneric = dyn (Fn(&(), &mut ()) -> anyhow::Result<()>) + Send + Sync;
