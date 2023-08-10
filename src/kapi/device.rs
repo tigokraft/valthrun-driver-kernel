@@ -92,10 +92,10 @@ pub extern "system" fn device_general_irp_handler(device: &mut DEVICE_OBJECT, ir
     let major_function_index = stack.MajorFunction as usize;
     debug_assert!(major_function_index < device_handle.major_function.len());
     if let Some(handler) = &device_handle.major_function[major_function_index] {
-        log::trace!("IRP 0x{:0>2X} dispatch {:X}", major_function_index, device_handle.device as u64);
+        // log::trace!("IRP 0x{:0>2X} dispatch {:X}", major_function_index, device_handle.device as u64);
         handler(device_handle, irp)
     } else {
-        log::trace!("IRP 0x{:0>2X} not supported on {:X}", major_function_index, device_handle.device as u64);
+        // log::trace!("IRP 0x{:0>2X} not supported on {:X}", major_function_index, device_handle.device as u64);
         irp.complete_request(STATUS_NOT_SUPPORTED)
     }
 }

@@ -16,25 +16,25 @@ fn mouse_state_to_input(state: &MouseState) -> MOUSE_INPUT_DATA {
     input_data.UnitId = 0;
 
     if let Some(state) = &state.buttons[0] {
-        input_data.ButtonData |= if *state { MOUSE_BUTTON_LEFT_UP } else { MOUSE_BUTTON_LEFT_DOWN };
+        input_data.ButtonFlags |= if *state { MOUSE_BUTTON_LEFT_DOWN } else { MOUSE_BUTTON_LEFT_UP };
     }
     if let Some(state) = &state.buttons[1] {
-        input_data.ButtonData |= if *state { MOUSE_BUTTON_RIGHT_UP } else { MOUSE_BUTTON_RIGHT_DOWN };
+        input_data.ButtonFlags |= if *state { MOUSE_BUTTON_RIGHT_DOWN } else { MOUSE_BUTTON_RIGHT_UP };
     }
     if let Some(state) = &state.buttons[2] {
-        input_data.ButtonData |= if *state { MOUSE_BUTTON_MIDDLE_UP } else { MOUSE_BUTTON_MIDDLE_DOWN };
+        input_data.ButtonFlags |= if *state { MOUSE_BUTTON_MIDDLE_DOWN } else { MOUSE_BUTTON_MIDDLE_UP };
     }
     if let Some(state) = &state.buttons[3] {
-        input_data.ButtonData |= if *state { MOUSE_BUTTON_4_UP } else { MOUSE_BUTTON_4_DOWN };
+        input_data.ButtonFlags |= if *state { MOUSE_BUTTON_4_DOWN } else { MOUSE_BUTTON_4_UP };
     }
     if let Some(state) = &state.buttons[4] {
-        input_data.ButtonData |= if *state { MOUSE_BUTTON_5_UP } else { MOUSE_BUTTON_5_DOWN };
+        input_data.ButtonFlags |= if *state { MOUSE_BUTTON_5_DOWN } else { MOUSE_BUTTON_5_UP };
     }
     if state.wheel {
-        input_data.ButtonData |= MOUSE_BUTTON_WHEEL;
+        input_data.ButtonFlags |= MOUSE_BUTTON_WHEEL;
     }
     if state.hwheel {
-        input_data.ButtonData |= MOUSE_BUTTON_HWHEEL;
+        input_data.ButtonFlags |= MOUSE_BUTTON_HWHEEL;
     }
     input_data.LastX = state.last_x;
     input_data.LastY = state.last_y;
