@@ -135,7 +135,7 @@ impl KModule {
         )
     }
 
-    pub fn query_modules() -> anyhow::Result<Box<impl Iterator<Item = KModule>>> {
+    pub fn query_modules() -> anyhow::Result<Vec<KModule>> {
         unsafe {
             let mut bytes = 0;
             ZwQuerySystemInformation(SystemModuleInformation, core::ptr::null_mut(), 0, &mut bytes);
@@ -148,11 +148,13 @@ impl KModule {
                 .map_err(|code| anyhow::anyhow!("{} -> {:X}", obfstr!("ZwQuerySystemInformation query"), code))?;
     
             let info = &*core::mem::transmute::<_, *const _SYSTEM_MODULE_INFORMATION>(buffer.as_ptr());
-            Ok(Box::new(
+            Ok(
+                /* Result needs to be copied as buffer will be deallocated */
                 info.modules()
                     .iter()
                     .map(KModule::from_module_entry)
-            ))
+                    .collect()
+            )
         }
     }
 
