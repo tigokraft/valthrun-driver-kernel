@@ -1,6 +1,6 @@
 use core::{ffi::CStr, mem::size_of};
 
-use alloc::{string::{String, ToString}, vec::Vec, boxed::Box};
+use alloc::{string::{String, ToString}, vec::Vec};
 use anyhow::Context;
 use obfstr::obfstr;
 use valthrun_driver_shared::SearchPattern;

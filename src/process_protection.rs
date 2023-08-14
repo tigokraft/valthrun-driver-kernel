@@ -146,6 +146,7 @@ pub fn initialize() -> anyhow::Result<()> {
 
 
         let (jmp_module, jmp_target) = KModule::query_modules()?
+            .into_iter()
             .filter(|module| module.file_name.ends_with(".sys"))
             .find_map(|module| {
                 let sections = match module.find_code_sections() {

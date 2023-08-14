@@ -1,37 +1,90 @@
+// Initial idea: https://github.com/cs1ime/sehcall/tree/main
+// Modified for Valthruns use cases.
+use core::{arch::{global_asm, asm}, sync::atomic::{AtomicU64, Ordering}};
+
+use alloc::string::ToString;
+use anyhow::Context;
+use obfstr::obfstr;
+use valthrun_driver_shared::ByteSequencePattern;
+
+use crate::{kapi::KModule, offsets::NtOffsets};
+
 use super::SEHException;
 
-/// The type of a function that can be called by the `seh_stub` function.
-type SEHCallback = unsafe extern "system" fn(*mut ());
+// RCX -> SEH function
+// RDX -> Callback
+// R8 -> Callback arg
+global_asm!(r#"
+.global _seh_invoke
+_seh_invoke:
+
+push rbx
+push rsi
+push rdi
+push rbp
+push r10
+push r11
+push r12
+push r13
+push r14
+push r15
+sub rsp, 0x50
+
+call _inner
+
+add rsp, 0x50
+pop r15
+pop r14
+pop r13
+pop r12
+pop r11
+pop r10
+pop rbp
+pop rdi
+pop rsi
+pop rbx
+ret
+
+_inner:
+push rcx
+mov rcx, r8
+jmp rdx
+"#);
 
 extern "system" {
-    /// Executes a function in an exception-handling block.<br><br>
-    ///
-    /// # Arguments
-    /// * `callback` - Simple function that calls the guarded procedure in the SEH context.
-    /// * `closure_ptr` - The procedure to execute in the exception-handling block.
-    ///
-    /// # Returns
-    /// 0 if no exception was thrown, otherwise the exception code.
-    fn seh_stub(
-        callback: SEHCallback,
-        closure_ptr: *mut (),
-    ) -> i32;
+    fn _seh_invoke(seh_wrapper: u64, callback: u64, callback_arg: u64) -> u32;
 }
 
-/// Internal function that calls the guarded procedure in the SEH context.<br>
-/// This function is called by the `seh_stub` FFI function.<br><br>
-///
-/// # Arguments
-/// * `closure_ptr` - The procedure to execute in the exception-handling block.
-unsafe extern "system" fn seh_callback<F>(closure_ptr: *mut ())
-    where
-        F: FnMut(),
-{
-    // Convert the raw pointer passed by the C stub function.
-    let closure = &mut *(closure_ptr as *mut F);
-
-    // Call the closure passed to try_seh.
+unsafe extern "system" fn seh_callback<F: FnMut()>(closure: *mut ()) {
+    let closure = unsafe { &mut *(closure as *mut F) };
     closure();
+
+    /*
+     * Setting the return value to zero.
+     * KdpSysWriteMsr + 0x0F jmp short loc_5827B3
+     * KdpSysWriteMsr + 0xXX mov eax, r8d
+     * KdpSysWriteMsr + 0xXX retn
+     */
+    asm!("mov r8, 0x0");
+}
+
+static SEH_TARGET: AtomicU64 = AtomicU64::new(0);
+
+/// Setup SEH
+pub fn setup_seh() -> anyhow::Result<()> {
+    let kernel_base = KModule::find_by_name(obfstr!("ntoskrnl.exe"))?
+        .with_context(|| obfstr!("could not find kernel base").to_string())?;
+    
+    let pattern = ByteSequencePattern::parse("E8 ? ? ? ? 89 45 EF E9")
+        .with_context(|| obfstr!("could not compile KdpSysWriteMsr pattern").to_string())?;
+
+    let seh_target: u64 = NtOffsets::locate_function(
+        &kernel_base, obfstr!("KdpSysWriteMsr"), 
+        &pattern, 0x01, 0x05
+    )?;
+
+    SEH_TARGET.store(seh_target + 0x0F, Ordering::Relaxed);
+    Ok(())
 }
 
 /// Executes a function in a structure-exception-handled block.<br>
@@ -43,19 +96,25 @@ unsafe extern "system" fn seh_callback<F>(closure_ptr: *mut ())
 ///
 /// # Returns
 /// Some if no exception was thrown, None if an exception was thrown.
+/// 
+/// ATTENTION:
+/// Currently returns SEHException::AccessViolation for every exception due to the SEH implementation logic!
 pub fn try_seh<F>(mut closure: F) -> Result<(), SEHException>
-    where
-        F: FnMut(),
+    where F: FnMut(),
 {
-    // Get the raw pointer to the closure.
-    let closure_ptr = &mut closure as *mut _ as *mut ();
+    let seh_target = SEH_TARGET.load(Ordering::Relaxed);
+    if seh_target == 0 {
+        #[inline(never)]
+        fn log_warn() {
+            log::warn!("{}", obfstr!("try_seh called, but SEH not yet initialized."));
+        }
+        log_warn();
 
-    // Call the C stub function.
-    // This function will call the `seh_callback` function in an SEH block,
-    // passing the raw pointer to the closure.
-    // The `seh_callback` function will then call the closure.
-    match unsafe { seh_stub(seh_callback::<F>, closure_ptr) } {
-        0 => Ok(()),
-        code => Err(SEHException::from(code)),
+        /* TODO: Return another excetion like not initialized or something... */
+        return Err(SEHException::AccessViolation);
     }
+    let closure_ptr = &mut closure as *mut _  as u64;
+
+    let result = unsafe { _seh_invoke(seh_target, seh_callback::<F> as u64, closure_ptr) };
+    if result == 0 { Ok(()) } else { Err(SEHException::AccessViolation) }
 }

@@ -78,12 +78,11 @@ pub extern "system" fn driver_entry(driver: *mut DRIVER_OBJECT, registry_path: *
         return STATUS_FAILED_DRIVER_ENTRY;
     }
 
-    log::info!("Driver entry called");
     match unsafe { driver.as_mut() } {
         Some(driver) => internal_driver_entry(driver, registry_path),
         None => {
             let target_driver_entry = internal_driver_entry as usize;
-            log::info!("Manually mapped drive.");
+            log::info!("Manually mapped driver.");
             log::info!("  System range start is {:X}, driver entry mapped at {:X}.", unsafe { MmSystemRangeStart } as u64, target_driver_entry);
             log::info!("  IRQL level at {:X}", unsafe { KeGetCurrentIrql() });
 
@@ -124,6 +123,11 @@ extern "C" fn internal_driver_entry(driver: &mut DRIVER_OBJECT, registry_path: *
         log::info!("Initialize driver at {:X} ({:?}). WinVer {}.", driver as *mut _ as u64, registry_path, OS_VERSION_INFO.dwBuildNumber);
     }
 
+    if let Err(error) = kapi::setup_seh() {
+        log::error!("{}: {}", obfstr!("Failed to initialize SEH: {:#}"), error);
+        return STATUS_FAILED_DRIVER_ENTRY;
+    }
+    
     /* Needs to be done first as it's assumed to be init */
     if let Err(error) = initialize_nt_offsets() {
         log::error!("{}: {}", obfstr!("Failed to initialize NT_OFFSETS: {:#}"), error);

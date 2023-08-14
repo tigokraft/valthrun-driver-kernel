@@ -36,10 +36,6 @@ fn get_km_dir(windows_kits_dir: &PathBuf) -> anyhow::Result<PathBuf> {
 }
 
 fn main() {
-    cc::Build::new()
-        .file("src/kapi/seh/wrapper.c")
-        .compile("libcseh.a");
-
     let windows_kits_dir = get_windows_kits_dir().unwrap();
 
     let km_dir = get_km_dir(&windows_kits_dir).unwrap();
