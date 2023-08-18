@@ -1,13 +1,18 @@
 use core::{ffi::CStr, mem::size_of};
 
-use alloc::{string::{String, ToString}, vec::Vec};
+use alloc::{
+    string::{String, ToString},
+    vec::Vec,
+};
 use anyhow::Context;
 use obfstr::obfstr;
 use valthrun_driver_shared::SearchPattern;
-use winapi::{shared::ntdef::{HANDLE, PVOID, NTSTATUS}, um::winnt::{PIMAGE_NT_HEADERS, IMAGE_SECTION_HEADER, IMAGE_FILE_HEADER, IMAGE_SCN_CNT_CODE}};
+use winapi::{
+    shared::ntdef::{HANDLE, NTSTATUS, PVOID},
+    um::winnt::{IMAGE_FILE_HEADER, IMAGE_SCN_CNT_CODE, IMAGE_SECTION_HEADER, PIMAGE_NT_HEADERS},
+};
 
 use super::NTStatusEx;
-
 
 #[repr(C)]
 #[allow(non_snake_case, non_camel_case_types)]
@@ -28,7 +33,7 @@ struct _SYSTEM_MODULE_ENTRY {
 #[allow(non_snake_case, non_camel_case_types)]
 struct _SYSTEM_MODULE_INFORMATION {
     Count: u32,
-    Module: [_SYSTEM_MODULE_ENTRY;0],
+    Module: [_SYSTEM_MODULE_ENTRY; 0],
 }
 
 impl _SYSTEM_MODULE_INFORMATION {
@@ -44,7 +49,12 @@ impl _SYSTEM_MODULE_INFORMATION {
 const SystemModuleInformation: u32 = 0x0B;
 extern "system" {
     fn RtlImageNtHeader(ModuleAddress: PVOID) -> PIMAGE_NT_HEADERS;
-    fn ZwQuerySystemInformation(SystemInformationClass: u32, SystemInformation: *mut (), SystemInformationLength: u32, ReturnLength: *mut u32) -> NTSTATUS;
+    fn ZwQuerySystemInformation(
+        SystemInformationClass: u32,
+        SystemInformation: *mut (),
+        SystemInformationLength: u32,
+        ReturnLength: *mut u32,
+    ) -> NTSTATUS;
 }
 
 pub struct KModuleSection {
@@ -56,18 +66,23 @@ pub struct KModuleSection {
 
 impl KModuleSection {
     fn from_header(header: &IMAGE_SECTION_HEADER, module_base: usize) -> Self {
-        let section_name = CStr::from_bytes_until_nul(&header.Name).unwrap_or_default().to_string_lossy();
+        let section_name = CStr::from_bytes_until_nul(&header.Name)
+            .unwrap_or_default()
+            .to_string_lossy();
         Self {
             name: section_name.to_string(),
             module_base: module_base,
             virtual_address: header.VirtualAddress as usize,
-            size_of_raw_data: header.SizeOfRawData as usize
+            size_of_raw_data: header.SizeOfRawData as usize,
         }
     }
-    
+
     pub fn raw_data(&self) -> &[u8] {
         unsafe {
-            core::slice::from_raw_parts(self.raw_data_address() as *const u8, self.size_of_raw_data as usize)
+            core::slice::from_raw_parts(
+                self.raw_data_address() as *const u8,
+                self.size_of_raw_data as usize,
+            )
         }
     }
 
@@ -93,10 +108,18 @@ pub struct KModule {
 impl KModule {
     fn from_module_entry(entry: &_SYSTEM_MODULE_ENTRY) -> Self {
         Self {
-            file_path: CStr::from_bytes_until_nul(&entry.FullPathName).unwrap_or_default().to_string_lossy().to_string(),
-            file_name: CStr::from_bytes_until_nul(&entry.FullPathName[entry.OffsetToFileName as usize..]).unwrap_or_default().to_string_lossy().to_string(),
-            base_address: entry.ImageBase as usize, 
-            module_size: entry.ImageSize as usize
+            file_path: CStr::from_bytes_until_nul(&entry.FullPathName)
+                .unwrap_or_default()
+                .to_string_lossy()
+                .to_string(),
+            file_name: CStr::from_bytes_until_nul(
+                &entry.FullPathName[entry.OffsetToFileName as usize..],
+            )
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string(),
+            base_address: entry.ImageBase as usize,
+            module_size: entry.ImageSize as usize,
         }
     }
 }
@@ -107,17 +130,21 @@ impl KModule {
             .with_context(|| obfstr!("RtlImageNtHeader failed").to_string())?;
 
         let section_headers = (&header.FileHeader as *const _ as *const ())
-                .wrapping_byte_add(size_of::<IMAGE_FILE_HEADER>())
-                .wrapping_byte_add(header.FileHeader.SizeOfOptionalHeader as usize)
-                .cast::<IMAGE_SECTION_HEADER>();
+            .wrapping_byte_add(size_of::<IMAGE_FILE_HEADER>())
+            .wrapping_byte_add(header.FileHeader.SizeOfOptionalHeader as usize)
+            .cast::<IMAGE_SECTION_HEADER>();
 
         Ok(unsafe {
-            core::slice::from_raw_parts(section_headers, header.FileHeader.NumberOfSections as usize)
+            core::slice::from_raw_parts(
+                section_headers,
+                header.FileHeader.NumberOfSections as usize,
+            )
         })
     }
 
     pub fn find_sections_by_name(&self, name: &str) -> anyhow::Result<Vec<KModuleSection>> {
-        let result = self.section_headers()?
+        let result = self
+            .section_headers()?
             .iter()
             .map(|section| KModuleSection::from_header(section, self.base_address))
             .filter(|section| section.name == name)
@@ -127,33 +154,49 @@ impl KModule {
     }
 
     pub fn find_code_sections(&self) -> anyhow::Result<impl Iterator<Item = KModuleSection> + '_> {
-        Ok(
-            self.section_headers()?
-                .iter()
-                .filter(|section| (section.Characteristics & IMAGE_SCN_CNT_CODE) > 0)
-                .map(|section| KModuleSection::from_header(section, self.base_address))
-        )
+        Ok(self
+            .section_headers()?
+            .iter()
+            .filter(|section| (section.Characteristics & IMAGE_SCN_CNT_CODE) > 0)
+            .map(|section| KModuleSection::from_header(section, self.base_address)))
     }
 
     pub fn query_modules() -> anyhow::Result<Vec<KModule>> {
         unsafe {
             let mut bytes = 0;
-            ZwQuerySystemInformation(SystemModuleInformation, core::ptr::null_mut(), 0, &mut bytes);
+            ZwQuerySystemInformation(
+                SystemModuleInformation,
+                core::ptr::null_mut(),
+                0,
+                &mut bytes,
+            );
 
             let mut buffer = Vec::<u8>::with_capacity(bytes as usize);
             buffer.set_len(bytes as usize);
-    
-            ZwQuerySystemInformation(SystemModuleInformation, buffer.as_mut_ptr() as *mut (), bytes, &mut bytes)
-                .ok()
-                .map_err(|code| anyhow::anyhow!("{} -> {:X}", obfstr!("ZwQuerySystemInformation query"), code))?;
-    
-            let info = &*core::mem::transmute::<_, *const _SYSTEM_MODULE_INFORMATION>(buffer.as_ptr());
+
+            ZwQuerySystemInformation(
+                SystemModuleInformation,
+                buffer.as_mut_ptr() as *mut (),
+                bytes,
+                &mut bytes,
+            )
+            .ok()
+            .map_err(|code| {
+                anyhow::anyhow!(
+                    "{} -> {:X}",
+                    obfstr!("ZwQuerySystemInformation query"),
+                    code
+                )
+            })?;
+
+            let info =
+                &*core::mem::transmute::<_, *const _SYSTEM_MODULE_INFORMATION>(buffer.as_ptr());
             Ok(
                 /* Result needs to be copied as buffer will be deallocated */
                 info.modules()
                     .iter()
                     .map(KModule::from_module_entry)
-                    .collect()
+                    .collect(),
             )
         }
     }

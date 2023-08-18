@@ -12,14 +12,14 @@ pub struct MOUSE_INPUT_DATA {
     pub RawButtons: u32,
     pub LastX: i32,
     pub LastY: i32,
-    pub ExtraInformation: u32
+    pub ExtraInformation: u32,
 }
 
 pub type MouseClassServiceCallbackFn = extern "system" fn(
-    DeviceObject: PDEVICE_OBJECT, 
-    InputDataStart: *const MOUSE_INPUT_DATA, 
+    DeviceObject: PDEVICE_OBJECT,
+    InputDataStart: *const MOUSE_INPUT_DATA,
     InputDataEnd: *const MOUSE_INPUT_DATA,
-    InputDataConsumed: *mut u32
+    InputDataConsumed: *mut u32,
 ) -> ();
 
 pub const MOUSE_FLAG_MOVE_RELATIVE: u16 = 0x00;

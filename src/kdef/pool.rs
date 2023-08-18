@@ -1,6 +1,6 @@
 //! Kernel Mode pools.
 
-use winapi::{shared::ntdef::PVOID, km::wdm::POOL_TYPE};
+use winapi::{km::wdm::POOL_TYPE, shared::ntdef::PVOID};
 
 #[allow(unused)]
 extern "system" {
@@ -13,7 +13,7 @@ extern "system" {
     pub fn ExAllocatePool(PoolType: POOL_TYPE, NumberOfBytes: usize) -> PVOID;
     /// Deallocates a block of pool memory.
     pub fn ExFreePool(P: PVOID);
-    
+
     pub fn ProbeForRead(address: *const (), length: usize, alignment: u32);
     pub fn ProbeForWrite(address: *mut (), length: usize, alignment: u32);
 }

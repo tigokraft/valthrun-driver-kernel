@@ -1,6 +1,6 @@
 use core::alloc::GlobalAlloc;
 
-use winapi::{shared::ntdef::PVOID, km::wdm::POOL_TYPE};
+use winapi::{km::wdm::POOL_TYPE, shared::ntdef::PVOID};
 
 use crate::kdef::{ExAllocatePoolWithTag, ExFreePoolWithTag};
 

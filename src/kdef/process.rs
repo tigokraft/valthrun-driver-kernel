@@ -1,8 +1,14 @@
 #![allow(unused, dead_code)]
 use core::ffi::c_void;
 
-use modular_bitfield::{bitfield, specifiers::{B3, B1, B4}};
-use winapi::{shared::ntdef::{LIST_ENTRY, NTSTATUS, PVOID, UNICODE_STRING}, km::wdm::PEPROCESS};
+use modular_bitfield::{
+    bitfield,
+    specifiers::{B1, B3, B4},
+};
+use winapi::{
+    km::wdm::PEPROCESS,
+    shared::ntdef::{LIST_ENTRY, NTSTATUS, PVOID, UNICODE_STRING},
+};
 
 #[repr(C)]
 #[bitfield]
@@ -12,7 +18,6 @@ pub struct PSProtection {
     pub protection_audit: B1,
     pub protection_signer: B4,
 }
-
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
@@ -29,12 +34,12 @@ extern "system" {
 
     pub fn PsGetProcessPeb(process: PEPROCESS) -> *const _PEB;
     pub fn PsLookupProcessByProcessId(process_id: i32, process: *mut PEPROCESS) -> NTSTATUS;
-    
+
     pub fn KeStackAttachProcess(process: PEPROCESS, apc_state: &mut _KAPC_STATE);
     pub fn KeUnstackDetachProcess(apc_state: &mut _KAPC_STATE);
-    
+
     pub static PsInitialSystemProcess: PEPROCESS;
-    
+
     pub fn MmGetSystemRoutineAddress(system_routine_name: *const UNICODE_STRING) -> PVOID;
     pub static MmSystemRangeStart: *const ();
 }
@@ -46,7 +51,7 @@ pub struct _KAPC_STATE {
     pub Process: *const _KPROCESS,
     pub InProgressFlags: u8,
     pub KernelApcPending: bool,
-    pub UserApcPendingAll: bool
+    pub UserApcPendingAll: bool,
 }
 
 #[repr(C)]
@@ -54,28 +59,28 @@ pub struct _KAPC_STATE {
 pub struct _PEB_LDR_DATA {
     pub Length: u32,
     pub Initialized: bool,
-    pub SsHandle: PVOID,                                                    
-    pub InLoadOrderModuleList: LIST_ENTRY,                            
-    pub InMemoryOrderModuleList: LIST_ENTRY,                             
-    pub InInitializationOrderModuleList: LIST_ENTRY,                   
-    pub EntryInProgress: PVOID,                                              
-    pub ShutdownInProgress: u8,                                             
-    pub ShutdownThreadId: PVOID,                                           
+    pub SsHandle: PVOID,
+    pub InLoadOrderModuleList: LIST_ENTRY,
+    pub InMemoryOrderModuleList: LIST_ENTRY,
+    pub InInitializationOrderModuleList: LIST_ENTRY,
+    pub EntryInProgress: PVOID,
+    pub ShutdownInProgress: u8,
+    pub ShutdownThreadId: PVOID,
 }
 
 #[repr(C)]
 #[allow(non_snake_case, non_camel_case_types)]
 pub struct _LDR_DATA_TABLE_ENTRY {
     pub InLoadOrderLinks: LIST_ENTRY,
-    pub InMemoryOrderLinks: LIST_ENTRY, 
-    pub InInitializationOrderLinks: LIST_ENTRY,                     
-    pub DllBase: *const (),                                                     
-    pub EntryPoint: *const (),                                                     
-    pub SizeOfImage: u32,    
+    pub InMemoryOrderLinks: LIST_ENTRY,
+    pub InInitializationOrderLinks: LIST_ENTRY,
+    pub DllBase: *const (),
+    pub EntryPoint: *const (),
+    pub SizeOfImage: u32,
     pub FullDllName: UNICODE_STRING,
-    pub BaseDllName: UNICODE_STRING,   
+    pub BaseDllName: UNICODE_STRING,
     pub Flags: u32,
-    /* More fields */                                      
+    /* More fields */
 }
 
 #[repr(C)]
@@ -86,7 +91,7 @@ pub struct _PEB {
     pub Reserved2: [u8; 1],
     pub Reserved3: [PVOID; 2],
     pub Ldr: *const _PEB_LDR_DATA,
-    pub ProcessParameters: *const () /* PRTL_USER_PROCESS_PARAMETERS */,
+    pub ProcessParameters: *const (), /* PRTL_USER_PROCESS_PARAMETERS */
     pub Reserved4: [PVOID; 3],
     pub AtlThunkSListPtr: *const (),
     pub Reserved5: *const (),
@@ -96,7 +101,7 @@ pub struct _PEB {
     pub AtlThunkSListPtr32: u32,
     pub Reserved9: [PVOID; 45],
     pub Reserved10: [u8; 96],
-    pub PostProcessInitRoutine: *const () /* PPS_POST_PROCESS_INIT_ROUTINE */,
+    pub PostProcessInitRoutine: *const (), /* PPS_POST_PROCESS_INIT_ROUTINE */
     pub Reserved11: [u8; 128],
     pub Reserved12: *const (),
     pub SessionId: u32,

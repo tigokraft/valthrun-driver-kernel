@@ -4,7 +4,14 @@ use alloc::vec::Vec;
 use valthrun_driver_shared::ModuleInfo;
 use winapi::{km::wdm::PEPROCESS, shared::ntdef::NT_SUCCESS};
 
-use crate::{kdef::{KeUnstackDetachProcess, KeStackAttachProcess, _KAPC_STATE, PsLookupProcessByProcessId, ObfDereferenceObject, IoGetCurrentProcess, ObfReferenceObject, PsGetProcessPeb, _LDR_DATA_TABLE_ENTRY, PsGetProcessId}, offsets::get_nt_offsets};
+use crate::{
+    kdef::{
+        IoGetCurrentProcess, KeStackAttachProcess, KeUnstackDetachProcess, ObfDereferenceObject,
+        ObfReferenceObject, PsGetProcessId, PsGetProcessPeb, PsLookupProcessByProcessId,
+        _KAPC_STATE, _LDR_DATA_TABLE_ENTRY,
+    },
+    offsets::get_nt_offsets,
+};
 
 use super::UnicodeStringEx;
 
@@ -60,9 +67,9 @@ impl Process {
     pub fn attach(&self) -> AttachedProcess {
         let mut apc_state: _KAPC_STATE = unsafe { core::mem::zeroed() };
         unsafe { KeStackAttachProcess(self.eprocess, &mut apc_state) };
-        AttachedProcess{
+        AttachedProcess {
             process: self,
-            apc_state
+            apc_state,
         }
     }
 }
@@ -74,7 +81,6 @@ impl Drop for Process {
         }
     }
 }
-
 
 pub struct AttachedProcess<'a> {
     process: &'a Process,
@@ -98,7 +104,10 @@ impl AttachedProcess<'_> {
         let ldr = match unsafe { peb.Ldr.as_ref() } {
             Some(ldr) => ldr,
             None => {
-                log::warn!("Missing process module list for {:X}", self.process.eprocess() as u64);
+                log::warn!(
+                    "Missing process module list for {:X}",
+                    self.process.eprocess() as u64
+                );
                 return None;
             }
         };
@@ -113,12 +122,12 @@ impl AttachedProcess<'_> {
             };
             let base_name = entry.BaseDllName.as_string_lossy();
             if base_name == name {
-                return Some(ModuleInfo{
+                return Some(ModuleInfo {
                     base_address: entry.DllBase as usize,
-                    module_size: entry.SizeOfImage as usize
-                })
+                    module_size: entry.SizeOfImage as usize,
+                });
             }
-            
+
             current_entry = unsafe { (*current_entry).Flink };
         }
 
@@ -137,12 +146,12 @@ extern "system" {
 }
 
 pub fn find_processes_by_name(target_name: &str) -> anyhow::Result<Vec<Process>> {
-     #[allow(non_snake_case)]
+    #[allow(non_snake_case)]
     let PsGetNextProcess = get_nt_offsets().PsGetNextProcess;
 
     #[allow(non_snake_case)]
     let EPROCESS_ThreadListHead = get_nt_offsets().EPROCESS_ThreadListHead;
-    
+
     let mut cs2_candidates = Vec::with_capacity(8);
 
     let mut current_peprocess = core::ptr::null_mut();
@@ -158,7 +167,6 @@ pub fn find_processes_by_name(target_name: &str) -> anyhow::Result<Vec<Process>>
                 .ok()
         };
 
-
         if image_file_name != Some(target_name) {
             continue;
         }
@@ -171,15 +179,19 @@ pub fn find_processes_by_name(target_name: &str) -> anyhow::Result<Vec<Process>>
                 .read_volatile()
         };
 
-        log::trace!("{} matched {:X}: {:?} ({})", target_name, current_peprocess as u64, image_file_name, active_threads);
+        log::trace!(
+            "{} matched {:X}: {:?} ({})",
+            target_name,
+            current_peprocess as u64,
+            image_file_name,
+            active_threads
+        );
         if active_threads == 0 {
             /* Process terminated / not running */
             continue;
         }
 
-        cs2_candidates.push(
-            Process::from_raw(current_peprocess, false)
-        );
+        cs2_candidates.push(Process::from_raw(current_peprocess, false));
     }
 
     Ok(cs2_candidates)

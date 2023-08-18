@@ -1,6 +1,5 @@
 [build]
 target = "x86_64-pc-windows-msvc"
-
 rustflags = [
     # Pre Link Args
     "-Z", "pre-link-arg=/NOLOGO",
@@ -10,7 +9,9 @@ rustflags = [
     "-Z", "pre-link-arg=/DRIVER",
     "-Z", "pre-link-arg=/DYNAMICBASE",
     "-Z", "pre-link-arg=/MANIFEST:NO",
-    # "-Z", "pre-link-arg=/PDBALTPATH:valthrun-driver.pdb",
+
+    "-Z", "pre-link-arg=/PDBALTPATH:https://youtu.be/dQw4w9WgXcQ",
+    "--remap-path-prefix=G:\\git\\rust\\valthrun=[src]",
 
     # Post Link Args
     "-C", "link-arg=/OPT:REF,ICF",

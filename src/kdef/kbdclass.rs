@@ -1,7 +1,6 @@
 #![allow(unused)]
 use winapi::km::wdm::PDEVICE_OBJECT;
 
-
 pub const KEYBOARD_FLAG_MAKE: u16 = 0x00;
 pub const KEYBOARD_FLAG_BREAK: u16 = 0x01;
 pub const KEYBOARD_FLAG_E0: u16 = 0x02;
@@ -15,12 +14,12 @@ pub struct KEYBOARD_INPUT_DATA {
     pub MakeCode: u16,
     pub Flags: u16,
     pub Reserved: u16,
-    pub ExtraInformation: u16
+    pub ExtraInformation: u16,
 }
 
 pub type KeyboardClassServiceCallbackFn = extern "system" fn(
-    DeviceObject: PDEVICE_OBJECT, 
-    InputDataStart: *const KEYBOARD_INPUT_DATA, 
+    DeviceObject: PDEVICE_OBJECT,
+    InputDataStart: *const KEYBOARD_INPUT_DATA,
     InputDataEnd: *const KEYBOARD_INPUT_DATA,
-    InputDataConsumed: *mut u32
+    InputDataConsumed: *mut u32,
 ) -> ();

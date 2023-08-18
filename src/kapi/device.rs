@@ -1,7 +1,16 @@
 use core::pin::Pin;
 
 use alloc::boxed::Box;
-use winapi::{km::wdm::{PDEVICE_OBJECT, DRIVER_OBJECT, IoCreateDevice, DEVICE_TYPE, DEVICE_FLAGS, IoDeleteDevice, DEVICE_OBJECT, IRP, IoGetCurrentIrpStackLocation}, shared::{ntdef::{UNICODE_STRING, NTSTATUS}, ntstatus::STATUS_NOT_SUPPORTED}};
+use winapi::{
+    km::wdm::{
+        IoCreateDevice, IoDeleteDevice, IoGetCurrentIrpStackLocation, DEVICE_FLAGS, DEVICE_OBJECT,
+        DEVICE_TYPE, DRIVER_OBJECT, IRP, PDEVICE_OBJECT,
+    },
+    shared::{
+        ntdef::{NTSTATUS, UNICODE_STRING},
+        ntstatus::STATUS_NOT_SUPPORTED,
+    },
+};
 
 use crate::kapi::IrpEx;
 
@@ -28,12 +37,15 @@ impl<T> DeviceHandle<T> {
         let mut device_ptr: PDEVICE_OBJECT = core::ptr::null_mut();
         let result = unsafe {
             IoCreateDevice(
-                driver, core::mem::size_of::<*const ()>() as u32, 
-                device_name.map(|name| name as *const _).unwrap_or(core::ptr::null()), 
+                driver,
+                core::mem::size_of::<*const ()>() as u32,
+                device_name
+                    .map(|name| name as *const _)
+                    .unwrap_or(core::ptr::null()),
                 device_type,
                 characteristics,
-                if exclusive { 1 } else { 0 }, 
-                &mut device_ptr
+                if exclusive { 1 } else { 0 },
+                &mut device_ptr,
             )
         };
 
@@ -44,7 +56,7 @@ impl<T> DeviceHandle<T> {
         let result = Box::pin(Self {
             device: device_ptr,
             major_function: Default::default(),
-            data
+            data,
         });
 
         unsafe {
@@ -52,7 +64,7 @@ impl<T> DeviceHandle<T> {
         }
         Ok(result)
     }
-    
+
     pub fn flags(&self) -> u32 {
         unsafe { (*self.device).Flags }
     }
@@ -78,7 +90,10 @@ impl<T> Drop for DeviceHandle<T> {
     }
 }
 
-pub extern "system" fn device_general_irp_handler(device: &mut DEVICE_OBJECT, irp: &mut IRP) -> NTSTATUS {
+pub extern "system" fn device_general_irp_handler(
+    device: &mut DEVICE_OBJECT,
+    irp: &mut IRP,
+) -> NTSTATUS {
     let device_handle = unsafe { (device.DeviceExtension as *mut DeviceHandle<()>).as_mut() };
     let device_handle = match device_handle {
         Some(handle) => handle,

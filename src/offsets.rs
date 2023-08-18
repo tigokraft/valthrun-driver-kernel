@@ -1,6 +1,6 @@
 use core::cell::SyncUnsafeCell;
 
-use alloc::{string::ToString, format};
+use alloc::{format, string::ToString};
 use anyhow::Context;
 use obfstr::obfstr;
 use valthrun_driver_shared::{ByteSequencePattern, SearchPattern};
@@ -33,28 +33,42 @@ pub fn initialize_nt_offsets() -> anyhow::Result<()> {
             .with_context(|| obfstr!("Failed to compile PsGetNextProcess pattern").to_string())?;
 
         NtOffsets::locate_function(
-            &kernel_base, obfstr!("PsGetNextProcess"), 
-            &pattern, 0x01, 0x05
+            &kernel_base,
+            obfstr!("PsGetNextProcess"),
+            &pattern,
+            0x01,
+            0x05,
         )?
     };
-    
+
     let mm_verify_callback_function_flags = {
-        let pattern = ByteSequencePattern::parse(obfstr!("E8 ?? ?? ?? ?? 85 C0 0F 84 ?? ?? ?? ?? 48 8B 4D 00"))
-            .with_context(|| obfstr!("Failed to compile MmVerifyCallbackFunctionFlags pattern").to_string())?;
+        let pattern = ByteSequencePattern::parse(obfstr!(
+            "E8 ?? ?? ?? ?? 85 C0 0F 84 ?? ?? ?? ?? 48 8B 4D 00"
+        ))
+        .with_context(|| {
+            obfstr!("Failed to compile MmVerifyCallbackFunctionFlags pattern").to_string()
+        })?;
 
         NtOffsets::locate_function(
-            &kernel_base, obfstr!("MmVerifyCallbackFunctionFlags"), 
-            &pattern, 0x01, 0x05
+            &kernel_base,
+            obfstr!("MmVerifyCallbackFunctionFlags"),
+            &pattern,
+            0x01,
+            0x05,
         )?
     };
 
     let eprocess_thread_list_head = {
-        let pattern = ByteSequencePattern::parse(obfstr!("4C 8D A9 ? ? ? ? 33 DB"))
-            .with_context(|| obfstr!("Failed to compile _EPROCESS.ThreadListHead pattern").to_string())?;
+        let pattern =
+            ByteSequencePattern::parse(obfstr!("4C 8D A9 ? ? ? ? 33 DB")).with_context(|| {
+                obfstr!("Failed to compile _EPROCESS.ThreadListHead pattern").to_string()
+            })?;
 
         NtOffsets::locate_offset(
-            &kernel_base, obfstr!("_EPROCESS.ThreadListHead"), 
-            &pattern, 0x03,
+            &kernel_base,
+            obfstr!("_EPROCESS.ThreadListHead"),
+            &pattern,
+            0x03,
         )?
     };
 
@@ -63,7 +77,7 @@ pub fn initialize_nt_offsets() -> anyhow::Result<()> {
         PsGetNextProcess: ps_get_next_process,
         MmVerifyCallbackFunctionFlags: mm_verify_callback_function_flags,
 
-        EPROCESS_ThreadListHead: eprocess_thread_list_head
+        EPROCESS_ThreadListHead: eprocess_thread_list_head,
     });
 
     Ok(())
@@ -71,16 +85,17 @@ pub fn initialize_nt_offsets() -> anyhow::Result<()> {
 
 impl NtOffsets {
     pub fn locate_function<T>(
-        module: &KModule, 
+        module: &KModule,
         name: &str,
         pattern: &dyn SearchPattern,
         offset_rel_address: isize,
-        instruction_length: usize
+        instruction_length: usize,
     ) -> anyhow::Result<T>
     where
-        T: Sized
+        T: Sized,
     {
-        let pattern_match = module.find_code_sections()?
+        let pattern_match = module
+            .find_code_sections()?
             .into_iter()
             .find_map(|section| {
                 if let Some(offset) = pattern.find(section.raw_data()) {
@@ -107,12 +122,13 @@ impl NtOffsets {
     }
 
     pub fn locate_offset(
-        module: &KModule, 
+        module: &KModule,
         name: &str,
         pattern: &dyn SearchPattern,
         inst_offset: isize,
     ) -> anyhow::Result<usize> {
-        let pattern_match = module.find_code_sections()?
+        let pattern_match = module
+            .find_code_sections()?
             .into_iter()
             .find_map(|section| {
                 if let Some(offset) = pattern.find(section.raw_data()) {

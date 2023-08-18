@@ -1,5 +1,9 @@
 #![allow(unused)]
-use winapi::{shared::ntdef::{PVOID, UNICODE_STRING, PCVOID, NTSTATUS, PCUNICODE_STRING}, um::winnt::ACCESS_MASK, km::wdm::KPROCESSOR_MODE};
+use winapi::{
+    km::wdm::KPROCESSOR_MODE,
+    shared::ntdef::{NTSTATUS, PCUNICODE_STRING, PCVOID, PVOID, UNICODE_STRING},
+    um::winnt::ACCESS_MASK,
+};
 
 use super::POBJECT_TYPE;
 
@@ -12,8 +16,14 @@ pub const OB_OPERATION_HANDLE_DUPLICATE: OB_OPERATION = 0x00000002;
 pub const OB_FLT_REGISTRATION_VERSION_0100: u16 = 0x0100;
 pub const OB_FLT_REGISTRATION_VERSION: u16 = OB_FLT_REGISTRATION_VERSION_0100;
 
-pub type POB_PRE_OPERATION_CALLBACK = Option<extern "system" fn (RegistrationContext: PVOID, OperationInformation: *const _OB_PRE_OPERATION_INFORMATION) -> u32>;
-pub type POB_POST_OPERATION_CALLBACK = Option<extern "system" fn (RegistrationContext: PVOID, OperationInformation: *const ()) -> u32>;
+pub type POB_PRE_OPERATION_CALLBACK = Option<
+    extern "system" fn(
+        RegistrationContext: PVOID,
+        OperationInformation: *const _OB_PRE_OPERATION_INFORMATION,
+    ) -> u32,
+>;
+pub type POB_POST_OPERATION_CALLBACK =
+    Option<extern "system" fn(RegistrationContext: PVOID, OperationInformation: *const ()) -> u32>;
 
 #[repr(C)]
 pub struct _OB_PRE_CREATE_HANDLE_INFORMATION {
@@ -26,7 +36,7 @@ pub struct _OB_PRE_DUPLICATE_HANDLE_INFORMATION {
     pub DesiredAccess: u32,
     pub OriginalDesiredAccess: u32,
     pub SourceProcess: PVOID,
-    pub TargetProcess: PVOID
+    pub TargetProcess: PVOID,
 }
 
 #[repr(C)]

@@ -1,4 +1,4 @@
-use alloc::{format, ffi::CString};
+use alloc::{ffi::CString, format};
 use winapi::km::wdm::DbgPrintEx;
 
 use crate::kdef::DPFLTR_LEVEL;
@@ -12,7 +12,7 @@ impl log::Log for KernelLogger {
 
     fn log(&self, record: &log::Record) {
         if !self.enabled(record.metadata()) {
-            return
+            return;
         }
 
         let (level_prefix, log_level) = match record.level() {
@@ -20,7 +20,7 @@ impl log::Log for KernelLogger {
             log::Level::Debug => ("D", DPFLTR_LEVEL::TRACE),
             log::Level::Info => ("I", DPFLTR_LEVEL::INFO),
             log::Level::Warn => ("W", DPFLTR_LEVEL::WARNING),
-            log::Level::Error => ("E", DPFLTR_LEVEL::ERROR)
+            log::Level::Error => ("E", DPFLTR_LEVEL::ERROR),
         };
         let payload = format!("[{}] {}", level_prefix, record.args());
         let payload = if let Ok(payload) = CString::new(payload) {
@@ -34,7 +34,7 @@ impl log::Log for KernelLogger {
         }
     }
 
-    fn flush(&self) { }
+    fn flush(&self) {}
 }
 
 pub static APP_LOGGER: KernelLogger = KernelLogger;

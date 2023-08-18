@@ -1,8 +1,17 @@
 use alloc::{string::String, vec::Vec};
 use anyhow::anyhow;
-use winapi::{shared::ntdef::{PVOID, UNICODE_STRING, OBJ_CASE_INSENSITIVE, NTSTATUS}, km::wdm::KPROCESSOR_MODE};
+use winapi::{
+    km::wdm::KPROCESSOR_MODE,
+    shared::ntdef::{NTSTATUS, OBJ_CASE_INSENSITIVE, PVOID, UNICODE_STRING},
+};
 
-use crate::{kdef::{ObfDereferenceObject, ObReferenceObjectByName, POBJECT_TYPE, OBJECT_NAME_INFORMATION, ObQueryNameString, ObfReferenceObject}, kapi::UnicodeStringEx};
+use crate::{
+    kapi::UnicodeStringEx,
+    kdef::{
+        ObQueryNameString, ObReferenceObjectByName, ObfDereferenceObject, ObfReferenceObject,
+        OBJECT_NAME_INFORMATION, POBJECT_TYPE,
+    },
+};
 
 use super::NTStatusEx;
 
@@ -16,16 +25,23 @@ impl Object {
         Self(target)
     }
 
-    pub fn reference_by_name(name: &UNICODE_STRING, ob_type: POBJECT_TYPE) -> Result<Object, NTSTATUS> {
+    pub fn reference_by_name(
+        name: &UNICODE_STRING,
+        ob_type: POBJECT_TYPE,
+    ) -> Result<Object, NTSTATUS> {
         let mut object: PVOID = core::ptr::null_mut();
         unsafe {
             ObReferenceObjectByName(
-                name, OBJ_CASE_INSENSITIVE, 
-                core::ptr::null_mut(), 0, 
-                ob_type, 
-                KPROCESSOR_MODE::KernelMode, core::ptr::null_mut(), 
+                name,
+                OBJ_CASE_INSENSITIVE,
+                core::ptr::null_mut(),
+                0,
+                ob_type,
+                KPROCESSOR_MODE::KernelMode,
+                core::ptr::null_mut(),
                 &mut object as *mut _ as PVOID,
-            ).ok()?
+            )
+            .ok()?
         };
 
         Ok(Object(object))
@@ -48,7 +64,6 @@ impl Object {
                 .map_err(|err| anyhow!("ObQueryNameString {:X}", err))?;
         }
 
-        log::debug!("Name length: {}", name_length);
         Ok(unsafe { &*(name_info) }.Name.as_string_lossy())
     }
 

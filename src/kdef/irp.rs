@@ -1,6 +1,6 @@
 #![allow(unused)]
 
-use winapi::km::wdm::{PIRP, IRP};
+use winapi::km::wdm::{IRP, PIRP};
 
 pub const IRP_MJ_CREATE: usize = 0x00;
 pub const IRP_MJ_CREATE_NAMED_PIPE: usize = 0x01;
@@ -42,6 +42,11 @@ pub unsafe fn IoSkipCurrentIrpStackLocation(irp: *mut IRP) {
 
     irp.CurrentLocation += 1;
 
-    let mut stack_location = &mut *irp.Tail.Overlay_mut().__bindgen_anon_2.__bindgen_anon_1.CurrentStackLocation_mut();
+    let mut stack_location = &mut *irp
+        .Tail
+        .Overlay_mut()
+        .__bindgen_anon_2
+        .__bindgen_anon_1
+        .CurrentStackLocation_mut();
     *stack_location = stack_location.wrapping_offset(1);
 }

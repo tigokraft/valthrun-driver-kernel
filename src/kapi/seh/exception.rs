@@ -76,6 +76,9 @@ mod tests {
     /// This is important because the exception code is a c_int.
     #[test]
     fn exception_size() {
-        assert_eq!(core::mem::size_of::<SEHException>(), core::mem::size_of::<i32>());
+        assert_eq!(
+            core::mem::size_of::<SEHException>(),
+            core::mem::size_of::<i32>()
+        );
     }
 }

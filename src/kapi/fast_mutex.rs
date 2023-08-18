@@ -4,7 +4,10 @@ use alloc::boxed::Box;
 use core::cell::UnsafeCell;
 use core::ops::{Deref, DerefMut};
 
-use crate::kdef::{_FAST_MUTEX, ExInitializeFastMutex, ExTryToAcquireFastMutex, ExAcquireFastMutex, ExReleaseFastMutex};
+use crate::kdef::{
+    ExAcquireFastMutex, ExInitializeFastMutex, ExReleaseFastMutex, ExTryToAcquireFastMutex,
+    _FAST_MUTEX,
+};
 
 /// A mutual exclusion primitive useful for protecting shared data.
 ///
@@ -28,15 +31,9 @@ unsafe impl<T> Sync for FastMutex<T> {}
 impl<T> FastMutex<T> {
     /// Creates a new mutex in an unlocked state ready for use.
     pub fn new(data: T) -> Self {
-        let lock = Box::new(unsafe {
-            UnsafeCell::new(core::mem::zeroed())
-        });
+        let lock = Box::new(unsafe { UnsafeCell::new(core::mem::zeroed()) });
 
-        unsafe {
-            ExInitializeFastMutex(
-                &mut *lock.get(),
-            )
-        };
+        unsafe { ExInitializeFastMutex(&mut *lock.get()) };
 
         Self {
             lock,
@@ -59,11 +56,7 @@ impl<T> FastMutex<T> {
     /// This function does not block.
     #[inline]
     pub fn try_lock(&self) -> Option<FastMutexGuard<T>> {
-        let status = unsafe {
-            ExTryToAcquireFastMutex(
-                self.lock.get()
-            )
-        } != 0;
+        let status = unsafe { ExTryToAcquireFastMutex(self.lock.get()) } != 0;
 
         match status {
             true => Some(FastMutexGuard {
@@ -85,11 +78,7 @@ impl<T> FastMutex<T> {
     /// and tries to lock the mutex again, this function will return `None` instead.
     #[inline]
     pub fn lock(&self) -> FastMutexGuard<T> {
-        unsafe {
-            ExAcquireFastMutex(
-                &mut *self.lock.get(),
-            )
-        };
+        unsafe { ExAcquireFastMutex(&mut *self.lock.get()) };
 
         FastMutexGuard {
             lock: unsafe { &mut *self.lock.get() },
@@ -127,11 +116,7 @@ pub struct FastMutexGuard<'a, T: 'a + ?Sized> {
 
 impl<'a, T: ?Sized> Drop for FastMutexGuard<'a, T> {
     fn drop(&mut self) {
-        unsafe {
-            ExReleaseFastMutex(
-                &mut *self.lock,
-            )
-        };
+        unsafe { ExReleaseFastMutex(&mut *self.lock) };
     }
 }
 

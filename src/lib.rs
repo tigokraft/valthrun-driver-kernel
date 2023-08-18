@@ -8,33 +8,53 @@
 use core::cell::SyncUnsafeCell;
 
 use alloc::boxed::Box;
-use device_varhal::VarhalDevice;
+use device::ValthrunDevice;
 use handler::HandlerRegistry;
-use kapi::{UnicodeStringEx, NTStatusEx};
+use kapi::{NTStatusEx, UnicodeStringEx};
 use kb::KeyboardInput;
 use mouse::MouseInput;
 use obfstr::obfstr;
-use valthrun_driver_shared::requests::{RequestHealthCheck, RequestCSModule, RequestRead, RequestProtectionToggle, RequestMouseMove, RequestKeyboardState};
-use winapi::{shared::{ntdef::{UNICODE_STRING, NTSTATUS}, ntstatus::{STATUS_SUCCESS, STATUS_FAILED_DRIVER_ENTRY, STATUS_OBJECT_NAME_COLLISION}}, km::wdm::{DRIVER_OBJECT, DbgPrintEx}};
+use valthrun_driver_shared::requests::{
+    RequestCSModule, RequestHealthCheck, RequestKeyboardState, RequestMouseMove,
+    RequestProtectionToggle, RequestRead,
+};
+use winapi::{
+    km::wdm::{DbgPrintEx, DRIVER_OBJECT},
+    shared::{
+        ntdef::{NTSTATUS, UNICODE_STRING},
+        ntstatus::{STATUS_FAILED_DRIVER_ENTRY, STATUS_OBJECT_NAME_COLLISION, STATUS_SUCCESS},
+    },
+};
 
-use crate::{logger::APP_LOGGER, handler::{handler_get_modules, handler_read, handler_protection_toggle, handler_mouse_move, handler_keyboard_state}, kdef::{DPFLTR_LEVEL, MmSystemRangeStart, IoCreateDriver, KeGetCurrentIrql}, kapi::device_general_irp_handler, offsets::initialize_nt_offsets, winver::{initialize_os_info, OS_VERSION_INFO}};
+use crate::{
+    handler::{
+        handler_get_modules, handler_keyboard_state, handler_mouse_move, handler_protection_toggle,
+        handler_read,
+    },
+    kapi::device_general_irp_handler,
+    kdef::{IoCreateDriver, KeGetCurrentIrql, MmSystemRangeStart, DPFLTR_LEVEL},
+    logger::APP_LOGGER,
+    offsets::initialize_nt_offsets,
+    winver::{initialize_os_info, OS_VERSION_INFO},
+};
 
-mod panic_hook;
-mod logger;
+mod device;
 mod handler;
 mod kapi;
+mod kb;
 mod kdef;
+mod logger;
+mod mouse;
 mod offsets;
+mod panic_hook;
 mod process_protection;
 mod winver;
-mod device_varhal;
-mod kb;
-mod mouse;
 
 extern crate alloc;
 
-static REQUEST_HANDLER: SyncUnsafeCell<Option<Box<HandlerRegistry>>> = SyncUnsafeCell::new(Option::None);
-static VARHAL_DEVICE: SyncUnsafeCell<Option<VarhalDevice>> = SyncUnsafeCell::new(Option::None);
+static REQUEST_HANDLER: SyncUnsafeCell<Option<Box<HandlerRegistry>>> =
+    SyncUnsafeCell::new(Option::None);
+static VALTHRUN_DEVICE: SyncUnsafeCell<Option<ValthrunDevice>> = SyncUnsafeCell::new(Option::None);
 static KEYBOARD_INPUT: SyncUnsafeCell<Option<KeyboardInput>> = SyncUnsafeCell::new(Option::None);
 static MOUSE_INPUT: SyncUnsafeCell<Option<MouseInput>> = SyncUnsafeCell::new(Option::None);
 
@@ -43,19 +63,19 @@ extern "system" fn driver_unload(_driver: &mut DRIVER_OBJECT) {
     log::info!("Unloading...");
 
     /* Remove the device */
-    let device_handle = unsafe { &mut *VARHAL_DEVICE.get() };
+    let device_handle = unsafe { &mut *VALTHRUN_DEVICE.get() };
     let _ = device_handle.take();
-    
+
     /* Delete request handler registry */
     let request_handler = unsafe { &mut *REQUEST_HANDLER.get() };
     let _ = request_handler.take();
 
     /* Uninstall process protection */
     process_protection::finalize();
-    
+
     let keyboard_input = unsafe { &mut *KEYBOARD_INPUT.get() };
     let _ = keyboard_input.take();
-    
+
     let mouse_input = unsafe { &mut *MOUSE_INPUT.get() };
     let _ = mouse_input.take();
 
@@ -63,18 +83,25 @@ extern "system" fn driver_unload(_driver: &mut DRIVER_OBJECT) {
 }
 
 #[no_mangle]
-pub extern "system" fn driver_entry(driver: *mut DRIVER_OBJECT, registry_path: *const UNICODE_STRING) -> NTSTATUS {
+pub extern "system" fn driver_entry(
+    driver: *mut DRIVER_OBJECT,
+    registry_path: *const UNICODE_STRING,
+) -> NTSTATUS {
     log::set_max_level(log::LevelFilter::Trace);
     if log::set_logger(&APP_LOGGER).is_err() {
-        unsafe { 
-            DbgPrintEx(0, DPFLTR_LEVEL::ERROR as u32, "[VT] Failed to initialize app logger!\n\0".as_ptr());
+        unsafe {
+            DbgPrintEx(
+                0,
+                DPFLTR_LEVEL::ERROR as u32,
+                obfstr!("[VT] Failed to initialize app logger!\n\0").as_ptr(),
+            );
         }
 
         return STATUS_FAILED_DRIVER_ENTRY;
     }
 
     if let Err(error) = initialize_os_info() {
-        log::error!("Failed to load OS version info: {:X}", error);
+        log::error!("{} {:X}", obfstr!("Failed to load OS version info:"), error);
         return STATUS_FAILED_DRIVER_ENTRY;
     }
 
@@ -82,19 +109,28 @@ pub extern "system" fn driver_entry(driver: *mut DRIVER_OBJECT, registry_path: *
         Some(driver) => internal_driver_entry(driver, registry_path),
         None => {
             let target_driver_entry = internal_driver_entry as usize;
-            log::info!("Manually mapped driver.");
-            log::info!("  System range start is {:X}, driver entry mapped at {:X}.", unsafe { MmSystemRangeStart } as u64, target_driver_entry);
-            log::info!("  IRQL level at {:X}", unsafe { KeGetCurrentIrql() });
+            log::info!("{}", obfstr!("Manually mapped driver."));
+            log::debug!(
+                "  System range start is {:X}, driver entry mapped at {:X}.",
+                unsafe { MmSystemRangeStart } as u64,
+                target_driver_entry
+            );
+            log::debug!("  IRQL level at {:X}", unsafe { KeGetCurrentIrql() });
 
             // TODO(low): May improve hiding via:
             // https://research.checkpoint.com/2021/a-deep-dive-into-doublefeature-equation-groups-post-exploitation-dashboard/
-            let driver_name = UNICODE_STRING::from_bytes(obfstr::wide!("\\Driver\\valthrun-driver"));
+            let driver_name =
+                UNICODE_STRING::from_bytes(obfstr::wide!("\\Driver\\valthrun-driver"));
             let result = unsafe { IoCreateDriver(&driver_name, target_driver_entry as *const _) };
             if let Err(code) = result.ok() {
                 if code == STATUS_OBJECT_NAME_COLLISION {
-                    log::error!("Failed to create valthrun driver as a driver with this name is already loaded.");
+                    log::error!("{}", obfstr!("Failed to create valthrun driver as a driver with this name is already loaded."));
                 } else {
-                    log::error!("Failed to create new driver for manually mapped driver: {:X}", code);
+                    log::error!(
+                        "{} {:X}",
+                        obfstr!("Failed to create new driver for manually mapped driver:"),
+                        code
+                    );
                 }
                 STATUS_FAILED_DRIVER_ENTRY
             } else {
@@ -113,14 +149,23 @@ pub extern "system" fn driver_entry(driver: *mut DRIVER_OBJECT, registry_path: *
     }
 }
 
-extern "C" fn internal_driver_entry(driver: &mut DRIVER_OBJECT, registry_path: *const UNICODE_STRING) -> NTSTATUS {
+extern "C" fn internal_driver_entry(
+    driver: &mut DRIVER_OBJECT,
+    registry_path: *const UNICODE_STRING,
+) -> NTSTATUS {
     let registry_path = unsafe { registry_path.as_ref() }.map(|path| path.as_string_lossy());
     {
-        let registry_path = registry_path.as_ref()
+        let registry_path = registry_path
+            .as_ref()
             .map(|path| path.as_str())
             .unwrap_or("None");
 
-        log::info!("Initialize driver at {:X} ({:?}). WinVer {}.", driver as *mut _ as u64, registry_path, OS_VERSION_INFO.dwBuildNumber);
+        log::info!(
+            "Initialize driver at {:X} ({:?}). WinVer {}.",
+            driver as *mut _ as u64,
+            registry_path,
+            OS_VERSION_INFO.dwBuildNumber
+        );
     }
 
     driver.DriverUnload = Some(driver_unload);
@@ -128,15 +173,23 @@ extern "C" fn internal_driver_entry(driver: &mut DRIVER_OBJECT, registry_path: *
         log::error!("{}{:#}", obfstr!("Failed to initialize SEH: "), error);
         return STATUS_FAILED_DRIVER_ENTRY;
     }
-    
+
     if let Err(error) = kapi::mem::init() {
-        log::error!("{}{:#}", obfstr!("Failed to initialize mem functions"), error);
+        log::error!(
+            "{}{:#}",
+            obfstr!("Failed to initialize mem functions"),
+            error
+        );
         return STATUS_FAILED_DRIVER_ENTRY;
     }
 
     /* Needs to be done first as it's assumed to be init */
     if let Err(error) = initialize_nt_offsets() {
-        log::error!("{}: {}", obfstr!("Failed to initialize NT_OFFSETS: {:#}"), error);
+        log::error!(
+            "{}: {}",
+            obfstr!("Failed to initialize NT_OFFSETS: {:#}"),
+            error
+        );
         return STATUS_FAILED_DRIVER_ENTRY;
     }
 
@@ -146,9 +199,13 @@ extern "C" fn internal_driver_entry(driver: &mut DRIVER_OBJECT, registry_path: *
 
     match kb::create_keyboard_input() {
         Err(error) => {
-            log::error!("Failed to initialize keyboard input: {:#}", error);
+            log::error!(
+                "{} {:#}",
+                obfstr!("Failed to initialize keyboard input:"),
+                error
+            );
             return STATUS_FAILED_DRIVER_ENTRY;
-        },
+        }
         Ok(keyboard) => {
             unsafe { *KEYBOARD_INPUT.get() = Some(keyboard) };
         }
@@ -156,32 +213,44 @@ extern "C" fn internal_driver_entry(driver: &mut DRIVER_OBJECT, registry_path: *
 
     match mouse::create_mouse_input() {
         Err(error) => {
-            log::error!("Failed to initialize mouse input: {:#}", error);
+            log::error!(
+                "{} {:#}",
+                obfstr!("Failed to initialize mouse input:"),
+                error
+            );
             return STATUS_FAILED_DRIVER_ENTRY;
-        },
+        }
         Ok(mouse) => {
             unsafe { *MOUSE_INPUT.get() = Some(mouse) };
         }
     }
-    
+
     if let Err(error) = process_protection::initialize() {
-        log::error!("Failed to initialized process protection: {:#}", error);
+        log::error!(
+            "{} {:#}",
+            obfstr!("Failed to initialized process protection:"),
+            error
+        );
         return STATUS_FAILED_DRIVER_ENTRY;
     };
-    
-    let device = match VarhalDevice::create(driver) {
+
+    let device = match ValthrunDevice::create(driver) {
         Ok(device) => device,
         Err(error) => {
-            log::error!("Failed to initialize device: {:#}", error);
+            log::error!("{} {:#}", obfstr!("Failed to initialize device:"), error);
             return STATUS_FAILED_DRIVER_ENTRY;
         }
     };
-    log::debug!("Varhal device Object at 0x{:X} (Handle at 0x{:X})", 
-        device.device_handle.device as *const _ as u64, &*device.device_handle as *const _ as u64);
-    unsafe { *VARHAL_DEVICE.get() = Some(device) };
+    log::debug!(
+        "{} device Object at 0x{:X} (Handle at 0x{:X})",
+        obfstr!("Valthrun"),
+        device.device_handle.device as *const _ as u64,
+        &*device.device_handle as *const _ as u64
+    );
+    unsafe { *VALTHRUN_DEVICE.get() = Some(device) };
 
     let mut handler = Box::new(HandlerRegistry::new());
-    
+
     handler.register::<RequestHealthCheck>(&|_req, res| {
         res.success = true;
         Ok(())

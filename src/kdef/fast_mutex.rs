@@ -1,4 +1,7 @@
-use winapi::{shared::ntdef::PVOID, km::wdm::{KeInitializeEvent, KEVENT, SynchronizationEvent}};
+use winapi::{
+    km::wdm::{KeInitializeEvent, SynchronizationEvent, KEVENT},
+    shared::ntdef::PVOID,
+};
 
 #[repr(C)]
 pub struct _FAST_MUTEX {
