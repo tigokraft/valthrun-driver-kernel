@@ -1,55 +1,84 @@
+use core::cell::SyncUnsafeCell;
+
+use obfstr::obfstr;
 use winapi::shared::ntdef::UNICODE_STRING;
 
 use crate::kdef::MmGetSystemRoutineAddress;
 
 use super::{UnicodeStringEx, seh};
+#[derive(Default)]
+struct MemFunctions {
+    probe_for_read: u64,
+    probe_for_write: u64,
+    memmove: u64,
+}
+static MEM_FUNCTIONS: SyncUnsafeCell<MemFunctions> = SyncUnsafeCell::new(MemFunctions {
+    memmove: 0,
+    probe_for_read: 0,
+    probe_for_write: 0,
+});
+
+pub fn init() -> anyhow::Result<()> {
+    let function_table = unsafe { &mut *MEM_FUNCTIONS.get() };
+
+    function_table.probe_for_read = unsafe {
+        let name = UNICODE_STRING::from_bytes(obfstr::wide!("ProbeForRead"));
+        MmGetSystemRoutineAddress(&name) as u64
+    };
+    if function_table.probe_for_read == 0 {
+        anyhow::bail!("{}", obfstr!("failed to resolve ProbeForRead"))
+    }
+
+    function_table.probe_for_write = unsafe {
+        let name = UNICODE_STRING::from_bytes(obfstr::wide!("ProbeForWrite"));
+        MmGetSystemRoutineAddress(&name) as u64
+    };
+    if function_table.probe_for_write == 0 {
+        anyhow::bail!("{}", obfstr!("failed to resolve ProbeForWrite"))
+    }
+
+    function_table.memmove = unsafe {
+        let name = UNICODE_STRING::from_bytes(obfstr::wide!("memmove"));
+        MmGetSystemRoutineAddress(&name) as u64
+    };
+    if function_table.memmove == 0 {
+        anyhow::bail!("{}", obfstr!("failed to resolve memmove"))
+    }
+
+    Ok(())
+}
 
 pub fn probe_read(target: u64, length: usize, align: usize) -> bool {
-    let target_fn = unsafe {
-        let name = UNICODE_STRING::from_bytes(obfstr::wide!("ProbeForRead"));
-        MmGetSystemRoutineAddress(&name)
-    };
-
-    if target_fn.is_null() {
-        log::warn!("Missing ProbeForRead");
-        return false;
+    let target_fn = unsafe { &*MEM_FUNCTIONS.get() }.probe_for_read;
+    if target_fn == 0 {
+        return false
     }
 
     unsafe {
-        seh::seh_invoke(target_fn as u64, target, length as u64, align as u64, 0)
+        seh::seh_invoke(target_fn, target, length as u64, align as u64, 0)
     }
 }
 
 pub fn probe_write(target: u64, length: usize, align: usize) -> bool {
-    let target_fn = unsafe {
-        let name = UNICODE_STRING::from_bytes(obfstr::wide!("ProbeForWrite"));
-        MmGetSystemRoutineAddress(&name)
-    };
-
-    if target_fn.is_null() {
-        log::warn!("Missing ProbeForWrite");
-        return false;
+    let target_fn = unsafe { &*MEM_FUNCTIONS.get() }.probe_for_write;
+    if target_fn == 0 {
+        return false
     }
 
     unsafe {
-        seh::seh_invoke(target_fn as u64, target, length as u64, align as u64, 0)
+        seh::seh_invoke(target_fn, target, length as u64, align as u64, 0)
     }
 }
 
 /// Copy memory from source into target.
 /// Returns false on failure.
 pub fn safe_copy(target: &mut [u8], source: u64) -> bool {
-    let target_fn = unsafe {
-        let name = UNICODE_STRING::from_bytes(obfstr::wide!("memmove"));
-        MmGetSystemRoutineAddress(&name)
-    };
-
-    if target_fn.is_null() {
-        log::warn!("Missing memmove");
-        return false;
+    let target_fn = unsafe { &*MEM_FUNCTIONS.get() }.memmove;
+    if target_fn == 0 {
+        return false
     }
 
     unsafe {
-        seh::seh_invoke(target_fn as u64, target.as_mut_ptr() as u64, source, target.len() as u64, 0)
+        seh::seh_invoke(target_fn, target.as_mut_ptr() as u64, source, target.len() as u64, 0)
     }
 }

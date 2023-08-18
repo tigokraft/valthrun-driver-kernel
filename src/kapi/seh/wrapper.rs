@@ -6,7 +6,6 @@ use alloc::string::ToString;
 use anyhow::Context;
 use obfstr::obfstr;
 use valthrun_driver_shared::ByteSequencePattern;
-use winapi::um::winnt::STATUS_ACCESS_VIOLATION;
 
 use crate::{kapi::KModule, offsets::NtOffsets};
 

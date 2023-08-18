@@ -3,7 +3,7 @@ use core::pin::Pin;
 use alloc::boxed::Box;
 use winapi::{km::{wdm::{DEVICE_TYPE, DRIVER_OBJECT, IoCreateSymbolicLink, IoDeleteSymbolicLink, IRP, IoGetCurrentIrpStackLocation}, ntifs::DEVICE_FLAGS}, shared::{ntdef::{UNICODE_STRING, NTSTATUS}, ntstatus::{STATUS_SUCCESS, STATUS_INVALID_PARAMETER}}};
 
-use crate::{kapi::{DeviceHandle, UnicodeStringEx, NTStatusEx, IrpEx, Process, self, mem}, process_protection, REQUEST_HANDLER, kdef::{ProbeForRead, ProbeForWrite, IRP_MJ_CREATE, IRP_MJ_CLOSE, IRP_MJ_DEVICE_CONTROL}};
+use crate::{kapi::{DeviceHandle, UnicodeStringEx, NTStatusEx, IrpEx, Process, mem}, process_protection, REQUEST_HANDLER, kdef::{IRP_MJ_CREATE, IRP_MJ_CLOSE, IRP_MJ_DEVICE_CONTROL}};
 
 type VarhalDeviceHandle = DeviceHandle<()>;
 pub struct VarhalDevice {
