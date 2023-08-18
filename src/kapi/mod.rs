@@ -6,6 +6,8 @@ pub use process::*;
 mod seh;
 pub use seh::*;
 
+pub mod mem;
+
 mod string;
 pub use string::*;
 

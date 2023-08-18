@@ -15,6 +15,7 @@ rustflags = [
     # Post Link Args
     "-C", "link-arg=/OPT:REF,ICF",
     "-C", "link-arg=/ENTRY:driver_entry",
+    "-C", "link-arg=/MERGE:.btext=.text",
     "-C", "link-arg=/MERGE:.edata=.rdata",
     "-C", "link-arg=/MERGE:.rustc=.data",
     "-C", "link-arg=/INTEGRITYCHECK",

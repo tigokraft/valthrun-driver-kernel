@@ -3,7 +3,7 @@ use core::pin::Pin;
 use alloc::boxed::Box;
 use winapi::{km::{wdm::{DEVICE_TYPE, DRIVER_OBJECT, IoCreateSymbolicLink, IoDeleteSymbolicLink, IRP, IoGetCurrentIrpStackLocation}, ntifs::DEVICE_FLAGS}, shared::{ntdef::{UNICODE_STRING, NTSTATUS}, ntstatus::{STATUS_SUCCESS, STATUS_INVALID_PARAMETER}}};
 
-use crate::{kapi::{DeviceHandle, UnicodeStringEx, NTStatusEx, IrpEx, Process, self}, process_protection, REQUEST_HANDLER, kdef::{ProbeForRead, ProbeForWrite, IRP_MJ_CREATE, IRP_MJ_CLOSE, IRP_MJ_DEVICE_CONTROL}};
+use crate::{kapi::{DeviceHandle, UnicodeStringEx, NTStatusEx, IrpEx, Process, self, mem}, process_protection, REQUEST_HANDLER, kdef::{ProbeForRead, ProbeForWrite, IRP_MJ_CREATE, IRP_MJ_CLOSE, IRP_MJ_DEVICE_CONTROL}};
 
 type VarhalDeviceHandle = DeviceHandle<()>;
 pub struct VarhalDevice {
@@ -93,22 +93,17 @@ fn irp_control(_device: &mut VarhalDeviceHandle, irp: &mut IRP) -> NTSTATUS {
     let inbuffer = unsafe {
         core::slice::from_raw_parts(param.Type3InputBuffer as *const u8, param.InputBufferLength as usize)
     };
-    let inbuffer_probe = kapi::try_seh(|| unsafe {
-        ProbeForRead(inbuffer.as_ptr() as *const (), inbuffer.len(), 1);
-    });
-    if let Err(err) = inbuffer_probe {
-        log::warn!("IRP request inbuffer invalid: {}", err);
+    
+    if !mem::probe_read(inbuffer.as_ptr() as u64, inbuffer.len(), 1) {
+        log::warn!("IRP request inbuffer invalid");
         return irp.complete_request(STATUS_INVALID_PARAMETER);
     }
 
     let outbuffer = unsafe {
         core::slice::from_raw_parts_mut(outbuffer as *mut u8, param.OutputBufferLength as usize)
     };
-    let outbuffer_probe = kapi::try_seh(|| unsafe {
-        ProbeForWrite(outbuffer.as_mut_ptr() as *mut (), outbuffer.len(), 1);
-    });
-    if let Err(err) = outbuffer_probe {
-        log::warn!("IRP request outbuffer invalid: {}", err);
+    if !mem::probe_write(outbuffer.as_ptr() as u64, outbuffer.len(), 1) {
+        log::warn!("IRP request outbuffer invalid");
         return irp.complete_request(STATUS_INVALID_PARAMETER);
     }
 

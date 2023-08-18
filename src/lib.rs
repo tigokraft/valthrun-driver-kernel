@@ -6,6 +6,7 @@
 #![feature(const_transmute_copy)]
 
 use core::cell::SyncUnsafeCell;
+use core::arch::asm;
 
 use alloc::boxed::Box;
 use device_varhal::VarhalDevice;
@@ -17,7 +18,7 @@ use obfstr::obfstr;
 use valthrun_driver_shared::requests::{RequestHealthCheck, RequestCSModule, RequestRead, RequestProtectionToggle, RequestMouseMove, RequestKeyboardState};
 use winapi::{shared::{ntdef::{UNICODE_STRING, NTSTATUS}, ntstatus::{STATUS_SUCCESS, STATUS_FAILED_DRIVER_ENTRY, STATUS_OBJECT_NAME_COLLISION}}, km::wdm::{DRIVER_OBJECT, DbgPrintEx}};
 
-use crate::{logger::APP_LOGGER, handler::{handler_get_modules, handler_read, handler_protection_toggle, handler_mouse_move, handler_keyboard_state}, kdef::{DPFLTR_LEVEL, MmSystemRangeStart, IoCreateDriver, KeGetCurrentIrql}, kapi::device_general_irp_handler, offsets::initialize_nt_offsets, winver::{initialize_os_info, OS_VERSION_INFO}};
+use crate::{logger::APP_LOGGER, handler::{handler_get_modules, handler_read, handler_protection_toggle, handler_mouse_move, handler_keyboard_state}, kdef::{DPFLTR_LEVEL, MmSystemRangeStart, IoCreateDriver, KeGetCurrentIrql}, kapi::{device_general_irp_handler, mem}, offsets::initialize_nt_offsets, winver::{initialize_os_info, OS_VERSION_INFO}};
 
 mod panic_hook;
 mod logger;
@@ -123,18 +124,50 @@ extern "C" fn internal_driver_entry(driver: &mut DRIVER_OBJECT, registry_path: *
         log::info!("Initialize driver at {:X} ({:?}). WinVer {}.", driver as *mut _ as u64, registry_path, OS_VERSION_INFO.dwBuildNumber);
     }
 
+    driver.DriverUnload = Some(driver_unload);
     if let Err(error) = kapi::setup_seh() {
-        log::error!("{}: {}", obfstr!("Failed to initialize SEH: {:#}"), error);
+        log::error!("{}{:#}", obfstr!("Failed to initialize SEH: "), error);
         return STATUS_FAILED_DRIVER_ENTRY;
     }
     
+    // log::debug!("X1 {:#}", mem::probe_read(1, 8, 1));
+    // log::debug!("X2 {:#}", mem::probe_read(internal_driver_entry as u64, 8, 1));
+
+    // log::debug!("X3 {:#}", mem::probe_write(1, 8, 1));
+    // log::debug!("X4 {:#}", mem::probe_write(internal_driver_entry as u64, 8, 1));
+
+    // let mut dest_buffer = [0u8];
+    // let src = 123;
+    // log::debug!("X5 {:#} | {:?}", mem::safe_copy(&mut dest_buffer, 0), dest_buffer);
+    // log::debug!("X6 {:#} | {:?}", mem::safe_copy(&mut dest_buffer, &src as *const _ as u64), dest_buffer);
+    // let mut x = 0x12345D;
+    // let mut read_buffer = [0u8; 256];
+    // log::debug!("Result 1: {:?}", kapi::try_seh(|| {
+    //     unsafe { asm!("int3"); };
+    //     x = 123;
+
+    //     let read_source = unsafe {
+    //         core::slice::from_raw_parts(x as *const u8, 256)
+    //     };
+    //     read_buffer.copy_from_slice(read_source);
+    // }));
+    // log::debug!("X: {}", x);
+
+    // log::debug!("Result 2: {:?}", kapi::try_seh(|| {
+    //     unsafe { asm!("int3"); };
+    //     unsafe {
+    //         *core::mem::transmute::<_, *mut u64>(0x0u64) = 0;
+    //     }
+    // }));
+    //log::debug!("Result 3: {:?}", kapi::try_seh(|| { }));
+    //return STATUS_FAILED_DRIVER_ENTRY;
+
     /* Needs to be done first as it's assumed to be init */
     if let Err(error) = initialize_nt_offsets() {
         log::error!("{}: {}", obfstr!("Failed to initialize NT_OFFSETS: {:#}"), error);
         return STATUS_FAILED_DRIVER_ENTRY;
     }
 
-    driver.DriverUnload = Some(driver_unload);
     for function in driver.MajorFunction.iter_mut() {
         *function = Some(device_general_irp_handler);
     }
