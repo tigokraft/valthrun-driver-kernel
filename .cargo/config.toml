@@ -11,7 +11,7 @@ rustflags = [
     "-Z", "pre-link-arg=/MANIFEST:NO",
 
     "-Z", "pre-link-arg=/PDBALTPATH:https://youtu.be/dQw4w9WgXcQ",
-    "--remap-path-prefix=G:\\git\\rust\\valthrun=[src]",
+    "--remap-path-prefix=C:\\Users\\Markus\\git\\Valthrun\\kernel\\=[src]",
 
     # Post Link Args
     "-C", "link-arg=/OPT:REF,ICF",

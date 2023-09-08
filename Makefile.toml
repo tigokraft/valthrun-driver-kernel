@@ -14,7 +14,8 @@ script = [
 ignore_errors = true
 script = [
     "cd %TARGET_PATH%",
-    "mv driver.dll valthrun-driver.sys",
+    "del valthrun-driver.sys",
+    "ren driver.dll valthrun-driver.sys",
 ]
 
 [tasks.sign]

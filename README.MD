@@ -5,6 +5,7 @@ Thanks Matthias for the buitifull writeup on [how to get started writing a kerne
 ### Requirements
 - Visual Studio 2022 (located at `%ProgramFiles%\Microsoft Visual Studio\2022\Community`)
 - Windows Kernel Development Kit
+- Cargo Make (`cargo install --force cargo-make`)
 
 ```ps1
 # Switch to the kernel driver directory

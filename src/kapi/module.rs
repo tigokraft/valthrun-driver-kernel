@@ -65,13 +65,14 @@ pub struct KModuleSection {
 }
 
 impl KModuleSection {
-    fn from_header(header: &IMAGE_SECTION_HEADER, module_base: usize) -> Self {
+    fn from_header(header: &IMAGE_SECTION_HEADER, module: &KModule) -> Self {
         let section_name = CStr::from_bytes_until_nul(&header.Name)
             .unwrap_or_default()
             .to_string_lossy();
+        
         Self {
             name: section_name.to_string(),
-            module_base: module_base,
+            module_base: module.base_address,
             virtual_address: header.VirtualAddress as usize,
             size_of_raw_data: header.SizeOfRawData as usize,
         }
@@ -146,19 +147,21 @@ impl KModule {
         let result = self
             .section_headers()?
             .iter()
-            .map(|section| KModuleSection::from_header(section, self.base_address))
+            .map(|section| KModuleSection::from_header(section, self))
             .filter(|section| section.name == name)
             .collect::<Vec<_>>();
 
         Ok(result)
     }
 
-    pub fn find_code_sections(&self) -> anyhow::Result<impl Iterator<Item = KModuleSection> + '_> {
+    pub fn find_code_sections(&self) -> anyhow::Result<Vec<KModuleSection>> {
         Ok(self
             .section_headers()?
             .iter()
             .filter(|section| (section.Characteristics & IMAGE_SCN_CNT_CODE) > 0)
-            .map(|section| KModuleSection::from_header(section, self.base_address)))
+            .map(|section| KModuleSection::from_header(section, self))
+            .collect::<Vec<_>>()
+        )
     }
 
     pub fn query_modules() -> anyhow::Result<Vec<KModule>> {
