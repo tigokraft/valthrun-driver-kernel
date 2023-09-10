@@ -35,7 +35,7 @@ use crate::{
     kdef::{IoCreateDriver, KeGetCurrentIrql, MmSystemRangeStart, DPFLTR_LEVEL},
     logger::APP_LOGGER,
     offsets::initialize_nt_offsets,
-    winver::{initialize_os_info, OS_VERSION_INFO},
+    winver::{initialize_os_info, os_info},
 };
 
 mod device;
@@ -164,7 +164,7 @@ extern "C" fn internal_driver_entry(
             "Initialize driver at {:X} ({:?}). WinVer {}.",
             driver as *mut _ as u64,
             registry_path,
-            OS_VERSION_INFO.dwBuildNumber
+            os_info().dwBuildNumber
         );
     }
 

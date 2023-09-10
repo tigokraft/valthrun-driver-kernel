@@ -31,10 +31,6 @@ fn process_protection_state() -> &'static FastMutex<Option<ProtectionState>> {
     PROCESS_PROTECTION.get_or_init(|| Box::new(FastMutex::new(None)))
 }
 
-extern "C" {
-    fn MmIsAddressValid(Address: PVOID) -> bool;
-}
-
 /*
  * _ctx will point to the method itself as we needed a jump to get here.
  * See ObRegisterCallbacks for more info.
@@ -172,13 +168,9 @@ pub fn initialize() -> anyhow::Result<()> {
         let (jmp_module, jmp_target) = KModule::query_modules()?
             .into_iter()
             .filter(|module| module.file_name.ends_with(".sys"))
+            .filter(KModule::is_base_data_valid)
             .find_map(|module| {
                 // log::debug!("Scanning {} ({:X} - {:X})", module.file_name, module.base_address, module.base_address + module.module_size);
-                if !MmIsAddressValid(module.base_address as *const () as PVOID) {
-                    // log::debug!(" ! Paged out !");
-                    return None;
-                }
-
                 let sections = match module.find_code_sections() {
                     Ok(sections) => sections,
                     Err(_) => return None,
@@ -186,9 +178,7 @@ pub fn initialize() -> anyhow::Result<()> {
 
                 let jmp_target = sections
                     .iter()
-                    .filter(|section| {
-                        MmIsAddressValid(section.raw_data_address() as PVOID)
-                    })
+                    .filter(|section| section.is_data_valid())
                     .filter(|section| {
                         // log::debug!(" Testing {} at {:X} ({:X} bytes)", section.name, section.raw_data_address(), section.size_of_raw_data);
                         MmVerifyCallbackFunctionFlags(section.raw_data_address() as PVOID, 0x20)

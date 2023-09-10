@@ -1,3 +1,5 @@
+use core::cell::SyncUnsafeCell;
+
 use winapi::shared::ntdef::NTSTATUS;
 
 use crate::kapi::NTStatusEx;
@@ -24,7 +26,7 @@ extern "system" {
     fn RtlGetVersion(info: &mut _OSVERSIONINFOEXW) -> NTSTATUS;
 }
 
-pub static OS_VERSION_INFO: _OSVERSIONINFOEXW = _OSVERSIONINFOEXW {
+pub static OS_VERSION_INFO: SyncUnsafeCell<_OSVERSIONINFOEXW> = SyncUnsafeCell::new(_OSVERSIONINFOEXW {
     dwOSVersionInfoSize: 0,
     dwMajorVersion: 0,
     dwMinorVersion: 0,
@@ -36,10 +38,13 @@ pub static OS_VERSION_INFO: _OSVERSIONINFOEXW = _OSVERSIONINFOEXW {
     wSuiteMask: 0,
     wProductType: 0,
     wReserved: 0,
-};
+});
+
+pub fn os_info() -> &'static _OSVERSIONINFOEXW {
+    unsafe { &*OS_VERSION_INFO.get() }
+}
 
 pub fn initialize_os_info() -> anyhow::Result<(), NTSTATUS> {
-    #[allow(mutable_transmutes)]
-    let mut info = unsafe { core::mem::transmute::<_, &mut _>(&OS_VERSION_INFO) };
+    let mut info = unsafe { &mut *OS_VERSION_INFO.get() };
     unsafe { RtlGetVersion(&mut info).ok() }
 }

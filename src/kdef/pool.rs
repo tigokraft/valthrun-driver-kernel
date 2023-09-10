@@ -16,4 +16,6 @@ extern "system" {
 
     pub fn ProbeForRead(address: *const (), length: usize, alignment: u32);
     pub fn ProbeForWrite(address: *mut (), length: usize, alignment: u32);
+
+    pub fn MmIsAddressValid(Address: PVOID) -> bool;
 }

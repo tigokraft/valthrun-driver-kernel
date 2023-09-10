@@ -5,12 +5,12 @@ use core::{
     sync::atomic::{AtomicU64, Ordering},
 };
 
-use alloc::string::ToString;
+use alloc::{string::ToString, format};
 use anyhow::Context;
 use obfstr::obfstr;
-use valthrun_driver_shared::ByteSequencePattern;
+use valthrun_driver_shared::{ByteSequencePattern, SearchPattern};
 
-use crate::{kapi::KModule, offsets::NtOffsets};
+use crate::kapi::KModule;
 
 #[repr(C)]
 struct SehInvokeInfo {
@@ -80,17 +80,27 @@ pub fn setup_seh() -> anyhow::Result<()> {
     let kernel_base = KModule::find_by_name(obfstr!("ntoskrnl.exe"))?
         .with_context(|| obfstr!("could not find kernel base").to_string())?;
 
-    let pattern = ByteSequencePattern::parse(obfstr!("E8 ? ? ? ? 89 45 EF E9"))
+    let pattern = ByteSequencePattern::parse(obfstr!("45 33 C0 48 8B 12 48 8B C2"))
         .with_context(|| obfstr!("could not compile KdpSysWriteMsr pattern").to_string())?;
 
-    let seh_target: u64 = NtOffsets::locate_function(
-        &kernel_base,
-        obfstr!("KdpSysWriteMsr"),
-        &pattern,
-        0x01,
-        0x05,
-    )?;
+    let seh_target = kernel_base
+        .find_code_sections()?
+        .into_iter()
+        .find_map(|section| {
+            if let Some(data) = section.raw_data() {
+                if let Some(offset) = pattern.find(data) {
+                    Some(offset + section.raw_data_address())
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        })
+        .with_context(|| format!("failed to find {} pattern", obfstr!("KdpSysWriteMsr")))?
+        as u64;
 
+    log::debug!("{} {:X} ({:X})", obfstr!("SEH found KdpSysWriteMsr at"), seh_target - kernel_base.base_address as u64, seh_target);
     SEH_TARGET.store(seh_target + 0x0F, Ordering::Relaxed);
 
     Ok(())

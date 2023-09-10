@@ -12,6 +12,8 @@ use winapi::{
     um::winnt::{IMAGE_FILE_HEADER, IMAGE_SCN_CNT_CODE, IMAGE_SECTION_HEADER, PIMAGE_NT_HEADERS},
 };
 
+use crate::kdef::MmIsAddressValid;
+
 use super::NTStatusEx;
 
 #[repr(C)]
@@ -78,13 +80,23 @@ impl KModuleSection {
         }
     }
 
-    pub fn raw_data(&self) -> &[u8] {
-        unsafe {
+    pub fn is_data_valid(&self) -> bool {
+        unsafe { MmIsAddressValid(self.raw_data_address() as *const () as PVOID) }
+    }
+
+    pub fn raw_data(&self) -> Option<&[u8]> {
+        if !self.is_data_valid() {
+            return None;
+        }
+
+        let buffer = unsafe {
             core::slice::from_raw_parts(
                 self.raw_data_address() as *const u8,
                 self.size_of_raw_data as usize,
             )
-        }
+        };
+
+        Some(buffer)
     }
 
     pub fn raw_data_address(&self) -> usize {
@@ -94,7 +106,7 @@ impl KModuleSection {
     /// Search for a pattern in the current section.
     /// ATTENTION: The result is the **absolute** address.
     pub fn find_pattern(&self, pattern: &dyn SearchPattern) -> Option<usize> {
-        let offset = pattern.find(self.raw_data())?;
+        let offset = pattern.find(self.raw_data()?)?;
         Some(self.raw_data_address() + offset)
     }
 }
@@ -126,6 +138,12 @@ impl KModule {
 }
 
 impl KModule {
+    pub fn is_base_data_valid(&self) -> bool {
+        unsafe {
+            MmIsAddressValid(self.base_address as *const () as PVOID)
+        }
+    }
+
     fn section_headers(&self) -> anyhow::Result<&'static [IMAGE_SECTION_HEADER]> {
         let header = unsafe { RtlImageNtHeader(self.base_address as PVOID).as_mut() }
             .with_context(|| obfstr!("RtlImageNtHeader failed").to_string())?;

@@ -6,7 +6,7 @@ use obfstr::obfstr;
 use valthrun_driver_shared::{ByteSequencePattern, SearchPattern};
 use winapi::shared::ntdef::PVOID;
 
-use crate::kapi::KModule;
+use crate::kapi::{KModule, KModuleSection};
 
 /// Undocumented function/struct offsets
 /// found by sigscanning
@@ -52,9 +52,14 @@ fn find_mm_verify_callback_function_flags_new(kernel_base: &KModule) -> anyhow::
     kernel_base
         .find_code_sections()?
         .into_iter()
+        .filter(KModuleSection::is_data_valid)
         .find_map(|section| {
-            if let Some(offset) = pattern.find(section.raw_data()) {
-                Some(offset + section.raw_data_address())
+            if let Some(data) = section.raw_data() {
+                if let Some(offset) = pattern.find(data) {
+                    Some(offset + section.raw_data_address())
+                } else {
+                    None
+                }
             } else {
                 None
             }
@@ -135,9 +140,14 @@ impl NtOffsets {
             .find_code_sections()?
             .into_iter()
             .find_map(|section| {
-                if let Some(offset) = pattern.find(section.raw_data()) {
-                    Some(offset + section.raw_data_address())
+                if let Some(data) = section.raw_data() {
+                    if let Some(offset) = pattern.find(data) {
+                        Some(offset + section.raw_data_address())
+                    } else {
+                        None
+                    }
                 } else {
+                    log::warn!("Skipping {}::{} as section data is not valid / paged out", module.file_name, section.name);
                     None
                 }
             })
@@ -168,8 +178,12 @@ impl NtOffsets {
             .find_code_sections()?
             .into_iter()
             .find_map(|section| {
-                if let Some(offset) = pattern.find(section.raw_data()) {
-                    Some(offset + section.raw_data_address())
+                if let Some(data) = section.raw_data() {
+                    if let Some(offset) = pattern.find(data) {
+                        Some(offset + section.raw_data_address())
+                    } else {
+                        None
+                    }
                 } else {
                     None
                 }
