@@ -22,7 +22,7 @@ use winapi::{
     km::wdm::{DbgPrintEx, DRIVER_OBJECT},
     shared::{
         ntdef::{NTSTATUS, UNICODE_STRING},
-        ntstatus::{STATUS_FAILED_DRIVER_ENTRY, STATUS_OBJECT_NAME_COLLISION, STATUS_SUCCESS},
+        ntstatus::{STATUS_OBJECT_NAME_COLLISION, STATUS_SUCCESS},
     },
 };
 
@@ -49,6 +49,9 @@ mod offsets;
 mod panic_hook;
 mod process_protection;
 mod winver;
+
+mod status;
+use status::*;
 
 extern crate alloc;
 
@@ -97,12 +100,12 @@ pub extern "system" fn driver_entry(
             );
         }
 
-        return STATUS_FAILED_DRIVER_ENTRY;
+        return CSTATUS_LOG_INIT_FAILED;
     }
 
     if let Err(error) = initialize_os_info() {
         log::error!("{} {:X}", obfstr!("Failed to load OS version info:"), error);
-        return STATUS_FAILED_DRIVER_ENTRY;
+        return CSTATUS_DRIVER_PREINIT_FAILED;
     }
 
     match unsafe { driver.as_mut() } {
@@ -125,14 +128,15 @@ pub extern "system" fn driver_entry(
             if let Err(code) = result.ok() {
                 if code == STATUS_OBJECT_NAME_COLLISION {
                     log::error!("{}", obfstr!("Failed to create valthrun driver as a driver with this name is already loaded."));
+                    CSTATUS_DRIVER_ALREADY_LOADED
                 } else {
                     log::error!(
                         "{} {:X}",
                         obfstr!("Failed to create new driver for manually mapped driver:"),
                         code
                     );
+                    CSTATUS_DRIVER_PREINIT_FAILED
                 }
-                STATUS_FAILED_DRIVER_ENTRY
             } else {
                 STATUS_SUCCESS
             }
@@ -171,7 +175,7 @@ extern "C" fn internal_driver_entry(
     driver.DriverUnload = Some(driver_unload);
     if let Err(error) = kapi::setup_seh() {
         log::error!("{}{:#}", obfstr!("Failed to initialize SEH: "), error);
-        return STATUS_FAILED_DRIVER_ENTRY;
+        return CSTATUS_DRIVER_INIT_FAILED;
     }
 
     if let Err(error) = kapi::mem::init() {
@@ -180,7 +184,7 @@ extern "C" fn internal_driver_entry(
             obfstr!("Failed to initialize mem functions"),
             error
         );
-        return STATUS_FAILED_DRIVER_ENTRY;
+        return CSTATUS_DRIVER_INIT_FAILED;
     }
 
     /* Needs to be done first as it's assumed to be init */
@@ -190,7 +194,7 @@ extern "C" fn internal_driver_entry(
             obfstr!("Failed to initialize NT_OFFSETS: {:#}"),
             error
         );
-        return STATUS_FAILED_DRIVER_ENTRY;
+        return CSTATUS_DRIVER_INIT_FAILED;
     }
 
     for function in driver.MajorFunction.iter_mut() {
@@ -204,7 +208,7 @@ extern "C" fn internal_driver_entry(
                 obfstr!("Failed to initialize keyboard input:"),
                 error
             );
-            return STATUS_FAILED_DRIVER_ENTRY;
+            return CSTATUS_DRIVER_INIT_FAILED;
         }
         Ok(keyboard) => {
             unsafe { *KEYBOARD_INPUT.get() = Some(keyboard) };
@@ -218,7 +222,7 @@ extern "C" fn internal_driver_entry(
                 obfstr!("Failed to initialize mouse input:"),
                 error
             );
-            return STATUS_FAILED_DRIVER_ENTRY;
+            return CSTATUS_DRIVER_INIT_FAILED;
         }
         Ok(mouse) => {
             unsafe { *MOUSE_INPUT.get() = Some(mouse) };
@@ -231,14 +235,14 @@ extern "C" fn internal_driver_entry(
             obfstr!("Failed to initialized process protection:"),
             error
         );
-        return STATUS_FAILED_DRIVER_ENTRY;
+        return CSTATUS_DRIVER_INIT_FAILED;
     };
 
     let device = match ValthrunDevice::create(driver) {
         Ok(device) => device,
         Err(error) => {
             log::error!("{} {:#}", obfstr!("Failed to initialize device:"), error);
-            return STATUS_FAILED_DRIVER_ENTRY;
+            return CSTATUS_DRIVER_INIT_FAILED;
         }
     };
     log::debug!(
