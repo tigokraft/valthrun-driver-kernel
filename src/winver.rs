@@ -26,19 +26,20 @@ extern "system" {
     fn RtlGetVersion(info: &mut _OSVERSIONINFOEXW) -> NTSTATUS;
 }
 
-static OS_VERSION_INFO: SyncUnsafeCell<_OSVERSIONINFOEXW> = SyncUnsafeCell::new(_OSVERSIONINFOEXW {
-    dwOSVersionInfoSize: 0,
-    dwMajorVersion: 0,
-    dwMinorVersion: 0,
-    dwBuildNumber: 0,
-    dwPlatformId: 0,
-    szCSDVersion: [0; 128],
-    wServicePackMajor: 0,
-    wServicePackMinor: 0,
-    wSuiteMask: 0,
-    wProductType: 0,
-    wReserved: 0,
-});
+static OS_VERSION_INFO: SyncUnsafeCell<_OSVERSIONINFOEXW> =
+    SyncUnsafeCell::new(_OSVERSIONINFOEXW {
+        dwOSVersionInfoSize: 0,
+        dwMajorVersion: 0,
+        dwMinorVersion: 0,
+        dwBuildNumber: 0,
+        dwPlatformId: 0,
+        szCSDVersion: [0; 128],
+        wServicePackMajor: 0,
+        wServicePackMinor: 0,
+        wSuiteMask: 0,
+        wProductType: 0,
+        wReserved: 0,
+    });
 
 pub fn os_info() -> &'static _OSVERSIONINFOEXW {
     unsafe { &*OS_VERSION_INFO.get() }

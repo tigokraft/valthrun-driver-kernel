@@ -71,7 +71,7 @@ impl KModuleSection {
         let section_name = CStr::from_bytes_until_nul(&header.Name)
             .unwrap_or_default()
             .to_string_lossy();
-        
+
         Self {
             name: section_name.to_string(),
             module_base: module.base_address,
@@ -139,9 +139,7 @@ impl KModule {
 
 impl KModule {
     pub fn is_base_data_valid(&self) -> bool {
-        unsafe {
-            MmIsAddressValid(self.base_address as *const () as PVOID)
-        }
+        unsafe { MmIsAddressValid(self.base_address as *const () as PVOID) }
     }
 
     fn section_headers(&self) -> anyhow::Result<&'static [IMAGE_SECTION_HEADER]> {
@@ -178,8 +176,7 @@ impl KModule {
             .iter()
             .filter(|section| (section.Characteristics & IMAGE_SCN_CNT_CODE) > 0)
             .map(|section| KModuleSection::from_header(section, self))
-            .collect::<Vec<_>>()
-        )
+            .collect::<Vec<_>>())
     }
 
     pub fn query_modules() -> anyhow::Result<Vec<KModule>> {

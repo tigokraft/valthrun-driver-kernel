@@ -5,9 +5,16 @@ use valthrun_driver_shared::{
     requests::{RequestRead, ResponseRead},
     IO_MAX_DEREF_COUNT,
 };
-use winapi::{km::wdm::{PEPROCESS, KPROCESSOR_MODE}, shared::{ntdef::{PCVOID, PVOID, NTSTATUS}, ntstatus::STATUS_SUCCESS}, ctypes::c_void};
+use winapi::{
+    ctypes::c_void,
+    km::wdm::{KPROCESSOR_MODE, PEPROCESS},
+    shared::{
+        ntdef::{NTSTATUS, PCVOID, PVOID},
+        ntstatus::STATUS_SUCCESS,
+    },
+};
 
-use crate::kapi::{mem, Process, NTStatusEx};
+use crate::kapi::{mem, Process};
 
 struct ReadContext<'a> {
     /// Target process where we want to read the data from
@@ -42,7 +49,8 @@ fn read_memory_attached(ctx: &mut ReadContext) -> bool {
         }
 
         // add the next offset
-        current_address = ctx.resolved_offsets[ctx.offset_index].wrapping_add(ctx.offsets[ctx.offset_index + 1]); 
+        current_address =
+            ctx.resolved_offsets[ctx.offset_index].wrapping_add(ctx.offsets[ctx.offset_index + 1]);
         ctx.offset_index += 1;
     }
 
@@ -57,7 +65,7 @@ extern "system" {
         ToAddress: PVOID,
         BufferSize: usize,
         PreviousMode: KPROCESSOR_MODE,
-        NumberOfBytesCopied: *mut usize
+        NumberOfBytesCopied: *mut usize,
     ) -> NTSTATUS;
 }
 
@@ -75,11 +83,13 @@ fn read_memory_mm(ctx: &mut ReadContext) -> bool {
         let success = unsafe {
             let mut bytes_copied = 0usize;
             MmCopyVirtualMemory(
-                ctx.process.eprocess(), current_address as *const c_void, 
-                current_process.eprocess(), target.as_mut_ptr() as *mut c_void, 
-                target.len(), 
-                KPROCESSOR_MODE::KernelMode, 
-                &mut bytes_copied
+                ctx.process.eprocess(),
+                current_address as *const c_void,
+                current_process.eprocess(),
+                target.as_mut_ptr() as *mut c_void,
+                target.len(),
+                KPROCESSOR_MODE::KernelMode,
+                &mut bytes_copied,
             ) == STATUS_SUCCESS
         };
         if !success {
@@ -87,18 +97,21 @@ fn read_memory_mm(ctx: &mut ReadContext) -> bool {
         }
 
         // add the next offset
-        current_address = ctx.resolved_offsets[ctx.offset_index].wrapping_add(ctx.offsets[ctx.offset_index + 1]); 
+        current_address =
+            ctx.resolved_offsets[ctx.offset_index].wrapping_add(ctx.offsets[ctx.offset_index + 1]);
         ctx.offset_index += 1;
     }
 
     unsafe {
         let mut bytes_copied = 0usize;
         let status = MmCopyVirtualMemory(
-            ctx.process.eprocess(), current_address as *const c_void, 
-            current_process.eprocess(), ctx.read_buffer.as_mut_ptr() as *mut c_void, 
-            ctx.read_buffer.len(), 
-            KPROCESSOR_MODE::KernelMode, 
-            &mut bytes_copied
+            ctx.process.eprocess(),
+            current_address as *const c_void,
+            current_process.eprocess(),
+            ctx.read_buffer.as_mut_ptr() as *mut c_void,
+            ctx.read_buffer.len(),
+            KPROCESSOR_MODE::KernelMode,
+            &mut bytes_copied,
         );
 
         status == STATUS_SUCCESS
@@ -111,7 +124,11 @@ pub fn handler_read(req: &RequestRead, res: &mut ResponseRead) -> anyhow::Result
     }
 
     let out_buffer = unsafe { core::slice::from_raw_parts_mut(req.buffer, req.count) };
-    if !mem::probe_write(out_buffer as *const _ as *const () as u64, out_buffer.len(), 1) {
+    if !mem::probe_write(
+        out_buffer as *const _ as *const () as u64,
+        out_buffer.len(),
+        1,
+    ) {
         anyhow::bail!("output buffer is not writeable")
     }
 
@@ -134,7 +151,7 @@ pub fn handler_read(req: &RequestRead, res: &mut ResponseRead) -> anyhow::Result
         resolved_offsets: [0u64; IO_MAX_DEREF_COUNT],
 
         offsets: &local_offsets,
-        offset_index: 0
+        offset_index: 0,
     };
 
     //let read_result = read_memory_attached(&mut read_ctx);
