@@ -26,7 +26,7 @@ extern "system" {
     fn RtlGetVersion(info: &mut _OSVERSIONINFOEXW) -> NTSTATUS;
 }
 
-pub static OS_VERSION_INFO: SyncUnsafeCell<_OSVERSIONINFOEXW> = SyncUnsafeCell::new(_OSVERSIONINFOEXW {
+static OS_VERSION_INFO: SyncUnsafeCell<_OSVERSIONINFOEXW> = SyncUnsafeCell::new(_OSVERSIONINFOEXW {
     dwOSVersionInfoSize: 0,
     dwMajorVersion: 0,
     dwMinorVersion: 0,
