@@ -14,7 +14,7 @@ use winapi::{
     },
 };
 
-use crate::kapi::{mem, Process};
+use crate::{kapi::{mem, Process}, pmem};
 
 struct ReadContext<'a> {
     /// Target process where we want to read the data from
@@ -118,6 +118,31 @@ fn read_memory_mm(ctx: &mut ReadContext) -> bool {
     }
 }
 
+// Side note:
+// We may not need to use read_process_memory if we just set the current cr3 to the target processes
+// cr3 value and then do normal buisness.
+#[allow(unused)]
+fn read_memory_physical(ctx: &mut ReadContext) -> bool {
+    let mut current_address = ctx.offsets[0];
+    while (ctx.offset_index + 1) < ctx.offsets.len() {
+        let target = &mut ctx.resolved_offsets[ctx.offset_index];
+        let target = unsafe {
+            core::slice::from_raw_parts_mut(target as *mut u64 as *mut u8, size_of_val(target))
+        };
+
+        if pmem::read_process_memory(ctx.process, current_address, target).is_err() {
+            return false;
+        }
+
+        // add the next offset
+        current_address =
+            ctx.resolved_offsets[ctx.offset_index].wrapping_add(ctx.offsets[ctx.offset_index + 1]);
+        ctx.offset_index += 1;
+    }
+
+    pmem::read_process_memory(ctx.process, current_address, ctx.read_buffer).is_ok()
+}
+
 pub fn handler_read(req: &RequestRead, res: &mut ResponseRead) -> anyhow::Result<()> {
     if req.offset_count > IO_MAX_DEREF_COUNT || req.offset_count > req.offsets.len() {
         anyhow::bail!("offset count is not valid")
@@ -155,7 +180,9 @@ pub fn handler_read(req: &RequestRead, res: &mut ResponseRead) -> anyhow::Result
     };
 
     //let read_result = read_memory_attached(&mut read_ctx);
-    let read_result = read_memory_mm(&mut read_ctx);
+    //let read_result = read_memory_mm(&mut read_ctx);
+    let read_result = read_memory_physical(&mut read_ctx);
+
     if !read_result {
         *res = ResponseRead::InvalidAddress {
             resolved_offsets: read_ctx.resolved_offsets,

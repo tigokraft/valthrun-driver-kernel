@@ -72,6 +72,14 @@ impl Process {
             apc_state,
         }
     }
+
+    pub fn get_directory_table_base(&self) -> u64 {
+        unsafe {
+            *self.eprocess()
+                .byte_offset(0x28)
+                .cast::<u64>()
+        }
+    }
 }
 
 impl Drop for Process {
