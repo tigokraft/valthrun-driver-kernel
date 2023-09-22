@@ -44,6 +44,9 @@ fn read_memory_attached(ctx: &mut ReadContext) -> bool {
             core::slice::from_raw_parts_mut(target as *mut u64 as *mut u8, size_of_val(target))
         };
 
+        if !mem::probe_read(current_address, target.len(), 0x01) {
+            return false;
+        }
         if !mem::safe_copy(target, current_address) {
             return false;
         }
@@ -52,6 +55,10 @@ fn read_memory_attached(ctx: &mut ReadContext) -> bool {
         current_address =
             ctx.resolved_offsets[ctx.offset_index].wrapping_add(ctx.offsets[ctx.offset_index + 1]);
         ctx.offset_index += 1;
+    }
+
+    if !mem::probe_read(current_address, ctx.read_buffer.len(), 0x01) {
+        return false;
     }
 
     mem::safe_copy(ctx.read_buffer, current_address)
@@ -80,6 +87,10 @@ fn read_memory_mm(ctx: &mut ReadContext) -> bool {
             core::slice::from_raw_parts_mut(target as *mut u64 as *mut u8, size_of_val(target))
         };
 
+        if !mem::probe_read(current_address, target.len(), 0x01) {
+            return false;
+        }
+
         let success = unsafe {
             let mut bytes_copied = 0usize;
             MmCopyVirtualMemory(
@@ -100,6 +111,10 @@ fn read_memory_mm(ctx: &mut ReadContext) -> bool {
         current_address =
             ctx.resolved_offsets[ctx.offset_index].wrapping_add(ctx.offsets[ctx.offset_index + 1]);
         ctx.offset_index += 1;
+    }
+
+    if !mem::probe_read(current_address, ctx.read_buffer.len(), 0x01) {
+        return false;
     }
 
     unsafe {
@@ -179,9 +194,9 @@ pub fn handler_read(req: &RequestRead, res: &mut ResponseRead) -> anyhow::Result
         offset_index: 0,
     };
 
-    //let read_result = read_memory_attached(&mut read_ctx);
+    let read_result = read_memory_attached(&mut read_ctx);
     //let read_result = read_memory_mm(&mut read_ctx);
-    let read_result = read_memory_physical(&mut read_ctx);
+    //let read_result = read_memory_physical(&mut read_ctx);
 
     if !read_result {
         *res = ResponseRead::InvalidAddress {
