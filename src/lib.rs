@@ -49,6 +49,7 @@ mod offsets;
 mod panic_hook;
 mod process_protection;
 mod winver;
+mod pmem;
 
 mod status;
 use status::*;

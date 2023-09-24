@@ -5,7 +5,7 @@ use core::{
     sync::atomic::{AtomicU64, Ordering},
 };
 
-use alloc::{string::ToString, format};
+use alloc::{format, string::ToString};
 use anyhow::Context;
 use obfstr::obfstr;
 use valthrun_driver_shared::{ByteSequencePattern, SearchPattern};
@@ -100,7 +100,12 @@ pub fn setup_seh() -> anyhow::Result<()> {
         .with_context(|| format!("failed to find {} pattern", obfstr!("KdpSysWriteMsr")))?
         as u64;
 
-    log::debug!("{} {:X} ({:X})", obfstr!("SEH found KdpSysWriteMsr at"), seh_target - kernel_base.base_address as u64, seh_target);
+    log::debug!(
+        "{} {:X} ({:X})",
+        obfstr!("SEH found KdpSysWriteMsr at"),
+        seh_target - kernel_base.base_address as u64,
+        seh_target
+    );
     SEH_TARGET.store(seh_target + 0x0F, Ordering::Relaxed);
 
     Ok(())

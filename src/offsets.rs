@@ -64,7 +64,12 @@ fn find_mm_verify_callback_function_flags_new(kernel_base: &KModule) -> anyhow::
                 None
             }
         })
-        .with_context(|| format!("failed to find {} pattern", obfstr!("MmVerifyCallbackFunctionFlags")))
+        .with_context(|| {
+            format!(
+                "failed to find {} pattern",
+                obfstr!("MmVerifyCallbackFunctionFlags")
+            )
+        })
 }
 
 pub fn initialize_nt_offsets() -> anyhow::Result<()> {
@@ -92,12 +97,21 @@ pub fn initialize_nt_offsets() -> anyhow::Result<()> {
             if let Ok(target) = find_mm_verify_callback_function_flags_old(&kernel_base) {
                 unsafe { core::mem::transmute_copy::<_, _>(&target) }
             } else {
-                anyhow::bail!("{}", obfstr!("Failed to resolve MmVerifyCallbackFunctionFlags"))
+                anyhow::bail!(
+                    "{}",
+                    obfstr!("Failed to resolve MmVerifyCallbackFunctionFlags")
+                )
             }
         }
     };
-    
-    log::debug!("{}::{} resolved to {:X} ({:X})", &kernel_base.file_name, obfstr!("MmVerifyCallbackFunctionFlags"), (mm_verify_callback_function_flags as u64) - kernel_base.base_address as u64, mm_verify_callback_function_flags as u64);
+
+    log::debug!(
+        "{}::{} resolved to {:X} ({:X})",
+        &kernel_base.file_name,
+        obfstr!("MmVerifyCallbackFunctionFlags"),
+        (mm_verify_callback_function_flags as u64) - kernel_base.base_address as u64,
+        mm_verify_callback_function_flags as u64
+    );
     let eprocess_thread_list_head = {
         let pattern =
             ByteSequencePattern::parse(obfstr!("4C 8D A9 ? ? ? ? 33 DB")).with_context(|| {
@@ -147,7 +161,11 @@ impl NtOffsets {
                         None
                     }
                 } else {
-                    log::warn!("Skipping {}::{} as section data is not valid / paged out", module.file_name, section.name);
+                    log::warn!(
+                        "Skipping {}::{} as section data is not valid / paged out",
+                        module.file_name,
+                        section.name
+                    );
                     None
                 }
             })
@@ -164,7 +182,13 @@ impl NtOffsets {
             .wrapping_add_signed(offset as isize)
             .wrapping_add(instruction_length);
 
-        log::debug!("{}::{} located at {:X} ({:X})", module.file_name, name, target - module.base_address, target);
+        log::debug!(
+            "{}::{} located at {:X} ({:X})",
+            module.file_name,
+            name,
+            target - module.base_address,
+            target
+        );
         unsafe { Ok(core::mem::transmute_copy::<_, T>(&target)) }
     }
 

@@ -13,7 +13,8 @@ use crate::{
         IoDriverObjectType, KeyboardClassServiceCallbackFn, KEYBOARD_FLAG_BREAK,
         KEYBOARD_FLAG_MAKE, KEYBOARD_INPUT_DATA,
     },
-    offsets::NtOffsets, winver::os_info
+    offsets::NtOffsets,
+    winver::os_info,
 };
 
 pub struct KeyboardInput {
@@ -58,7 +59,8 @@ fn find_keyboard_service_callback() -> anyhow::Result<KeyboardClassServiceCallba
         ByteSequencePattern::parse(obfstr!("48 8D 05 ? ? ? ? 48 89 45"))
     } else {
         ByteSequencePattern::parse(obfstr!("48 8D 05 ? ? ? ? 48 89 44 24"))
-    }.with_context(|| {
+    }
+    .with_context(|| {
         obfstr!("Failed to compile KeyboardClassServiceCallback pattern").to_string()
     })?;
 
@@ -85,7 +87,7 @@ pub fn create_keyboard_input() -> anyhow::Result<KeyboardInput> {
     };
 
     let service_callback = find_keyboard_service_callback()?;
-   
+
     Ok(KeyboardInput {
         kb_device,
         service_callback,

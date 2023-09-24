@@ -15,3 +15,12 @@ cd kernel/driver
 # The result will be located at "../target/x86_64-pc-windows-msvc/release/valthrun-driver.sys"
 cargo make --profile production sign
 ```
+
+
+# Stelth TODO
+- https://www.unknowncheats.me/forum/anti-cheat-bypass/444289-read-process-physical-memory-attach.html
+- `KeUserModeCallback`
+https://www.unknowncheats.me/forum/anti-cheat-bypass/347320-communication-via-callbacks.html
+
+# Performance TODO
+- Read memory by setting the processors `cr3` register (thus we never need to attach to the other processes stack)
