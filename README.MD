@@ -24,3 +24,9 @@ https://www.unknowncheats.me/forum/anti-cheat-bypass/347320-communication-via-ca
 
 # Performance TODO
 - Read memory by setting the processors `cr3` register (thus we never need to attach to the other processes stack)
+
+
+Mess around:
+- `KeUserModeCallback`
+https://www.unknowncheats.me/forum/anti-cheat-bypass/347320-communication-via-callbacks.html
+- Invoking Shellcode within CS (send text message, change player name etc.)

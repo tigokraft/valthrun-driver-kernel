@@ -38,7 +38,7 @@ impl ValthrunDevice {
             driver,
             Some(&device_name),
             DEVICE_TYPE::FILE_DEVICE_UNKNOWN, // FILE_DEVICE_UNKNOWN
-            0x00000100,                       // FILE_DEVICE_SECURE_OPEN
+            0x0,
             false,
             (),
         )?;
