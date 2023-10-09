@@ -1,5 +1,5 @@
 $cleanName = "valthrun-driver"
-$mode = "debug"
+$mode = "release"
 
 Write-Host "Stopping & deleting driver"
 sc.exe stop $cleanName

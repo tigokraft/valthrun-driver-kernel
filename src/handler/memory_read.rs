@@ -1,20 +1,36 @@
+use alloc::vec::Vec;
 use core::mem::size_of_val;
 
-use alloc::vec::Vec;
 use valthrun_driver_shared::{
-    requests::{RequestRead, ResponseRead},
+    requests::{
+        RequestRead,
+        ResponseRead,
+    },
     IO_MAX_DEREF_COUNT,
 };
 use winapi::{
     ctypes::c_void,
-    km::wdm::{KPROCESSOR_MODE, PEPROCESS},
+    km::wdm::{
+        KPROCESSOR_MODE,
+        PEPROCESS,
+    },
     shared::{
-        ntdef::{NTSTATUS, PCVOID, PVOID},
+        ntdef::{
+            NTSTATUS,
+            PCVOID,
+            PVOID,
+        },
         ntstatus::STATUS_SUCCESS,
     },
 };
 
-use crate::{kapi::{mem, Process}, pmem};
+use crate::{
+    kapi::{
+        mem,
+        Process,
+    },
+    pmem,
+};
 
 struct ReadContext<'a> {
     /// Target process where we want to read the data from

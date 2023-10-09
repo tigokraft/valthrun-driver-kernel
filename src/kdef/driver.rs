@@ -1,7 +1,13 @@
 #[allow(unused)]
 use winapi::{
-    km::wdm::{PDEVICE_OBJECT, PDRIVER_OBJECT},
-    shared::ntdef::{NTSTATUS, UNICODE_STRING},
+    km::wdm::{
+        PDEVICE_OBJECT,
+        PDRIVER_OBJECT,
+    },
+    shared::ntdef::{
+        NTSTATUS,
+        UNICODE_STRING,
+    },
 };
 
 #[allow(unused)]

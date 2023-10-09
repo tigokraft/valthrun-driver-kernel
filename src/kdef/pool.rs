@@ -1,6 +1,9 @@
 //! Kernel Mode pools.
 
-use winapi::{km::wdm::POOL_TYPE, shared::ntdef::PVOID};
+use winapi::{
+    km::wdm::POOL_TYPE,
+    shared::ntdef::PVOID,
+};
 
 #[allow(unused)]
 extern "system" {

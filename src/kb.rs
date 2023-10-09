@@ -1,17 +1,37 @@
-use alloc::{string::ToString, vec::Vec};
-use anyhow::{anyhow, Context};
+use alloc::{
+    string::ToString,
+    vec::Vec,
+};
+
+use anyhow::{
+    anyhow,
+    Context,
+};
 use obfstr::obfstr;
-use valthrun_driver_shared::{ByteSequencePattern, KeyboardState};
+use valthrun_driver_shared::{
+    ByteSequencePattern,
+    KeyboardState,
+};
 use winapi::{
     km::wdm::DRIVER_OBJECT,
-    shared::ntdef::{PVOID, UNICODE_STRING},
+    shared::ntdef::{
+        PVOID,
+        UNICODE_STRING,
+    },
 };
 
 use crate::{
-    kapi::{KModule, Object, UnicodeStringEx},
+    kapi::{
+        KModule,
+        Object,
+        UnicodeStringEx,
+    },
     kdef::{
-        IoDriverObjectType, KeyboardClassServiceCallbackFn, KEYBOARD_FLAG_BREAK,
-        KEYBOARD_FLAG_MAKE, KEYBOARD_INPUT_DATA,
+        IoDriverObjectType,
+        KeyboardClassServiceCallbackFn,
+        KEYBOARD_FLAG_BREAK,
+        KEYBOARD_FLAG_MAKE,
+        KEYBOARD_INPUT_DATA,
     },
     offsets::NtOffsets,
     winver::os_info,

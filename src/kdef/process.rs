@@ -3,11 +3,20 @@ use core::ffi::c_void;
 
 use modular_bitfield::{
     bitfield,
-    specifiers::{B1, B3, B4},
+    specifiers::{
+        B1,
+        B3,
+        B4,
+    },
 };
 use winapi::{
     km::wdm::PEPROCESS,
-    shared::ntdef::{LIST_ENTRY, NTSTATUS, PVOID, UNICODE_STRING},
+    shared::ntdef::{
+        LIST_ENTRY,
+        NTSTATUS,
+        PVOID,
+        UNICODE_STRING,
+    },
 };
 
 #[repr(C)]

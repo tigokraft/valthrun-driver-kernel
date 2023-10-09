@@ -1,10 +1,16 @@
+use alloc::format;
 use core::panic::PanicInfo;
 
-use alloc::format;
 use obfstr::obfstr;
-use winapi::km::wdm::{DbgBreakPoint, DbgPrintEx};
+use winapi::km::wdm::{
+    DbgBreakPoint,
+    DbgPrintEx,
+};
 
-use crate::kdef::{KeBugCheck, DPFLTR_LEVEL};
+use crate::kdef::{
+    KeBugCheck,
+    DPFLTR_LEVEL,
+};
 
 const BUGCHECK_CODE_RUST_PANIC: u32 = 0xC0210001;
 const BUGCHECK_CODE_CXX_FRAME: u32 = 0xC0210002;

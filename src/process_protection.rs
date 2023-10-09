@@ -1,18 +1,43 @@
-use alloc::{boxed::Box, string::ToString, vec::Vec};
-use anyhow::{anyhow, Context};
+use alloc::{
+    boxed::Box,
+    string::ToString,
+    vec::Vec,
+};
+
+use anyhow::{
+    anyhow,
+    Context,
+};
 use log::Level;
 use obfstr::obfstr;
 use once_cell::race::OnceBox;
 use valthrun_driver_shared::ByteSequencePattern;
-use winapi::shared::ntdef::{PVOID, UNICODE_STRING};
+use winapi::shared::ntdef::{
+    PVOID,
+    UNICODE_STRING,
+};
 
 use crate::{
-    kapi::{FastMutex, KModule, NTStatusEx, Process, UnicodeStringEx},
+    kapi::{
+        FastMutex,
+        KModule,
+        NTStatusEx,
+        Process,
+        UnicodeStringEx,
+    },
     kdef::{
-        ObRegisterCallbacks, ObUnRegisterCallbacks, PsGetProcessId, PsProcessType,
-        OB_FLT_REGISTRATION_VERSION, OB_OPERATION_HANDLE_CREATE, OB_OPERATION_HANDLE_DUPLICATE,
-        _OB_CALLBACK_REGISTRATION, _OB_OPERATION_REGISTRATION, _OB_PRE_CREATE_HANDLE_INFORMATION,
-        _OB_PRE_DUPLICATE_HANDLE_INFORMATION, _OB_PRE_OPERATION_INFORMATION,
+        ObRegisterCallbacks,
+        ObUnRegisterCallbacks,
+        PsGetProcessId,
+        PsProcessType,
+        OB_FLT_REGISTRATION_VERSION,
+        OB_OPERATION_HANDLE_CREATE,
+        OB_OPERATION_HANDLE_DUPLICATE,
+        _OB_CALLBACK_REGISTRATION,
+        _OB_OPERATION_REGISTRATION,
+        _OB_PRE_CREATE_HANDLE_INFORMATION,
+        _OB_PRE_DUPLICATE_HANDLE_INFORMATION,
+        _OB_PRE_OPERATION_INFORMATION,
     },
     offsets::get_nt_offsets,
 };

@@ -1,6 +1,9 @@
 #![allow(unused)]
 
-use winapi::km::wdm::{IRP, PIRP};
+use winapi::km::wdm::{
+    IRP,
+    PIRP,
+};
 
 pub const IRP_MJ_CREATE: usize = 0x00;
 pub const IRP_MJ_CREATE_NAMED_PIPE: usize = 0x01;

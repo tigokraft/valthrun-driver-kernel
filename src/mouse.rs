@@ -1,19 +1,47 @@
-use alloc::{string::ToString, vec::Vec};
-use anyhow::{anyhow, Context};
+use alloc::{
+    string::ToString,
+    vec::Vec,
+};
+
+use anyhow::{
+    anyhow,
+    Context,
+};
 use obfstr::obfstr;
-use valthrun_driver_shared::{ByteSequencePattern, MouseState};
+use valthrun_driver_shared::{
+    ByteSequencePattern,
+    MouseState,
+};
 use winapi::{
     km::wdm::DRIVER_OBJECT,
-    shared::ntdef::{PVOID, UNICODE_STRING},
+    shared::ntdef::{
+        PVOID,
+        UNICODE_STRING,
+    },
 };
 
 use crate::{
-    kapi::{KModule, Object, UnicodeStringEx},
+    kapi::{
+        KModule,
+        Object,
+        UnicodeStringEx,
+    },
     kdef::{
-        IoDriverObjectType, MouseClassServiceCallbackFn, MOUSE_BUTTON_4_DOWN, MOUSE_BUTTON_4_UP,
-        MOUSE_BUTTON_5_DOWN, MOUSE_BUTTON_5_UP, MOUSE_BUTTON_HWHEEL, MOUSE_BUTTON_LEFT_DOWN,
-        MOUSE_BUTTON_LEFT_UP, MOUSE_BUTTON_MIDDLE_DOWN, MOUSE_BUTTON_MIDDLE_UP,
-        MOUSE_BUTTON_RIGHT_DOWN, MOUSE_BUTTON_RIGHT_UP, MOUSE_BUTTON_WHEEL, MOUSE_INPUT_DATA,
+        IoDriverObjectType,
+        MouseClassServiceCallbackFn,
+        MOUSE_BUTTON_4_DOWN,
+        MOUSE_BUTTON_4_UP,
+        MOUSE_BUTTON_5_DOWN,
+        MOUSE_BUTTON_5_UP,
+        MOUSE_BUTTON_HWHEEL,
+        MOUSE_BUTTON_LEFT_DOWN,
+        MOUSE_BUTTON_LEFT_UP,
+        MOUSE_BUTTON_MIDDLE_DOWN,
+        MOUSE_BUTTON_MIDDLE_UP,
+        MOUSE_BUTTON_RIGHT_DOWN,
+        MOUSE_BUTTON_RIGHT_UP,
+        MOUSE_BUTTON_WHEEL,
+        MOUSE_INPUT_DATA,
     },
     offsets::NtOffsets,
 };

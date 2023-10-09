@@ -1,8 +1,14 @@
 use core::alloc::GlobalAlloc;
 
-use winapi::{km::wdm::POOL_TYPE, shared::ntdef::PVOID};
+use winapi::{
+    km::wdm::POOL_TYPE,
+    shared::ntdef::PVOID,
+};
 
-use crate::kdef::{ExAllocatePoolWithTag, ExFreePoolWithTag};
+use crate::kdef::{
+    ExAllocatePoolWithTag,
+    ExFreePoolWithTag,
+};
 
 pub const POOL_TAG: u32 = 0x123333;
 

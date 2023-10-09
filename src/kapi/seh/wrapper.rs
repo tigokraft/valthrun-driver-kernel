@@ -1,14 +1,23 @@
 // Initial idea: https://github.com/cs1ime/sehcall/tree/main
 // Modified for Valthruns use cases.
+use alloc::{
+    format,
+    string::ToString,
+};
 use core::{
     arch::global_asm,
-    sync::atomic::{AtomicU64, Ordering},
+    sync::atomic::{
+        AtomicU64,
+        Ordering,
+    },
 };
 
-use alloc::{format, string::ToString};
 use anyhow::Context;
 use obfstr::obfstr;
-use valthrun_driver_shared::{ByteSequencePattern, SearchPattern};
+use valthrun_driver_shared::{
+    ByteSequencePattern,
+    SearchPattern,
+};
 
 use crate::kapi::KModule;
 
