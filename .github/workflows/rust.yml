@@ -23,6 +23,8 @@ jobs:
       run: rustup component add rustfmt && cargo fmt --check
     # - name: Setup WDK
     #   run: .github/workflows/Install-WDK.ps1
+    - name: Install cargo make
+      run: cargo install --force cargo-make
     - name: Build
       run: cargo make --profile=release sign
     # Right now there are no tests specified
