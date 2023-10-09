@@ -19,7 +19,7 @@ log = "0.4.19"
 anyhow = { version = "1.0", default-features = false }
 modular-bitfield = "0.11.2"
 obfstr = "0.4.3"
-valthrun-driver-shared = { path = "../shared" }
+valthrun-driver-shared = { path = "./shared" }
 once_cell = { version = "1.18.0", default-features = false, features = ["alloc"] }
 
 [dependencies.winapi]
