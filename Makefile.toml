@@ -21,12 +21,5 @@ script = [
 [tasks.sign]
 dependencies = ["build-driver", "rename"]
 script = [
-    # Load the Visual Studio Developer environment
-    "call \"%ProgramFiles%\\Microsoft Visual Studio\\2022\\Community\\VC\\Auxiliary\\Build\\vcvars64.bat\"",
-
-    # Create a self signed certificate (only if not already done)
-    "if not exist DriverCertificate.cer ( makecert -r -pe -ss PrivateCertStore -n CN=DriverCertificate DriverCertificate.cer ) else ( echo Certificate already exists. )",
-
-    # Sign the driver
-    "signtool sign /a /v /s PrivateCertStore /n DriverCertificate /t http://timestamp.digicert.com /fd SHA256 %TARGET_PATH%/valthrun-driver.sys"
+    "Powershell.exe -File Sign-Driver.ps1 %TARGET_PATH%/valthrun-driver.sys"
 ]

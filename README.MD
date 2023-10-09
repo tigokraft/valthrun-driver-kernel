@@ -3,7 +3,7 @@ Thanks Matthias for the buitifull writeup on [how to get started writing a kerne
 
 ## Build
 ### Requirements
-- Visual Studio 2022 (located at `%ProgramFiles%\Microsoft Visual Studio\2022\Community`)
+- Visual Studio 2022
 - Windows Kernel Development Kit
 - Cargo Make (`cargo install --force cargo-make`)
 
