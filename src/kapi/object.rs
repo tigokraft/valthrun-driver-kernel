@@ -1,19 +1,31 @@
-use alloc::{string::String, vec::Vec};
+use alloc::{
+    string::String,
+    vec::Vec,
+};
+
 use anyhow::anyhow;
 use winapi::{
     km::wdm::KPROCESSOR_MODE,
-    shared::ntdef::{NTSTATUS, OBJ_CASE_INSENSITIVE, PVOID, UNICODE_STRING},
-};
-
-use crate::{
-    kapi::UnicodeStringEx,
-    kdef::{
-        ObQueryNameString, ObReferenceObjectByName, ObfDereferenceObject, ObfReferenceObject,
-        OBJECT_NAME_INFORMATION, POBJECT_TYPE,
+    shared::ntdef::{
+        NTSTATUS,
+        OBJ_CASE_INSENSITIVE,
+        PVOID,
+        UNICODE_STRING,
     },
 };
 
 use super::NTStatusEx;
+use crate::{
+    kapi::UnicodeStringEx,
+    kdef::{
+        ObQueryNameString,
+        ObReferenceObjectByName,
+        ObfDereferenceObject,
+        ObfReferenceObject,
+        OBJECT_NAME_INFORMATION,
+        POBJECT_TYPE,
+    },
+};
 
 pub struct Object(PVOID);
 

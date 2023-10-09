@@ -1,4 +1,8 @@
-use alloc::{ffi::CString, format};
+use alloc::{
+    ffi::CString,
+    format,
+};
+
 use winapi::km::wdm::DbgPrintEx;
 
 use crate::kdef::DPFLTR_LEVEL;

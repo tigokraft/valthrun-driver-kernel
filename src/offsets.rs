@@ -1,12 +1,21 @@
+use alloc::{
+    format,
+    string::ToString,
+};
 use core::cell::SyncUnsafeCell;
 
-use alloc::{format, string::ToString};
 use anyhow::Context;
 use obfstr::obfstr;
-use valthrun_driver_shared::{ByteSequencePattern, SearchPattern};
+use valthrun_driver_shared::{
+    ByteSequencePattern,
+    SearchPattern,
+};
 use winapi::shared::ntdef::PVOID;
 
-use crate::kapi::{KModule, KModuleSection, mem::{LockedVirtMem, IO_READ_ACCESS, MCT_CACHED}};
+use crate::kapi::{
+    KModule,
+    KModuleSection,
+};
 
 /// Undocumented function/struct offsets
 /// found by sigscanning

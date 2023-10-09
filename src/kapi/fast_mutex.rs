@@ -1,11 +1,19 @@
 //! Fast mutex implementation from https://github.com/StephanvanSchaik/windows-kernel-rs (MIT license)
 
 use alloc::boxed::Box;
-use core::cell::UnsafeCell;
-use core::ops::{Deref, DerefMut};
+use core::{
+    cell::UnsafeCell,
+    ops::{
+        Deref,
+        DerefMut,
+    },
+};
 
 use crate::kdef::{
-    ExAcquireFastMutex, ExInitializeFastMutex, ExReleaseFastMutex, ExTryToAcquireFastMutex,
+    ExAcquireFastMutex,
+    ExInitializeFastMutex,
+    ExReleaseFastMutex,
+    ExTryToAcquireFastMutex,
     _FAST_MUTEX,
 };
 

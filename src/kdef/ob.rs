@@ -1,7 +1,13 @@
 #![allow(unused)]
 use winapi::{
     km::wdm::KPROCESSOR_MODE,
-    shared::ntdef::{NTSTATUS, PCUNICODE_STRING, PCVOID, PVOID, UNICODE_STRING},
+    shared::ntdef::{
+        NTSTATUS,
+        PCUNICODE_STRING,
+        PCVOID,
+        PVOID,
+        UNICODE_STRING,
+    },
     um::winnt::ACCESS_MASK,
 };
 

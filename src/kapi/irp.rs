@@ -1,5 +1,9 @@
 use winapi::{
-    km::wdm::{IoCompleteRequest, IO_PRIORITY::IO_NO_INCREMENT, IRP},
+    km::wdm::{
+        IoCompleteRequest,
+        IO_PRIORITY::IO_NO_INCREMENT,
+        IRP,
+    },
     shared::ntdef::NTSTATUS,
 };
 

@@ -1,45 +1,71 @@
+use alloc::boxed::Box;
 use core::pin::Pin;
 
-use alloc::boxed::Box;
 use obfstr::obfstr;
 use winapi::{
     km::{
         ntifs::DEVICE_FLAGS,
         wdm::{
-            IoCreateSymbolicLink, IoDeleteSymbolicLink, IoGetCurrentIrpStackLocation, DEVICE_TYPE,
-            DRIVER_OBJECT, IRP,
+            IoGetCurrentIrpStackLocation,
+            DEVICE_TYPE,
+            DRIVER_OBJECT,
+            IRP,
         },
     },
     shared::{
-        ntdef::{NTSTATUS, UNICODE_STRING},
-        ntstatus::{STATUS_INVALID_PARAMETER, STATUS_SUCCESS},
+        guiddef::GUID,
+        ntdef::{
+            NTSTATUS,
+            UNICODE_STRING,
+        },
+        ntstatus::{
+            STATUS_INVALID_PARAMETER,
+            STATUS_SUCCESS,
+        },
     },
 };
 
 use crate::{
-    kapi::{mem, DeviceHandle, IrpEx, NTStatusEx, Process, UnicodeStringEx},
-    kdef::{IRP_MJ_CLOSE, IRP_MJ_CREATE, IRP_MJ_DEVICE_CONTROL},
-    process_protection, REQUEST_HANDLER,
+    kapi::{
+        mem,
+        DeviceHandle,
+        IrpEx,
+        Process,
+        UnicodeStringEx,
+    },
+    kdef::{
+        IRP_MJ_CLOSE,
+        IRP_MJ_CREATE,
+        IRP_MJ_DEVICE_CONTROL,
+    },
+    process_protection,
+    REQUEST_HANDLER,
 };
 
 type ValthrunDeviceHandle = DeviceHandle<()>;
 pub struct ValthrunDevice {
     pub device_handle: Pin<Box<ValthrunDeviceHandle>>,
-    dos_link_name: UNICODE_STRING,
 }
 
 unsafe impl Sync for ValthrunDevice {}
 impl ValthrunDevice {
     pub fn create(driver: &mut DRIVER_OBJECT) -> anyhow::Result<Self> {
-        let dos_name = UNICODE_STRING::from_bytes(obfstr::wide!("\\DosDevices\\valthrun"));
         let device_name = UNICODE_STRING::from_bytes(obfstr::wide!("\\Device\\valthrun"));
-
+        let sddl =
+            UNICODE_STRING::from_bytes(obfstr::wide!("D:P(A;;GA;;;SY)(A;;GA;;;BU)(A;;GA;;;AU)"));
+        let mut guid = GUID::default();
+        guid.Data1 = 0x3838266;
+        guid.Data2 = 0x87FE;
+        guid.Data3 = 0x4FEA;
+        guid.Data4 = [0x1e, 0x79, 0xa8, 0xc2, 0xb8, 0x7c, 0x88, 0x0B];
         let mut device = DeviceHandle::<()>::create(
             driver,
             Some(&device_name),
-            DEVICE_TYPE::FILE_DEVICE_UNKNOWN, // FILE_DEVICE_UNKNOWN
-            0x0,
+            DEVICE_TYPE::FILE_DEVICE_UNKNOWN,
+            0x00,
             false,
+            &sddl,
+            &guid,
             (),
         )?;
 
@@ -47,27 +73,11 @@ impl ValthrunDevice {
         device.major_function[IRP_MJ_CLOSE] = Some(irp_close);
         device.major_function[IRP_MJ_DEVICE_CONTROL] = Some(irp_control);
 
-        unsafe {
-            IoCreateSymbolicLink(&dos_name, &device_name)
-                .ok()
-                .map_err(|err| anyhow::anyhow!("IoCreateSymbolicLink: {}", err))?;
-        };
-
         *device.flags_mut() |= DEVICE_FLAGS::DO_DIRECT_IO as u32;
         device.mark_initialized();
         Ok(Self {
             device_handle: device,
-            dos_link_name: dos_name,
         })
-    }
-}
-
-impl Drop for ValthrunDevice {
-    fn drop(&mut self) {
-        let result = unsafe { IoDeleteSymbolicLink(&self.dos_link_name) };
-        if let Err(status) = result.ok() {
-            log::warn!("Failed to unlink dos device: {}", status);
-        }
     }
 }
 

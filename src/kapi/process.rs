@@ -1,19 +1,28 @@
+use alloc::vec::Vec;
 use core::ffi::CStr;
 
-use alloc::vec::Vec;
 use valthrun_driver_shared::ModuleInfo;
-use winapi::{km::wdm::PEPROCESS, shared::ntdef::NT_SUCCESS};
-
-use crate::{
-    kdef::{
-        IoGetCurrentProcess, KeStackAttachProcess, KeUnstackDetachProcess, ObfDereferenceObject,
-        ObfReferenceObject, PsGetProcessId, PsGetProcessPeb, PsLookupProcessByProcessId,
-        _KAPC_STATE, _LDR_DATA_TABLE_ENTRY,
-    },
-    offsets::get_nt_offsets,
+use winapi::{
+    km::wdm::PEPROCESS,
+    shared::ntdef::NT_SUCCESS,
 };
 
 use super::UnicodeStringEx;
+use crate::{
+    kdef::{
+        IoGetCurrentProcess,
+        KeStackAttachProcess,
+        KeUnstackDetachProcess,
+        ObfDereferenceObject,
+        ObfReferenceObject,
+        PsGetProcessId,
+        PsGetProcessPeb,
+        PsLookupProcessByProcessId,
+        _KAPC_STATE,
+        _LDR_DATA_TABLE_ENTRY,
+    },
+    offsets::get_nt_offsets,
+};
 
 #[derive(Debug, Clone)]
 pub struct Process {
@@ -74,11 +83,7 @@ impl Process {
     }
 
     pub fn get_directory_table_base(&self) -> u64 {
-        unsafe {
-            *self.eprocess()
-                .byte_offset(0x28)
-                .cast::<u64>()
-        }
+        unsafe { *self.eprocess().byte_offset(0x28).cast::<u64>() }
     }
 }
 

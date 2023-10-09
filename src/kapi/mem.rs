@@ -3,9 +3,11 @@ use core::cell::SyncUnsafeCell;
 use obfstr::obfstr;
 use winapi::{shared::ntdef::{UNICODE_STRING, PVOID}, km::{ndis::PMDL, wdm::{PIRP, KPROCESSOR_MODE}}};
 
+use super::{
+    seh,
+    UnicodeStringEx,
+};
 use crate::kdef::MmGetSystemRoutineAddress;
-
-use super::{seh, UnicodeStringEx};
 #[derive(Default)]
 struct MemFunctions {
     probe_for_read: u64,

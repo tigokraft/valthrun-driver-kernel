@@ -5,37 +5,64 @@
 #![feature(new_uninit)]
 #![feature(const_transmute_copy)]
 
+use alloc::boxed::Box;
 use core::cell::SyncUnsafeCell;
 
-use alloc::boxed::Box;
 use device::ValthrunDevice;
 use handler::HandlerRegistry;
-use kapi::{NTStatusEx, UnicodeStringEx};
+use kapi::{
+    NTStatusEx,
+    UnicodeStringEx,
+};
 use kb::KeyboardInput;
 use mouse::MouseInput;
 use obfstr::obfstr;
 use valthrun_driver_shared::requests::{
-    RequestCSModule, RequestHealthCheck, RequestKeyboardState, RequestMouseMove,
-    RequestProtectionToggle, RequestRead,
+    RequestCSModule,
+    RequestHealthCheck,
+    RequestKeyboardState,
+    RequestMouseMove,
+    RequestProtectionToggle,
+    RequestRead,
 };
 use winapi::{
-    km::wdm::{DbgPrintEx, DRIVER_OBJECT},
+    km::wdm::{
+        DbgPrintEx,
+        DRIVER_OBJECT,
+    },
     shared::{
-        ntdef::{NTSTATUS, UNICODE_STRING},
-        ntstatus::{STATUS_OBJECT_NAME_COLLISION, STATUS_SUCCESS},
+        ntdef::{
+            NTSTATUS,
+            UNICODE_STRING,
+        },
+        ntstatus::{
+            STATUS_OBJECT_NAME_COLLISION,
+            STATUS_SUCCESS,
+        },
     },
 };
 
 use crate::{
     handler::{
-        handler_get_modules, handler_keyboard_state, handler_mouse_move, handler_protection_toggle,
+        handler_get_modules,
+        handler_keyboard_state,
+        handler_mouse_move,
+        handler_protection_toggle,
         handler_read,
     },
     kapi::device_general_irp_handler,
-    kdef::{IoCreateDriver, KeGetCurrentIrql, MmSystemRangeStart, DPFLTR_LEVEL},
+    kdef::{
+        IoCreateDriver,
+        KeGetCurrentIrql,
+        MmSystemRangeStart,
+        DPFLTR_LEVEL,
+    },
     logger::APP_LOGGER,
     offsets::initialize_nt_offsets,
-    winver::{initialize_os_info, os_info},
+    winver::{
+        initialize_os_info,
+        os_info,
+    },
 };
 
 mod device;
@@ -47,9 +74,9 @@ mod logger;
 mod mouse;
 mod offsets;
 mod panic_hook;
+mod pmem;
 mod process_protection;
 mod winver;
-mod pmem;
 
 mod status;
 use status::*;

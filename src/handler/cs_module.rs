@@ -1,8 +1,12 @@
 use alloc::format;
+
 use anyhow::Context;
 use obfstr::obfstr;
 use valthrun_driver_shared::{
-    requests::{RequestCSModule, ResponseCsModule},
+    requests::{
+        RequestCSModule,
+        ResponseCsModule,
+    },
     CS2ModuleInfo,
 };
 

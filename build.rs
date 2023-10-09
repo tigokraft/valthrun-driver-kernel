@@ -1,8 +1,15 @@
-use std::env::var;
-use std::path::{Path, PathBuf};
+use std::{
+    env::var,
+    path::{
+        Path,
+        PathBuf,
+    },
+};
 
-use winreg::enums::*;
-use winreg::RegKey;
+use winreg::{
+    enums::*,
+    RegKey,
+};
 
 fn get_windows_kits_dir() -> anyhow::Result<PathBuf> {
     let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);

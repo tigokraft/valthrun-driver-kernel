@@ -1,20 +1,40 @@
+use alloc::boxed::Box;
 use core::pin::Pin;
 
-use alloc::boxed::Box;
 use winapi::{
     km::wdm::{
-        IoCreateDevice, IoDeleteDevice, IoGetCurrentIrpStackLocation, DEVICE_FLAGS, DEVICE_OBJECT,
-        DEVICE_TYPE, DRIVER_OBJECT, IRP, PDEVICE_OBJECT,
+        IoDeleteDevice,
+        IoGetCurrentIrpStackLocation,
+        DEVICE_FLAGS,
+        DEVICE_OBJECT,
+        DEVICE_TYPE,
+        DRIVER_OBJECT,
+        IRP,
+        PDEVICE_OBJECT,
     },
     shared::{
-        ntdef::{NTSTATUS, UNICODE_STRING},
+        guiddef::{
+            GUID,
+            LPCGUID,
+        },
+        ntdef::{
+            BOOLEAN,
+            NTSTATUS,
+            PCUNICODE_STRING,
+            UNICODE_STRING,
+        },
         ntstatus::STATUS_NOT_SUPPORTED,
     },
 };
 
-use crate::kapi::IrpEx;
-
-use super::NTStatusEx;
+use super::{
+    NTStatusEx,
+    UnicodeStringEx,
+};
+use crate::{
+    kapi::IrpEx,
+    kdef::MmGetSystemRoutineAddress,
+};
 
 type DeviceMajorFn<T> = fn(device: &mut DeviceHandle<T>, irp: &mut IRP) -> NTSTATUS;
 
@@ -25,6 +45,18 @@ pub struct DeviceHandle<T> {
 }
 unsafe impl<T: Sync> Sync for DeviceHandle<T> {}
 
+type IoCreateDeviceSecure = extern "system" fn(
+    DriverObject: *mut DRIVER_OBJECT,
+    DeviceExtensionSize: u32,
+    DeviceName: PCUNICODE_STRING,
+    DeviceType: DEVICE_TYPE,
+    DeviceCharacteristics: u32,
+    Exclusive: BOOLEAN,
+    DefaultSDDLString: PCUNICODE_STRING,
+    DeviceClassGuid: LPCGUID,
+    DeviceObject: *mut PDEVICE_OBJECT,
+) -> NTSTATUS;
+
 impl<T> DeviceHandle<T> {
     pub fn create(
         driver: &mut DRIVER_OBJECT,
@@ -32,11 +64,18 @@ impl<T> DeviceHandle<T> {
         device_type: DEVICE_TYPE,
         characteristics: u32,
         exclusive: bool,
+        sddl: &UNICODE_STRING,
+        class_guid: &GUID,
         data: T,
     ) -> anyhow::Result<Pin<Box<Self>>> {
         let mut device_ptr: PDEVICE_OBJECT = core::ptr::null_mut();
         let result = unsafe {
-            IoCreateDevice(
+            let name = UNICODE_STRING::from_bytes(obfstr::wide!("IoCreateDeviceSecure"));
+            #[allow(non_snake_case)]
+            let IoCreateDeviceSecure: IoCreateDeviceSecure =
+                core::mem::transmute(MmGetSystemRoutineAddress(&name));
+
+            IoCreateDeviceSecure(
                 driver,
                 core::mem::size_of::<*const ()>() as u32,
                 device_name
@@ -45,6 +84,8 @@ impl<T> DeviceHandle<T> {
                 device_type,
                 characteristics,
                 if exclusive { 1 } else { 0 },
+                sddl,
+                class_guid,
                 &mut device_ptr,
             )
         };

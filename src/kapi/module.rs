@@ -1,20 +1,34 @@
-use core::{ffi::CStr, mem::size_of};
-
 use alloc::{
-    string::{String, ToString},
+    string::{
+        String,
+        ToString,
+    },
     vec::Vec,
 };
+use core::{
+    ffi::CStr,
+    mem::size_of,
+};
+
 use anyhow::Context;
 use obfstr::obfstr;
 use valthrun_driver_shared::SearchPattern;
 use winapi::{
-    shared::ntdef::{HANDLE, NTSTATUS, PVOID},
-    um::winnt::{IMAGE_FILE_HEADER, IMAGE_SCN_CNT_CODE, IMAGE_SECTION_HEADER, PIMAGE_NT_HEADERS},
+    shared::ntdef::{
+        HANDLE,
+        NTSTATUS,
+        PVOID,
+    },
+    um::winnt::{
+        IMAGE_FILE_HEADER,
+        IMAGE_SCN_CNT_CODE,
+        IMAGE_SECTION_HEADER,
+        PIMAGE_NT_HEADERS,
+    },
 };
 
-use crate::kdef::MmIsAddressValid;
-
 use super::NTStatusEx;
+use crate::kdef::MmIsAddressValid;
 
 #[repr(C)]
 #[allow(non_snake_case, non_camel_case_types)]

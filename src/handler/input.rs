@@ -1,11 +1,21 @@
 use core::mem::size_of;
 
 use valthrun_driver_shared::{
-    requests::{RequestKeyboardState, RequestMouseMove, ResponseKeyboardState, ResponseMouseMove},
-    KeyboardState, MouseState,
+    requests::{
+        RequestKeyboardState,
+        RequestMouseMove,
+        ResponseKeyboardState,
+        ResponseMouseMove,
+    },
+    KeyboardState,
+    MouseState,
 };
 
-use crate::{kapi::mem, KEYBOARD_INPUT, MOUSE_INPUT};
+use crate::{
+    kapi::mem,
+    KEYBOARD_INPUT,
+    MOUSE_INPUT,
+};
 
 pub fn handler_mouse_move(
     req: &RequestMouseMove,

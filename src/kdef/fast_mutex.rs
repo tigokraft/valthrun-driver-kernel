@@ -1,5 +1,9 @@
 use winapi::{
-    km::wdm::{KeInitializeEvent, SynchronizationEvent, KEVENT},
+    km::wdm::{
+        KeInitializeEvent,
+        SynchronizationEvent,
+        KEVENT,
+    },
     shared::ntdef::PVOID,
 };
 

@@ -1,13 +1,21 @@
-use valthrun_driver_shared::requests::{RequestProtectionToggle, ResponseProtectionToggle};
+use valthrun_driver_shared::requests::{
+    RequestProtectionToggle,
+    ResponseProtectionToggle,
+};
 use winapi::{
     km::wdm::PEPROCESS,
-    shared::ntdef::{PVOID, UNICODE_STRING},
+    shared::ntdef::{
+        PVOID,
+        UNICODE_STRING,
+    },
 };
 
 use crate::{
     kapi::UnicodeStringEx,
     kdef::{
-        IoGetCurrentProcess, MmGetSystemRoutineAddress, ProcessProtectionInformation,
+        IoGetCurrentProcess,
+        MmGetSystemRoutineAddress,
+        ProcessProtectionInformation,
         PsGetProcessId,
     },
     process_protection,
