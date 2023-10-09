@@ -21,8 +21,8 @@ jobs:
     - uses: Swatinem/rust-cache@v2
     - name: Check fmt
       run: rustup component add rustfmt && cargo fmt --check
-    - name: Setup WDK
-      run: .github/workflows/Install-WDK.ps1
+    # - name: Setup WDK
+    #   run: .github/workflows/Install-WDK.ps1
     - name: Build
       run: cargo make --profile=release sign
     # Right now there are no tests specified
