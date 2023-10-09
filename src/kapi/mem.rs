@@ -1,7 +1,19 @@
 use core::cell::SyncUnsafeCell;
 
 use obfstr::obfstr;
-use winapi::{shared::ntdef::{UNICODE_STRING, PVOID}, km::{ndis::PMDL, wdm::{PIRP, KPROCESSOR_MODE}}};
+use winapi::{
+    km::{
+        ndis::PMDL,
+        wdm::{
+            KPROCESSOR_MODE,
+            PIRP,
+        },
+    },
+    shared::ntdef::{
+        PVOID,
+        UNICODE_STRING,
+    },
+};
 
 use super::{
     seh,
@@ -84,7 +96,15 @@ pub fn probe_and_lock_pages(mdl: PMDL, access_mode: KPROCESSOR_MODE, operation: 
         return false;
     }
 
-    unsafe { seh::seh_invoke(target_fn, mdl as u64, access_mode as u64, operation as u64, 0) }
+    unsafe {
+        seh::seh_invoke(
+            target_fn,
+            mdl as u64,
+            access_mode as u64,
+            operation as u64,
+            0,
+        )
+    }
 }
 
 /// Copy memory from source into target.
@@ -117,15 +137,9 @@ extern "system" {
 
     fn IoFreeMdl(MemoryDescriptorList: PMDL);
 
-    fn MmProbeAndLockPages(
-        MemoryDescriptorList: PMDL,
-        AccessMode: KPROCESSOR_MODE,
-        Operation: u32,
-    );
+    fn MmProbeAndLockPages(MemoryDescriptorList: PMDL, AccessMode: KPROCESSOR_MODE, Operation: u32);
 
-    fn MmUnlockPages(
-        MemoryDescriptorList: PMDL
-    );
+    fn MmUnlockPages(MemoryDescriptorList: PMDL);
 
     fn MmMapLockedPagesSpecifyCache(
         MemoryDescriptorList: PMDL,
@@ -136,15 +150,9 @@ extern "system" {
         Priority: u32,
     ) -> PVOID;
 
-    fn MmGetSystemAddressForMdlSafe(
-        MemoryDescriptorList: PMDL,
-        Priority: u32,
-    ) -> PVOID;
+    fn MmGetSystemAddressForMdlSafe(MemoryDescriptorList: PMDL, Priority: u32) -> PVOID;
 
-    fn MmUnmapLockedPages(
-        BaseAddress: PVOID,
-        MemoryDescriptorList: PMDL,
-    );
+    fn MmUnmapLockedPages(BaseAddress: PVOID, MemoryDescriptorList: PMDL);
 }
 
 pub const MCT_NON_CACHED: u32 = 0x00;
@@ -168,15 +176,26 @@ pub struct LockedVirtMem {
 
 impl LockedVirtMem {
     pub fn create(
-            address: u64, length: usize, 
-            access_mode: KPROCESSOR_MODE, operation: u32,
-            cache: u32,
-        ) -> Option<Self> {
-        let access_mode2 = match &access_mode { KPROCESSOR_MODE::KernelMode => KPROCESSOR_MODE::KernelMode, KPROCESSOR_MODE::UserMode => KPROCESSOR_MODE::UserMode };
+        address: u64,
+        length: usize,
+        access_mode: KPROCESSOR_MODE,
+        operation: u32,
+        cache: u32,
+    ) -> Option<Self> {
+        let access_mode2 = match &access_mode {
+            KPROCESSOR_MODE::KernelMode => KPROCESSOR_MODE::KernelMode,
+            KPROCESSOR_MODE::UserMode => KPROCESSOR_MODE::UserMode,
+        };
 
         log::debug!("MDL");
         let mdl = unsafe {
-            IoAllocateMdl(address as PVOID, length as u32, false, false, core::ptr::null_mut())
+            IoAllocateMdl(
+                address as PVOID,
+                length as u32,
+                false,
+                false,
+                core::ptr::null_mut(),
+            )
         };
         if mdl.is_null() {
             return None;
@@ -193,7 +212,14 @@ impl LockedVirtMem {
 
         log::debug!("MmMapLockedPagesSpecifyCache");
         let address = unsafe {
-            MmMapLockedPagesSpecifyCache(mdl, KPROCESSOR_MODE::KernelMode, cache, core::ptr::null_mut(), 0, 0)
+            MmMapLockedPagesSpecifyCache(
+                mdl,
+                KPROCESSOR_MODE::KernelMode,
+                cache,
+                core::ptr::null_mut(),
+                0,
+                0,
+            )
         };
         // let address = unsafe {
         //     MmGetSystemAddressForMdlSafe(mdl, 0)
@@ -211,14 +237,12 @@ impl LockedVirtMem {
         Some(Self {
             mdl,
             length,
-            address,            
+            address,
         })
     }
 
     pub fn memory(&self) -> &mut [u8] {
-        unsafe {
-            core::slice::from_raw_parts_mut(self.address as *mut u8, self.length)
-        }
+        unsafe { core::slice::from_raw_parts_mut(self.address as *mut u8, self.length) }
     }
 }
 
