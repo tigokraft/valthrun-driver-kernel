@@ -229,33 +229,33 @@ extern "C" fn internal_driver_entry(
         *function = Some(device_general_irp_handler);
     }
 
-    // match kb::create_keyboard_input() {
-    //     Err(error) => {
-    //         log::error!(
-    //             "{} {:#}",
-    //             obfstr!("Failed to initialize keyboard input:"),
-    //             error
-    //         );
-    //         return CSTATUS_DRIVER_INIT_FAILED;
-    //     }
-    //     Ok(keyboard) => {
-    //         unsafe { *KEYBOARD_INPUT.get() = Some(keyboard) };
-    //     }
-    // }
+    match kb::create_keyboard_input() {
+        Err(error) => {
+            log::error!(
+                "{} {:#}",
+                obfstr!("Failed to initialize keyboard input:"),
+                error
+            );
+            return CSTATUS_DRIVER_INIT_FAILED;
+        }
+        Ok(keyboard) => {
+            unsafe { *KEYBOARD_INPUT.get() = Some(keyboard) };
+        }
+    }
 
-    // match mouse::create_mouse_input() {
-    //     Err(error) => {
-    //         log::error!(
-    //             "{} {:#}",
-    //             obfstr!("Failed to initialize mouse input:"),
-    //             error
-    //         );
-    //         return CSTATUS_DRIVER_INIT_FAILED;
-    //     }
-    //     Ok(mouse) => {
-    //         unsafe { *MOUSE_INPUT.get() = Some(mouse) };
-    //     }
-    // }
+    match mouse::create_mouse_input() {
+        Err(error) => {
+            log::error!(
+                "{} {:#}",
+                obfstr!("Failed to initialize mouse input:"),
+                error
+            );
+            return CSTATUS_DRIVER_INIT_FAILED;
+        }
+        Ok(mouse) => {
+            unsafe { *MOUSE_INPUT.get() = Some(mouse) };
+        }
+    }
 
     if let Err(error) = process_protection::initialize() {
         log::error!(
