@@ -163,34 +163,34 @@ impl NtOffsets {
             .find_code_sections()?
             .into_iter()
             .find_map(|section| {
-                if let Some(memory) = LockedVirtMem::create(section.raw_data_address() as u64, section.size_of_raw_data, winapi::km::wdm::KPROCESSOR_MODE::UserMode, IO_READ_ACCESS, MCT_CACHED) {
-                    if let Some(offset) = pattern.find(memory.memory()) {
-                        Some(offset + section.raw_data_address())
-                    } else {
-                        None
-                    }
-                } else {
-                    log::warn!(
-                        "Skipping {}::{} as section data could not be locked",
-                        module.file_name,
-                        section.name
-                    );
-                    None
-                }
-                // if let Some(data) = section.raw_data() {
-                //     if let Some(offset) = pattern.find(data) {
+                // if let Some(memory) = LockedVirtMem::create(section.raw_data_address() as u64, section.size_of_raw_data, winapi::km::wdm::KPROCESSOR_MODE::UserMode, IO_READ_ACCESS, MCT_CACHED) {
+                //     if let Some(offset) = pattern.find(memory.memory()) {
                 //         Some(offset + section.raw_data_address())
                 //     } else {
                 //         None
                 //     }
                 // } else {
                 //     log::warn!(
-                //         "Skipping {}::{} as section data is not valid / paged out",
+                //         "Skipping {}::{} as section data could not be locked",
                 //         module.file_name,
                 //         section.name
                 //     );
                 //     None
                 // }
+                if let Some(data) = section.raw_data() {
+                    if let Some(offset) = pattern.find(data) {
+                        Some(offset + section.raw_data_address())
+                    } else {
+                        None
+                    }
+                } else {
+                    log::warn!(
+                        "Skipping {}::{} as section data is not valid / paged out",
+                        module.file_name,
+                        section.name
+                    );
+                    None
+                }
             })
             .with_context(|| format!("failed to find {} pattern", name))?;
 
