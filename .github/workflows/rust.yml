@@ -27,11 +27,13 @@ jobs:
     - name: Check fmt
       run: rustup component add rustfmt && cargo fmt --check
     - name: Build
-      run: ./github/workflows/CI-Build.ps1
+      run: ./.github/workflows/CI-Build.ps1
     # Right now there are no tests specified
     # - name: Run tests
     #   run: cargo test --verbose
     - uses: actions/upload-artifact@v3
       with:
         name: valthrun-driver
-        path: target/x86_64-pc-windows-msvc/release/valthrun-driver.sys
+        path: |
+          target/x86_64-pc-windows-msvc/release/valthrun-driver.sys
+          target/x86_64-pc-windows-msvc/release/driver.pdb

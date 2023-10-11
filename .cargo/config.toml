@@ -10,8 +10,7 @@ rustflags = [
     "-Z", "pre-link-arg=/DYNAMICBASE",
     "-Z", "pre-link-arg=/MANIFEST:NO",
 
-    # "-Z", "pre-link-arg=/PDBALTPATH:https://youtu.be/dQw4w9WgXcQ",
-    # "--remap-path-prefix=C:\\Users\\Markus\\git\\Valthrun\\kernel\\=[src]",
+    "-Z", "pre-link-arg=/PDBALTPATH:https://youtu.be/dQw4w9WgXcQ",
 
     # Post Link Args
     "-C", "link-arg=/OPT:REF,ICF",
