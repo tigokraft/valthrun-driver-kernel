@@ -16,6 +16,9 @@ pub struct MetricsReport<'a> {
 
 #[derive(Debug, Serialize)]
 pub struct MetricsEntry {
+    // Entry sequence number
+    pub seq_no: u32,
+
     /// timestamp is a count of 100-nanosecond intervals since January 1, 1601
     pub timestamp: u64,
 

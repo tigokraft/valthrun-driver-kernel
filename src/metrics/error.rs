@@ -18,7 +18,10 @@ pub enum HttpError {
     EOF,
 
     #[error("io: {0}")]
-    IoError(#[from] WskError),
+    WskTransportError(#[from] WskError),
+
+    #[error("tls: {0:?}")]
+    TlsTransportError(embedded_tls::TlsError),
 
     #[error("connect failed: {0}")]
     ConnectError(anyhow::Error),
@@ -37,4 +40,10 @@ pub enum HttpError {
 
     #[error("fmt error")]
     WriteFmtError(WriteFmtError<Infallible>),
+}
+
+impl From<embedded_tls::TlsError> for HttpError {
+    fn from(value: embedded_tls::TlsError) -> Self {
+        HttpError::TlsTransportError(value)
+    }
 }

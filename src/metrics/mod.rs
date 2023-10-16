@@ -3,10 +3,12 @@ mod error;
 mod http;
 
 use alloc::{
+    collections::VecDeque,
     string::{
         String,
         ToString,
     },
+    sync::Arc,
     vec::Vec,
 };
 
@@ -14,7 +16,10 @@ use anyhow::Context;
 pub use error::*;
 pub use http::*;
 use obfstr::obfstr;
-use winapi::shared::ntdef::UNICODE_STRING;
+use winapi::{
+    km::wdm::NotificationEvent,
+    shared::ntdef::UNICODE_STRING,
+};
 
 use self::data::{
     DeviceInfo,
@@ -23,7 +28,15 @@ use self::data::{
 };
 use crate::{
     imports::GLOBAL_IMPORTS,
-    kapi::UnicodeStringEx,
+    kapi::{
+        thread::{
+            self,
+            JoinHandle,
+        },
+        FastMutex,
+        KEvent,
+        UnicodeStringEx,
+    },
     util::KeQueryTickCount,
     wsk::{
         sys::{
@@ -37,83 +50,91 @@ use crate::{
     WSK,
 };
 
-pub struct MetricsClient {
-    session_id: String,
-    pending_entries: Vec<MetricsEntry>,
-    device_info: DeviceInfo,
+enum SubmitResult {
+    Success,
 }
 
-const SESSION_ID_CHARS: &'static str = "0123456789abcdefghijklmnopqrstuvwxyz";
-impl MetricsClient {
-    fn generate_session_id() -> String {
-        let imports = GLOBAL_IMPORTS.resolve().unwrap();
-        let mut seed = {
-            let mut buffer = 0;
-            unsafe { (imports.KeQuerySystemTimePrecise)(&mut buffer) };
-            buffer as u32
-        };
+struct WorkerContext {
+    session_id: String,
+    device_info: DeviceInfo,
 
-        let mut session_id = String::with_capacity(16);
-        for _ in 0..16 {
-            let value = unsafe { (imports.RtlRandomEx)(&mut seed) } as usize;
-            session_id.push(char::from(
-                SESSION_ID_CHARS.as_bytes()[value % SESSION_ID_CHARS.len()],
-            ));
-        }
+    entry_sequence_no: u32,
+    pending_entries: VecDeque<MetricsEntry>,
+    shutdown: bool,
+}
 
-        session_id
-    }
+impl WorkerContext {
+    fn executor(event: KEvent, context: Arc<FastMutex<Self>>) {
+        loop {
+            let mut locked_context = context.lock();
+            if locked_context.shutdown {
+                break;
+            }
 
-    pub fn new() -> Self {
-        Self {
-            session_id: Self::generate_session_id(),
-            pending_entries: Default::default(),
-            device_info: DeviceInfo {},
-        }
-    }
+            if locked_context.pending_entries.is_empty() {
+                /* no pending entries, wait for next event */
+                drop(locked_context);
+                event.wait_for(None);
+                continue;
+            }
 
-    pub fn add_record(&mut self, report_type: String, payload: String) {
-        let mut entry = MetricsEntry {
-            payload,
-            report_type,
-            timestamp: 0,
-            uptime: 0,
-        };
-        if let Ok(imports) = GLOBAL_IMPORTS.resolve() {
-            unsafe {
-                (imports.KeQuerySystemTimePrecise)(&mut entry.timestamp);
-                entry.uptime = KeQueryTickCount() * (imports.KeQueryTimeIncrement)() as u64;
+            let (report, entries) = match locked_context.create_report_payload() {
+                Ok(data) => data,
+                Err(error) => {
+                    log::warn!("{}: {}", obfstr!("Failed to create metrics report"), error);
+                    continue;
+                }
+            };
+            drop(locked_context);
+
+            let reenqueue = match Self::send_report(&report) {
+                Ok(SubmitResult::Success) => false,
+                //Ok(result) => true,
+                Err(error) => {
+                    log::warn!(
+                        "{}: {}. {}",
+                        obfstr!("Failed to submit metrics report"),
+                        error,
+                        obfstr!("Reenqueue and try again later.")
+                    );
+                    // FIXME: Update next send timestamp.
+                    true
+                }
+            };
+
+            if reenqueue {
+                let mut locked_context = context.lock();
+                for entry in entries.into_iter().rev() {
+                    locked_context.pending_entries.push_front(entry);
+                }
             }
         }
-        self.pending_entries.push(entry);
+
+        log::trace!("Metrics worker exited");
     }
 
-    pub fn send_report(&mut self) -> anyhow::Result<()> {
+    pub fn send_report(report: &str) -> anyhow::Result<SubmitResult> {
         let wsk = unsafe { &*WSK.get() };
         let wsk = wsk
             .as_ref()
             .with_context(|| obfstr!("missing wsk instance").to_string())?;
 
-        let (report_payload, _entries) = self.create_report_payload()?;
         let (metrics_host, server_address) = resolve_metrics_target(wsk)
             .map_err(|err| anyhow::anyhow!("{}: {:#}", obfstr!("failed to resolve target"), err))?;
 
         let request = HttpRequest {
             host: &metrics_host,
             target: "/report",
-            payload: report_payload.as_bytes(),
+            payload: report.as_bytes(),
         };
-        match http::execute_http_request(wsk, &server_address, &request) {
+        match http::execute_https_request(wsk, &server_address, &request) {
             Ok(response) => {
+                /* FIXME: Inspect http response code & json status value */
                 log::debug!("Report send with status code {}", response.status_code);
+                Ok(SubmitResult::Success)
             }
-            Err(error) => {
-                /* FIXME: Reenqueue reports! */
-                anyhow::bail!("Failed to send report: {:#}", error);
-            }
+            Err(error) => anyhow::bail!("submit: {:#}", error),
         }
-        log::debug!("Report: {}", report_payload);
-        Ok(())
     }
 
     fn create_report_payload(&mut self) -> anyhow::Result<(String, Vec<MetricsEntry>)> {
@@ -160,6 +181,108 @@ impl MetricsClient {
             "{}",
             obfstr!("failed to allocate big enough buffer for the final report")
         )
+    }
+}
+
+pub struct MetricsClient {
+    session_id: String,
+
+    worker_context: Arc<FastMutex<WorkerContext>>,
+    worker_handle: Option<JoinHandle<()>>,
+    worker_event: KEvent,
+}
+
+const SESSION_ID_CHARS: &'static str = "0123456789abcdefghijklmnopqrstuvwxyz";
+impl MetricsClient {
+    fn generate_session_id() -> String {
+        let imports = GLOBAL_IMPORTS.resolve().unwrap();
+        let mut seed = {
+            let mut buffer = 0;
+            unsafe { (imports.KeQuerySystemTimePrecise)(&mut buffer) };
+            buffer as u32
+        };
+
+        let mut session_id = String::with_capacity(16);
+        for _ in 0..16 {
+            let value = unsafe { (imports.RtlRandomEx)(&mut seed) } as usize;
+            session_id.push(char::from(
+                SESSION_ID_CHARS.as_bytes()[value % SESSION_ID_CHARS.len()],
+            ));
+        }
+
+        session_id
+    }
+
+    pub fn new() -> Self {
+        let session_id = Self::generate_session_id();
+        let worker_context = WorkerContext {
+            entry_sequence_no: 0,
+
+            device_info: DeviceInfo {},
+            session_id: session_id.clone(),
+            pending_entries: Default::default(),
+
+            shutdown: false,
+        };
+        let worker_context = Arc::new(FastMutex::new(worker_context));
+        let worker_event = KEvent::new(NotificationEvent);
+        let worker_handle = thread::spawn({
+            let worker_event = worker_event.clone();
+            let worker_context = worker_context.clone();
+            move || WorkerContext::executor(worker_event, worker_context)
+        });
+
+        Self {
+            session_id,
+
+            worker_context,
+            worker_handle: Some(worker_handle),
+            worker_event,
+        }
+    }
+
+    pub fn add_record(&self, report_type: String, payload: String) {
+        let mut entry = MetricsEntry {
+            payload,
+            report_type,
+            timestamp: 0,
+            uptime: 0,
+            seq_no: 0,
+        };
+        if let Ok(imports) = GLOBAL_IMPORTS.resolve() {
+            unsafe {
+                (imports.KeQuerySystemTimePrecise)(&mut entry.timestamp);
+                entry.uptime = KeQueryTickCount() * (imports.KeQueryTimeIncrement)() as u64;
+            }
+        }
+
+        {
+            let mut worker_context = self.worker_context.lock();
+            worker_context.entry_sequence_no = worker_context.entry_sequence_no.wrapping_add(1);
+            entry.seq_no = worker_context.entry_sequence_no;
+            worker_context.pending_entries.push_back(entry);
+        }
+        self.worker_event.signal();
+    }
+
+    pub fn shutdown(&mut self) {
+        let worker_handle = match self.worker_handle.take() {
+            Some(handle) => handle,
+            None => return, // previus shutdown was successfull
+        };
+
+        /* FIXME: Flush pending entries! */
+        log::trace!("Requesting shutdown");
+        self.worker_context.lock().shutdown = true;
+        self.worker_event.signal();
+        worker_handle.join();
+        log::debug!("Shutdown successfull");
+    }
+}
+
+impl Drop for MetricsClient {
+    fn drop(&mut self) {
+        self.shutdown();
     }
 }
 
@@ -210,4 +333,8 @@ fn resolve_metrics_target(wsk: &WskInstance) -> Result<(String, SOCKADDR_INET), 
         inet_addr.to_string()
     );
     Ok((String::from_utf16_lossy(&target_host), inet_addr))
+}
+
+pub fn initialize() -> anyhow::Result<MetricsClient> {
+    Ok(MetricsClient::new())
 }

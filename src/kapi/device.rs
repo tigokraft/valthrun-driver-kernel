@@ -13,27 +13,19 @@ use winapi::{
         PDEVICE_OBJECT,
     },
     shared::{
-        guiddef::{
-            GUID,
-            LPCGUID,
-        },
+        guiddef::GUID,
         ntdef::{
-            BOOLEAN,
             NTSTATUS,
-            PCUNICODE_STRING,
             UNICODE_STRING,
         },
         ntstatus::STATUS_NOT_SUPPORTED,
     },
 };
 
-use super::{
-    NTStatusEx,
-    UnicodeStringEx,
-};
+use super::NTStatusEx;
 use crate::{
+    imports::GLOBAL_IMPORTS,
     kapi::IrpEx,
-    kdef::MmGetSystemRoutineAddress,
 };
 
 type DeviceMajorFn<T> = fn(device: &mut DeviceHandle<T>, irp: &mut IRP) -> NTSTATUS;
@@ -44,18 +36,6 @@ pub struct DeviceHandle<T> {
     pub data: T,
 }
 unsafe impl<T: Sync> Sync for DeviceHandle<T> {}
-
-type IoCreateDeviceSecure = extern "system" fn(
-    DriverObject: *mut DRIVER_OBJECT,
-    DeviceExtensionSize: u32,
-    DeviceName: PCUNICODE_STRING,
-    DeviceType: DEVICE_TYPE,
-    DeviceCharacteristics: u32,
-    Exclusive: BOOLEAN,
-    DefaultSDDLString: PCUNICODE_STRING,
-    DeviceClassGuid: LPCGUID,
-    DeviceObject: *mut PDEVICE_OBJECT,
-) -> NTSTATUS;
 
 impl<T> DeviceHandle<T> {
     pub fn create(
@@ -70,12 +50,8 @@ impl<T> DeviceHandle<T> {
     ) -> anyhow::Result<Pin<Box<Self>>> {
         let mut device_ptr: PDEVICE_OBJECT = core::ptr::null_mut();
         let result = unsafe {
-            let name = UNICODE_STRING::from_bytes(obfstr::wide!("IoCreateDeviceSecure"));
-            #[allow(non_snake_case)]
-            let IoCreateDeviceSecure: IoCreateDeviceSecure =
-                core::mem::transmute(MmGetSystemRoutineAddress(&name));
-
-            IoCreateDeviceSecure(
+            let imports = GLOBAL_IMPORTS.resolve()?;
+            (imports.IoCreateDeviceSecure)(
                 driver,
                 core::mem::size_of::<*const ()>() as u32,
                 device_name
@@ -86,7 +62,7 @@ impl<T> DeviceHandle<T> {
                 if exclusive { 1 } else { 0 },
                 sddl,
                 class_guid,
-                &mut device_ptr,
+                &mut device_ptr as *mut PDEVICE_OBJECT,
             )
         };
 

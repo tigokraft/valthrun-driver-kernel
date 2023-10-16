@@ -36,23 +36,6 @@ pub struct ProcessProtectionInformation {
     pub protection: PSProtection,
 }
 
-#[link(name = "ntoskrnl")]
-extern "system" {
-    pub fn PsGetProcessId(process: PEPROCESS) -> i32;
-    pub fn IoGetCurrentProcess() -> PEPROCESS;
-
-    pub fn PsGetProcessPeb(process: PEPROCESS) -> *const _PEB;
-    pub fn PsLookupProcessByProcessId(process_id: i32, process: *mut PEPROCESS) -> NTSTATUS;
-
-    pub fn KeStackAttachProcess(process: PEPROCESS, apc_state: &mut _KAPC_STATE);
-    pub fn KeUnstackDetachProcess(apc_state: &mut _KAPC_STATE);
-
-    pub static PsInitialSystemProcess: PEPROCESS;
-
-    pub fn MmGetSystemRoutineAddress(system_routine_name: *const UNICODE_STRING) -> PVOID;
-    pub static MmSystemRangeStart: *const ();
-}
-
 #[repr(C)]
 #[allow(non_snake_case, non_camel_case_types)]
 pub struct _KAPC_STATE {

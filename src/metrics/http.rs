@@ -5,6 +5,7 @@ use alloc::{
     },
     vec::Vec,
 };
+use core::fmt::Debug;
 
 use embedded_io::{
     Read,
@@ -25,12 +26,10 @@ use crate::{
     io::BufReader,
     metrics::HttpError,
     util::{
-        TcpConnection,
-        Win32Rng,
+        Win32Rng, TcpConnection,
     },
     wsk::{
         sys::SOCKADDR_INET,
-        WskError,
         WskInstance,
     },
 };
@@ -43,7 +42,10 @@ pub struct HttpRequest<'a> {
 }
 
 impl<'a> HttpRequest<'a> {
-    fn emit_headers(&self, output: &mut dyn Write<Error = WskError>) -> Result<(), HttpError> {
+    fn emit_headers<E: Into<HttpError> + embedded_io::Error>(
+        &self,
+        output: &mut dyn Write<Error = E>,
+    ) -> Result<(), HttpError> {
         let mut buffer = Vec::with_capacity(500);
         write!(&mut buffer, "POST {} HTTP/1.1\r\n", self.target)
             .map_err(HttpError::WriteFmtError)?;
@@ -61,12 +63,18 @@ impl<'a> HttpRequest<'a> {
             .map_err(HttpError::WriteFmtError)?;
         write!(&mut buffer, "\r\n").map_err(HttpError::WriteFmtError)?;
 
-        output.write_all(buffer.as_slice())?;
+        output
+            .write_all(buffer.as_slice())
+            .map_err(|err| err.into())?;
+
         Ok(())
     }
 
-    fn emit_payload(&self, output: &mut dyn Write<Error = WskError>) -> Result<(), HttpError> {
-        output.write_all(self.payload).map_err(HttpError::IoError)
+    fn emit_payload<E: Into<HttpError> + embedded_io::Error>(
+        &self,
+        output: &mut dyn Write<Error = E>,
+    ) -> Result<(), HttpError> {
+        output.write_all(self.payload).map_err(|err| err.into())
     }
 }
 
@@ -103,7 +111,10 @@ pub struct HttpResponse {
 }
 
 impl HttpResponse {
-    fn read_headers(&mut self, reader: &mut dyn Read<Error = WskError>) -> Result<(), HttpError> {
+    fn read_headers<E: Into<HttpError> + embedded_io::Error + Debug>(
+        &mut self,
+        reader: &mut dyn Read<Error = E>,
+    ) -> Result<(), HttpError> {
         let mut buffer = Vec::with_capacity(512);
         loop {
             let mut current_byte = 0u8;
@@ -114,8 +125,8 @@ impl HttpResponse {
                 }
                 Ok(_) => {}
                 Err(err) => {
-                    log::trace!("{}: {}", obfstr!("reading HTTP response header"), err);
-                    return Err(HttpError::IoError(err));
+                    log::trace!("{}: {:?}", obfstr!("reading HTTP response header"), err);
+                    return Err(err.into());
                 }
             }
 
@@ -162,7 +173,10 @@ impl HttpResponse {
         Ok(())
     }
 
-    fn read_payload(&mut self, stream: &mut dyn Read<Error = WskError>) -> Result<(), HttpError> {
+    fn read_payload<E: Into<HttpError> + embedded_io::Error>(
+        &mut self,
+        stream: &mut dyn Read<Error = E>,
+    ) -> Result<(), HttpError> {
         let content_length = if let Some(header) = self.headers.find_header("Content-Length") {
             header
                 .value
@@ -188,7 +202,7 @@ impl HttpResponse {
         if let Err(error) = stream.read_exact(&mut self.content) {
             match error {
                 ReadExactError::UnexpectedEof => return Err(HttpError::EOF),
-                ReadExactError::Other(err) => return Err(HttpError::IoError(err)),
+                ReadExactError::Other(err) => return Err(err.into()),
             }
         }
 
@@ -210,12 +224,10 @@ pub fn execute_https_request(
     };
 
     let mut read_record_buffer = Vec::new();
-    read_record_buffer.resize(16384, 0u8);
+    read_record_buffer.resize(16640, 0u8);
 
     let mut write_record_buffer = Vec::new();
-    write_record_buffer.resize(16384, 0u8);
-
-    let mut rng = Win32Rng::new();
+    write_record_buffer.resize(16640, 0u8);
 
     let config = TlsConfig::new();
     let mut tls: TlsConnection<'_, TcpConnection, Aes128GcmSha256> = TlsConnection::new(
@@ -224,29 +236,28 @@ pub fn execute_https_request(
         &mut write_record_buffer,
     );
 
-    tls.open::<_, NoVerify>(TlsContext::new(&config, &mut rng))
-        .unwrap();
+    tls.open::<_, NoVerify>(TlsContext::new(&config, &mut Win32Rng::new()))?;
 
-    Err(HttpError::EOF)
-    // if let Err(error) = request.emit_headers(&mut tls) {
-    //     log::trace!("{}: {:#}", obfstr!("send headers"), error);
-    //     return Err(error);
-    // }
-    // if let Err(error) = request.emit_payload(&mut tls) {
-    //     log::trace!("{}: {:#}", obfstr!("send payload"), error);
-    //     return Err(error);
-    // }
+    if let Err(error) = request.emit_headers(&mut tls) {
+        log::trace!("{}: {:#}", obfstr!("send headers"), error);
+        return Err(error);
+    }
+    if let Err(error) = request.emit_payload(&mut tls) {
+        log::trace!("{}: {:#}", obfstr!("send payload"), error);
+        return Err(error);
+    }
+    tls.flush()?;
 
-    // let mut reader = BufReader::new(tls);
-    // let mut response = HttpResponse::default();
+    let mut reader = BufReader::new(tls);
+    let mut response = HttpResponse::default();
 
-    // response.read_headers(&mut reader)?;
-    // response.read_payload(&mut reader)?;
+    response.read_headers(&mut reader)?;
+    response.read_payload(&mut reader)?;
 
-    // log::debug!("Request succeeded -> {}", response.status_code);
-    // log::debug!("Response content length: {}", response.content.len());
-    // log::debug!("{}", String::from_utf8_lossy(response.content.as_slice()));
-    // Ok(response)
+    log::debug!("Request succeeded -> {}", response.status_code);
+    log::debug!("Response content length: {}", response.content.len());
+    log::debug!("{}", String::from_utf8_lossy(response.content.as_slice()));
+    Ok(response)
 }
 
 pub fn execute_http_request(
@@ -270,6 +281,7 @@ pub fn execute_http_request(
         log::trace!("{}: {:#}", obfstr!("send payload"), error);
         return Err(error);
     }
+    connection.flush()?;
 
     let mut reader = BufReader::new(connection);
     let mut response = HttpResponse::default();

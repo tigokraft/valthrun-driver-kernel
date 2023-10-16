@@ -7,24 +7,22 @@ use anyhow::anyhow;
 use winapi::{
     km::wdm::KPROCESSOR_MODE,
     shared::ntdef::{
+        HANDLE,
         NTSTATUS,
         OBJ_CASE_INSENSITIVE,
         PVOID,
         UNICODE_STRING,
     },
+    um::winnt::ACCESS_MASK,
 };
 
 use super::NTStatusEx;
 use crate::{
     kapi::UnicodeStringEx,
     kdef::{
-        ObQueryNameString,
-        ObReferenceObjectByName,
-        ObfDereferenceObject,
-        ObfReferenceObject,
         OBJECT_NAME_INFORMATION,
         POBJECT_TYPE,
-    },
+    }, imports::GLOBAL_IMPORTS,
 };
 
 pub struct Object(PVOID);
@@ -33,17 +31,42 @@ unsafe impl Sync for Object {}
 
 impl Object {
     pub fn reference(target: PVOID) -> Self {
-        unsafe { ObfReferenceObject(target) };
+        let imports = GLOBAL_IMPORTS.unwrap();
+        unsafe { (imports.ObfReferenceObject)(target) };
         Self(target)
+    }
+
+    // From a reference instance
+    pub fn from_owned(target: PVOID) -> Self {
+        Self(target)
+    }
+
+    pub fn reference_by_handle(handle: HANDLE, access: ACCESS_MASK) -> Result<Object, NTSTATUS> {
+        let imports = GLOBAL_IMPORTS.unwrap();
+        let mut object: PVOID = core::ptr::null_mut();
+        unsafe {
+            (imports.ObReferenceObjectByHandle)(
+                handle,
+                access,
+                core::ptr::null_mut(),
+                KPROCESSOR_MODE::KernelMode,
+                &mut object as *mut _ as PVOID,
+                core::ptr::null_mut(),
+            )
+            .ok()?
+        };
+
+        Ok(Object(object))
     }
 
     pub fn reference_by_name(
         name: &UNICODE_STRING,
         ob_type: POBJECT_TYPE,
     ) -> Result<Object, NTSTATUS> {
+        let imports = GLOBAL_IMPORTS.unwrap();
         let mut object: PVOID = core::ptr::null_mut();
         unsafe {
-            ObReferenceObjectByName(
+            (imports.ObReferenceObjectByName)(
                 name,
                 OBJ_CASE_INSENSITIVE,
                 core::ptr::null_mut(),
@@ -64,6 +87,8 @@ impl Object {
     }
 
     pub fn name(&self) -> anyhow::Result<String> {
+        let imports = GLOBAL_IMPORTS.unwrap();
+
         let mut buffer = Vec::<u8>::with_capacity(1024);
         buffer.resize(1024, 0);
 
@@ -71,7 +96,7 @@ impl Object {
 
         let mut name_length = 0;
         unsafe {
-            ObQueryNameString(self.0, name_info, buffer.len() as u32, &mut name_length)
+            (imports.ObQueryNameString)(self.0, name_info, buffer.len() as u32, &mut name_length)
                 .ok()
                 .map_err(|err| anyhow!("ObQueryNameString {:X}", err))?;
         }
@@ -87,8 +112,9 @@ impl Object {
 impl Drop for Object {
     fn drop(&mut self) {
         if !self.0.is_null() {
+            let imports = GLOBAL_IMPORTS.unwrap();
             unsafe {
-                ObfDereferenceObject(self.0);
+                (imports.ObfDereferenceObject)(self.0);
             }
         }
     }

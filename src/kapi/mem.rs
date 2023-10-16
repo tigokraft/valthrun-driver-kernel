@@ -21,7 +21,6 @@ use crate::{
     kdef::{
         IoAllocateMdl,
         IoFreeMdl,
-        MmGetSystemRoutineAddress,
         MmMapLockedPagesSpecifyCache,
         MmUnlockPages,
     },
@@ -43,11 +42,12 @@ static MEM_FUNCTIONS: SyncUnsafeCell<MemFunctions> = SyncUnsafeCell::new(MemFunc
 });
 
 pub fn init() -> anyhow::Result<()> {
+    let imports = GLOBAL_IMPORTS.resolve()?;
     let function_table = unsafe { &mut *MEM_FUNCTIONS.get() };
 
     function_table.probe_for_read = unsafe {
         let name = UNICODE_STRING::from_bytes(obfstr::wide!("ProbeForRead"));
-        MmGetSystemRoutineAddress(&name) as u64
+        (imports.MmGetSystemRoutineAddress)(&name) as u64
     };
     if function_table.probe_for_read == 0 {
         anyhow::bail!("{}", obfstr!("failed to resolve ProbeForRead"))
@@ -55,7 +55,7 @@ pub fn init() -> anyhow::Result<()> {
 
     function_table.probe_for_write = unsafe {
         let name = UNICODE_STRING::from_bytes(obfstr::wide!("ProbeForWrite"));
-        MmGetSystemRoutineAddress(&name) as u64
+        (imports.MmGetSystemRoutineAddress)(&name) as u64
     };
     if function_table.probe_for_write == 0 {
         anyhow::bail!("{}", obfstr!("failed to resolve ProbeForWrite"))
@@ -63,7 +63,7 @@ pub fn init() -> anyhow::Result<()> {
 
     function_table.memmove = unsafe {
         let name = UNICODE_STRING::from_bytes(obfstr::wide!("memmove"));
-        MmGetSystemRoutineAddress(&name) as u64
+        (imports.MmGetSystemRoutineAddress)(&name) as u64
     };
     if function_table.memmove == 0 {
         anyhow::bail!("{}", obfstr!("failed to resolve memmove"))
@@ -71,7 +71,7 @@ pub fn init() -> anyhow::Result<()> {
 
     function_table.probe_and_lock_process_pages = unsafe {
         let name = UNICODE_STRING::from_bytes(obfstr::wide!("MmProbeAndLockProcessPages"));
-        MmGetSystemRoutineAddress(&name) as u64
+        (imports.MmGetSystemRoutineAddress)(&name) as u64
     };
     if function_table.probe_and_lock_process_pages == 0 {
         anyhow::bail!(

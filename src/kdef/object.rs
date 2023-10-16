@@ -1,12 +1,7 @@
-use winapi::{
-    km::wdm::KPROCESSOR_MODE,
-    shared::ntdef::{
-        NTSTATUS,
-        PCUNICODE_STRING,
-        PVOID,
-        UNICODE_STRING,
-    },
-    um::winnt::ACCESS_MASK,
+use winapi::shared::ntdef::{
+    NTSTATUS,
+    PVOID,
+    UNICODE_STRING,
 };
 
 use super::_OB_CALLBACK_REGISTRATION;
@@ -22,33 +17,12 @@ pub struct OBJECT_NAME_INFORMATION {
 
 #[allow(unused)]
 extern "system" {
-    pub fn ObQueryNameString(
-        Object: PVOID,
-        ObjectNameInfo: *mut OBJECT_NAME_INFORMATION,
-        Length: u32,
-        ReturnLength: &mut u32,
-    ) -> NTSTATUS;
-
-    pub fn ObfDereferenceObject(object: PVOID);
-    pub fn ObfReferenceObject(object: PVOID);
-
     pub fn ObRegisterCallbacks(
         CallbackRegistration: *const _OB_CALLBACK_REGISTRATION,
         RegistrationHandle: *mut PVOID,
     ) -> NTSTATUS;
     pub fn ObUnRegisterCallbacks(RegistrationHandle: PVOID);
     pub fn ObGetFilterVersion() -> u16;
-
-    pub fn ObReferenceObjectByName(
-        ObjectName: PCUNICODE_STRING,
-        Attributes: u32,
-        AccessState: *mut (),
-        DesiredAccess: ACCESS_MASK,
-        ObjectType: POBJECT_TYPE,
-        AccessMode: KPROCESSOR_MODE,
-        ParseContext: PVOID,
-        Object: PVOID,
-    ) -> NTSTATUS;
 
     pub static CmKeyObjectType: *const POBJECT_TYPE;
     pub static IoFileObjectType: *const POBJECT_TYPE;

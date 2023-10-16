@@ -15,25 +15,30 @@ use anyhow::{
 };
 use obfstr::obfstr;
 use winapi::shared::ntdef::{
+    PUNICODE_STRING,
     PVOID,
     UNICODE_STRING,
 };
 
-use crate::{
-    kapi::{
-        KModule,
-        UnicodeStringEx,
-    },
-    kdef::MmGetSystemRoutineAddress,
+use crate::kapi::{
+    KModule,
+    UnicodeStringEx,
 };
 
 pub trait DynamicImport<T>: Debug {
     fn resolve(self) -> anyhow::Result<T>;
 }
 
-#[derive(Debug)]
 pub struct SystemExport {
     function: &'static [u16],
+}
+
+impl Debug for SystemExport {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("SystemExport")
+            .field("function", &String::from_utf16_lossy(&self.function))
+            .finish()
+    }
 }
 
 impl SystemExport {
@@ -42,11 +47,15 @@ impl SystemExport {
     }
 }
 
+extern "system" {
+    fn MmGetSystemRoutineAddress(SystemRoutineName: PUNICODE_STRING) -> PVOID;
+}
+
 impl<T> DynamicImport<T> for SystemExport {
     fn resolve(self) -> anyhow::Result<T> {
-        let uname = UNICODE_STRING::from_bytes(self.function);
+        let mut uname = UNICODE_STRING::from_bytes(self.function);
         unsafe {
-            let address = MmGetSystemRoutineAddress(&uname);
+            let address = MmGetSystemRoutineAddress(&mut uname);
             if address.is_null() {
                 anyhow::bail!(
                     "{} {}",
@@ -133,7 +142,7 @@ impl<T> DynamicImportTable<T> {
     pub fn unwrap(&self) -> &T {
         match self.resolve() {
             Ok(table) => table,
-            Err(error) => panic!("{}: {:#}", obfstr!("Failed to load import table"), error)
+            Err(error) => panic!("{}: {:#}", obfstr!("Failed to load import table"), error),
         }
     }
 }

@@ -5,11 +5,9 @@
 #![feature(result_flattening)]
 #![feature(new_uninit)]
 #![feature(const_transmute_copy)]
+#![allow(dead_code)]
 
-use alloc::{
-    boxed::Box,
-    string::ToString,
-};
+use alloc::{boxed::Box, string::ToString, format};
 use core::cell::SyncUnsafeCell;
 
 use device::ValthrunDevice;
@@ -60,7 +58,6 @@ use crate::{
     kdef::{
         IoCreateDriver,
         KeGetCurrentIrql,
-        MmSystemRangeStart,
         DPFLTR_LEVEL,
     },
     logger::APP_LOGGER,
@@ -95,12 +92,17 @@ use status::*;
 
 extern crate alloc;
 
+// FIXME: Exchange SyncUnsafeCell with a RwLock
 pub static WSK: SyncUnsafeCell<Option<WskInstance>> = SyncUnsafeCell::new(None);
-static REQUEST_HANDLER: SyncUnsafeCell<Option<Box<HandlerRegistry>>> =
+pub static REQUEST_HANDLER: SyncUnsafeCell<Option<Box<HandlerRegistry>>> =
     SyncUnsafeCell::new(Option::None);
-static VALTHRUN_DEVICE: SyncUnsafeCell<Option<ValthrunDevice>> = SyncUnsafeCell::new(Option::None);
-static KEYBOARD_INPUT: SyncUnsafeCell<Option<KeyboardInput>> = SyncUnsafeCell::new(Option::None);
-static MOUSE_INPUT: SyncUnsafeCell<Option<MouseInput>> = SyncUnsafeCell::new(Option::None);
+pub static VALTHRUN_DEVICE: SyncUnsafeCell<Option<ValthrunDevice>> =
+    SyncUnsafeCell::new(Option::None);
+pub static KEYBOARD_INPUT: SyncUnsafeCell<Option<KeyboardInput>> =
+    SyncUnsafeCell::new(Option::None);
+pub static MOUSE_INPUT: SyncUnsafeCell<Option<MouseInput>> = SyncUnsafeCell::new(Option::None);
+pub static METRICS_CLIENT: SyncUnsafeCell<Option<MetricsClient>> =
+    SyncUnsafeCell::new(Option::None);
 
 #[no_mangle]
 extern "system" fn driver_unload(_driver: &mut DRIVER_OBJECT) {
@@ -123,7 +125,20 @@ extern "system" fn driver_unload(_driver: &mut DRIVER_OBJECT) {
     let mouse_input = unsafe { &mut *MOUSE_INPUT.get() };
     let _ = mouse_input.take();
 
+    let metrics = unsafe { &mut *METRICS_CLIENT.get() };
+    if let Some(mut metrics) = metrics.take() {
+        metrics.shutdown();
+    }
+
+    /* shutdown WSK after after everthing else has been shut down */
+    let wsk = unsafe { &mut *WSK.get() };
+    let _ = wsk.take();
+
     log::info!("Driver Unloaded");
+}
+
+extern "system" {
+    pub static MmSystemRangeStart: *const ();
 }
 
 #[no_mangle]
@@ -195,10 +210,12 @@ pub extern "system" fn driver_entry(
 }
 
 fn wsk_dummy() -> anyhow::Result<()> {
-    let mut metrics = MetricsClient::new();
-    metrics.add_record("test-record".to_string(), "payload".to_string());
+    // if let Some(metrics) = unsafe { &*METRICS_CLIENT.get() } {
+    //     for i in 0..10 {
+    //         metrics.add_record("testing".to_string(), format!("my test paload {}", i));
+    //     }
+    // }
 
-    log::debug!("Result: {:#?}", metrics.send_report());
     // let wsk = unsafe { &*WSK.get() };
     // let wsk = wsk.as_ref().context("missing WSK instance")?;
     // match metrics::send_report(&wsk, "/report", "{ \"message\": \"Hello World?\" }") {
@@ -235,21 +252,21 @@ extern "C" fn internal_driver_entry(
     driver.DriverUnload = Some(driver_unload);
     if let Err(error) = GLOBAL_IMPORTS.resolve() {
         log::error!(
-            "{} {:#}",
-            obfstr!("Failed to load the global import table:"),
+            "{}: {:#}",
+            obfstr!("Failed to load the global import table"),
             error
         );
         return CSTATUS_DRIVER_INIT_FAILED;
     }
 
     if let Err(error) = kapi::setup_seh() {
-        log::error!("{} {:#}", obfstr!("Failed to initialize SEH:"), error);
+        log::error!("{}: {:#}", obfstr!("Failed to initialize SEH"), error);
         return CSTATUS_DRIVER_INIT_FAILED;
     }
 
     if let Err(error) = kapi::mem::init() {
         log::error!(
-            "{} {:#}",
+            "{}: {:#}",
             obfstr!("Failed to initialize mem functions"),
             error
         );
@@ -267,7 +284,7 @@ extern "C" fn internal_driver_entry(
     if let Err(error) = initialize_nt_offsets() {
         log::error!(
             "{}: {:#}",
-            obfstr!("Failed to initialize NT_OFFSETS:"),
+            obfstr!("Failed to initialize NT_OFFSETS"),
             error
         );
         return CSTATUS_DRIVER_INIT_FAILED;
@@ -282,8 +299,18 @@ extern "C" fn internal_driver_entry(
             unsafe { *WSK.get() = Some(wsk) };
         }
         Err(err) => {
-            log::error!("{}: {:#}", obfstr!("WSK initialize error: "), err);
+            log::error!("{}: {:#}", obfstr!("WSK initialize error"), err);
             return CSTATUS_DRIVER_INIT_FAILED;
+        }
+    }
+
+    match metrics::initialize() {
+        Err(error) => {
+            log::error!("{}: {:#}", obfstr!("Failed to initialize metrics"), error);
+            return CSTATUS_DRIVER_INIT_FAILED;
+        }
+        Ok(client) => {
+            unsafe { *METRICS_CLIENT.get() = Some(client) };
         }
     }
 

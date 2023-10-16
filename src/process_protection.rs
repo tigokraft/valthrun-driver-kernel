@@ -18,6 +18,7 @@ use winapi::shared::ntdef::{
 };
 
 use crate::{
+    imports::GLOBAL_IMPORTS,
     kapi::{
         FastMutex,
         KModule,
@@ -28,7 +29,6 @@ use crate::{
     kdef::{
         ObRegisterCallbacks,
         ObUnRegisterCallbacks,
-        PsGetProcessId,
         PsProcessType,
         OB_FLT_REGISTRATION_VERSION,
         OB_OPERATION_HANDLE_CREATE,
@@ -74,7 +74,8 @@ extern "system" fn process_protection_callback(
         return 0;
     }
 
-    let target_process_id = unsafe { PsGetProcessId(info.Object) };
+    let imports = GLOBAL_IMPORTS.unwrap();
+    let target_process_id = unsafe { (imports.PsGetProcessId)(info.Object) };
     if log::log_enabled!(target: "ProcessAttachments", Level::Trace) && false {
         let current_process_name = current_process.get_image_file_name().unwrap_or_default();
         if current_process_name != obfstr!("svchost.exe")

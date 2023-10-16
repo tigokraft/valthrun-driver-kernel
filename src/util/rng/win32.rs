@@ -1,10 +1,8 @@
-use rand_core::{
-    CryptoRng,
-    RngCore,
-};
+use rand_core::{RngCore, CryptoRng};
 
 use crate::imports::GLOBAL_IMPORTS;
 
+/// Random number generator using RtlRandomEx
 pub struct Win32Rng {
     seed: u32,
 }
@@ -21,7 +19,6 @@ impl Win32Rng {
     }
 }
 
-// FIXME: This is not true, but we have to start with something..
 impl CryptoRng for Win32Rng {}
 
 impl RngCore for Win32Rng {

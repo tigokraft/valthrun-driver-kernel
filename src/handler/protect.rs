@@ -11,24 +11,21 @@ use winapi::{
 };
 
 use crate::{
+    imports::GLOBAL_IMPORTS,
     kapi::UnicodeStringEx,
-    kdef::{
-        IoGetCurrentProcess,
-        MmGetSystemRoutineAddress,
-        ProcessProtectionInformation,
-        PsGetProcessId,
-    },
+    kdef::ProcessProtectionInformation,
     process_protection,
 };
 
 /// Gets ta pointer to a function from ntoskrnl exports
 fn get_ntoskrnl_exports(function_name: *const UNICODE_STRING) -> PVOID {
     //The MmGetSystemRoutineAddress routine returns a pointer to a function specified by SystemRoutineName.
-    return unsafe { MmGetSystemRoutineAddress(function_name) };
+    let imports = GLOBAL_IMPORTS.unwrap();
+    return unsafe { (imports.MmGetSystemRoutineAddress)(function_name) };
 }
 
 // Gets function base address
-pub fn get_function_base_address(function_name: *const UNICODE_STRING) -> PVOID {
+fn get_function_base_address(function_name: *const UNICODE_STRING) -> PVOID {
     let base = get_ntoskrnl_exports(function_name);
     return base;
 }
@@ -75,8 +72,9 @@ pub fn handler_protection_toggle(
     req: &RequestProtectionToggle,
     _res: &mut ResponseProtectionToggle,
 ) -> anyhow::Result<()> {
-    let process = unsafe { IoGetCurrentProcess() };
-    let current_thread_id = unsafe { PsGetProcessId(process) };
+    let imports = GLOBAL_IMPORTS.resolve()?;
+    let process = unsafe { (imports.PsGetCurrentProcess)() };
+    let current_thread_id = unsafe { (imports.PsGetProcessId)(process) };
 
     process_protection::toggle_protection(current_thread_id, req.enabled);
 

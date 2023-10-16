@@ -7,7 +7,6 @@ use winapi::{
         IoFreeIrp,
         KeInitializeEvent,
         KeSetEvent,
-        KeWaitForSingleObject,
         _KWAIT_REASON_Executive,
         DEVICE_OBJECT,
         IO_COMPLETION_ROUTINE_RESULT,
@@ -50,6 +49,7 @@ use self::sys::{
     _WSK_REGISTRATION,
 };
 use crate::{
+    imports::GLOBAL_IMPORTS,
     kapi::NTStatusEx,
     kdef::{
         IoCancelIrp,
@@ -351,13 +351,18 @@ impl SyncWskContext {
     }
 
     pub fn await_event(&self, timeout: Option<u32>) -> bool {
+        let imports = GLOBAL_IMPORTS.unwrap();
         unsafe {
-            KeWaitForSingleObject(
+            (imports.KeWaitForSingleObject)(
                 &*self.event as *const _ as PVOID,
                 _KWAIT_REASON_Executive as u32,
                 KPROCESSOR_MODE::KernelMode,
                 false,
-                timeout.as_ref(),
+                if let Some(timeout) = &timeout {
+                    timeout as *const _
+                } else {
+                    core::ptr::null()
+                },
             )
             .is_ok()
         }

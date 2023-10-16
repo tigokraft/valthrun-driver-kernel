@@ -24,6 +24,7 @@ pub struct TcpConnection {
     socket: WskConnectionSocket,
 }
 
+#[allow(unused)]
 impl TcpConnection {
     pub fn connect(wsk: &WskInstance, target: &SOCKADDR_INET) -> anyhow::Result<Self> {
         let mut socket = wsk

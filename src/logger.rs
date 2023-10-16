@@ -26,7 +26,16 @@ impl log::Log for KernelLogger {
             log::Level::Warn => ("W", DPFLTR_LEVEL::WARNING),
             log::Level::Error => ("E", DPFLTR_LEVEL::ERROR),
         };
-        let payload = format!("[{}] {}", level_prefix, record.args());
+        let payload = if cfg!(debug_assertions) {
+            format!(
+                "[{}][{}] {}",
+                level_prefix,
+                record.module_path().unwrap_or("default"),
+                record.args()
+            )
+        } else {
+            format!("[{}] {}", level_prefix, record.args())
+        };
         let payload = if let Ok(payload) = CString::new(payload) {
             payload
         } else {
