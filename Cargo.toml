@@ -11,6 +11,7 @@ crate-type = ["cdylib"]
 
 [build-dependencies]
 anyhow = "1.0.72"
+bindgen = "0.68.1"
 cc = "1.0.79"
 winreg = "0.50.0" 
 
@@ -21,6 +22,12 @@ modular-bitfield = "0.11.2"
 obfstr = "0.4.3"
 valthrun-driver-shared = { path = "./shared" }
 once_cell = { version = "1.18.0", default-features = false, features = ["alloc"] }
+thiserror = { version = "1.0", package = "thiserror-core", default-features = false }
+paste = "1.0.14"
+httparse = { version = "1.8.0", default-features = false }
+embedded-io = { version = "0.6.0", features = ["alloc"] }
+serde = { version = "1.0", default-features = false, features = ["derive", "alloc"] }
+serde-json-core = "0.5.1"
 
 [dependencies.winapi]
 git = "https://github.com/Trantect/winapi-rs.git"

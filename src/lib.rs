@@ -1,11 +1,13 @@
 #![no_std]
+#![feature(error_in_core)]
 #![feature(sync_unsafe_cell)]
 #![feature(pointer_byte_offsets)]
 #![feature(result_flattening)]
 #![feature(new_uninit)]
 #![feature(const_transmute_copy)]
 
-use alloc::boxed::Box;
+use alloc::{boxed::Box, string::ToString};
+use metrics::MetricsClient;
 use core::cell::SyncUnsafeCell;
 
 use device::ValthrunDevice;
@@ -63,26 +65,33 @@ use crate::{
         initialize_os_info,
         os_info,
     },
+    wsk::{WskInstance, WskBuffer}, imports::GLOBAL_IMPORTS,
 };
 
 mod device;
 mod handler;
+mod imports;
+mod io;
 mod kapi;
 mod kb;
 mod kdef;
 mod logger;
+mod metrics;
 mod mouse;
 mod offsets;
 mod panic_hook;
 mod pmem;
 mod process_protection;
+mod util;
 mod winver;
+mod wsk;
 
 mod status;
 use status::*;
 
 extern crate alloc;
 
+pub static WSK: SyncUnsafeCell<Option<WskInstance>> = SyncUnsafeCell::new(None);
 static REQUEST_HANDLER: SyncUnsafeCell<Option<Box<HandlerRegistry>>> =
     SyncUnsafeCell::new(Option::None);
 static VALTHRUN_DEVICE: SyncUnsafeCell<Option<ValthrunDevice>> = SyncUnsafeCell::new(Option::None);
@@ -132,7 +141,7 @@ pub extern "system" fn driver_entry(
     }
 
     if let Err(error) = initialize_os_info() {
-        log::error!("{} {:X}", obfstr!("Failed to load OS version info:"), error);
+        log::error!("{} {}", obfstr!("Failed to load OS version info:"), error);
         return CSTATUS_DRIVER_PREINIT_FAILED;
     }
 
@@ -181,6 +190,25 @@ pub extern "system" fn driver_entry(
     }
 }
 
+fn wsk_dummy() -> anyhow::Result<()> {
+    let mut metrics = MetricsClient::new();
+    metrics.add_record("test-record".to_string(), "payload".to_string());
+
+    log::debug!("Result: {:#?}", metrics.send_report());
+    // let wsk = unsafe { &*WSK.get() };
+    // let wsk = wsk.as_ref().context("missing WSK instance")?;
+    // match metrics::send_report(&wsk, "/report", "{ \"message\": \"Hello World?\" }") {
+    //     Ok(_) => {
+    //         log::debug!("Success!");
+    //     }
+    //     Err(error) => {
+    //         log::debug!("Fail: {:#}", error);
+    //     }
+    // }
+
+    Ok(())
+}
+
 extern "C" fn internal_driver_entry(
     driver: &mut DRIVER_OBJECT,
     registry_path: *const UNICODE_STRING,
@@ -201,25 +229,37 @@ extern "C" fn internal_driver_entry(
     }
 
     driver.DriverUnload = Some(driver_unload);
+    if let Err(error) = GLOBAL_IMPORTS.resolve() {
+        log::error!("{} {:#}", obfstr!("Failed to load the global import table:"), error);
+        return CSTATUS_DRIVER_INIT_FAILED;
+    }
+
     if let Err(error) = kapi::setup_seh() {
-        log::error!("{}{:#}", obfstr!("Failed to initialize SEH: "), error);
+        log::error!("{} {:#}", obfstr!("Failed to initialize SEH:"), error);
         return CSTATUS_DRIVER_INIT_FAILED;
     }
 
     if let Err(error) = kapi::mem::init() {
         log::error!(
-            "{}{:#}",
+            "{} {:#}",
             obfstr!("Failed to initialize mem functions"),
             error
         );
         return CSTATUS_DRIVER_INIT_FAILED;
     }
 
+    // {
+    //     let mut buffer = [ 0x76u8; 32 ];
+    //     let x = WskBuffer::create(&mut buffer);
+    //     log::debug!("WSK Buffer error: {:?}", x.err());
+    // }
+    // return CSTATUS_DRIVER_INIT_FAILED;
+
     /* Needs to be done first as it's assumed to be init */
     if let Err(error) = initialize_nt_offsets() {
         log::error!(
-            "{}: {}",
-            obfstr!("Failed to initialize NT_OFFSETS: {:#}"),
+            "{}: {:#}",
+            obfstr!("Failed to initialize NT_OFFSETS:"),
             error
         );
         return CSTATUS_DRIVER_INIT_FAILED;
@@ -229,42 +269,57 @@ extern "C" fn internal_driver_entry(
         *function = Some(device_general_irp_handler);
     }
 
-    match kb::create_keyboard_input() {
-        Err(error) => {
-            log::error!(
-                "{} {:#}",
-                obfstr!("Failed to initialize keyboard input:"),
-                error
-            );
+    match WskInstance::create(1 << 8) {
+        Ok(wsk) => {
+            unsafe { *WSK.get() = Some(wsk) };
+        },
+        Err(err) => {
+            log::error!("{}: {:#}", obfstr!("WSK initialize error: "), err);
             return CSTATUS_DRIVER_INIT_FAILED;
-        }
-        Ok(keyboard) => {
-            unsafe { *KEYBOARD_INPUT.get() = Some(keyboard) };
         }
     }
 
-    match mouse::create_mouse_input() {
-        Err(error) => {
-            log::error!(
-                "{} {:#}",
-                obfstr!("Failed to initialize mouse input:"),
-                error
-            );
-            return CSTATUS_DRIVER_INIT_FAILED;
-        }
-        Ok(mouse) => {
-            unsafe { *MOUSE_INPUT.get() = Some(mouse) };
-        }
-    }
-
-    if let Err(error) = process_protection::initialize() {
-        log::error!(
-            "{} {:#}",
-            obfstr!("Failed to initialized process protection:"),
-            error
-        );
+    if let Err(err) = wsk_dummy() {
+        log::error!("{}: {:#}", obfstr!("WSK dummy error"), err);
         return CSTATUS_DRIVER_INIT_FAILED;
-    };
+    }
+
+    // match kb::create_keyboard_input() {
+    //     Err(error) => {
+    //         log::error!(
+    //             "{} {:#}",
+    //             obfstr!("Failed to initialize keyboard input:"),
+    //             error
+    //         );
+    //         return CSTATUS_DRIVER_INIT_FAILED;
+    //     }
+    //     Ok(keyboard) => {
+    //         unsafe { *KEYBOARD_INPUT.get() = Some(keyboard) };
+    //     }
+    // }
+
+    // match mouse::create_mouse_input() {
+    //     Err(error) => {
+    //         log::error!(
+    //             "{} {:#}",
+    //             obfstr!("Failed to initialize mouse input:"),
+    //             error
+    //         );
+    //         return CSTATUS_DRIVER_INIT_FAILED;
+    //     }
+    //     Ok(mouse) => {
+    //         unsafe { *MOUSE_INPUT.get() = Some(mouse) };
+    //     }
+    // }
+
+    // if let Err(error) = process_protection::initialize() {
+    //     log::error!(
+    //         "{} {:#}",
+    //         obfstr!("Failed to initialized process protection:"),
+    //         error
+    //     );
+    //     return CSTATUS_DRIVER_INIT_FAILED;
+    // };
 
     let device = match ValthrunDevice::create(driver) {
         Ok(device) => device,

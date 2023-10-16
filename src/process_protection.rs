@@ -176,6 +176,7 @@ pub fn finalize() {
     }
 }
 
+#[allow(unused)]
 pub fn initialize() -> anyhow::Result<()> {
     let mut context = process_protection_state().lock();
     if context.is_some() {

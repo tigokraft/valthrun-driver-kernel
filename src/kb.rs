@@ -93,6 +93,7 @@ fn find_keyboard_service_callback() -> anyhow::Result<KeyboardClassServiceCallba
     )
 }
 
+#[allow(unused)]
 pub fn create_keyboard_input() -> anyhow::Result<KeyboardInput> {
     let name = UNICODE_STRING::from_bytes(obfstr::wide!("\\Driver\\KbdClass"));
     let kb_driver = Object::reference_by_name(&name, unsafe { *IoDriverObjectType })

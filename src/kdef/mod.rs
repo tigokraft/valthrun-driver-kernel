@@ -33,3 +33,6 @@ pub use kbdclass::*;
 
 mod mouclass;
 pub use mouclass::*;
+
+mod mm;
+pub use mm::*;

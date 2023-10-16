@@ -3,12 +3,16 @@ use alloc::string::String;
 use winapi::shared::ntdef::UNICODE_STRING;
 
 pub trait UnicodeStringEx {
-    fn from_bytes(s: &'static [u16]) -> UNICODE_STRING;
+    fn from_bytes_unchecked(s: &[u16]) -> UNICODE_STRING;
+    fn from_bytes(s: &'static [u16]) -> UNICODE_STRING {
+        Self::from_bytes_unchecked(s)
+    }
+
     fn as_string_lossy(&self) -> String;
 }
 
 impl UnicodeStringEx for UNICODE_STRING {
-    fn from_bytes(s: &'static [u16]) -> UNICODE_STRING {
+    fn from_bytes_unchecked(s: &[u16]) -> UNICODE_STRING {
         let len = s.len();
         let n = if len > 0 && s[len - 1] == 0 {
             len - 1

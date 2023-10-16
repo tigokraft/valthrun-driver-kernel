@@ -1,8 +1,9 @@
 use core::cell::SyncUnsafeCell;
 
+use anyhow::anyhow;
 use winapi::shared::ntdef::NTSTATUS;
 
-use crate::kapi::NTStatusEx;
+use crate::{kapi::NTStatusEx, dynamic_import_table, util::imports::SystemExport};
 
 #[repr(C)]
 #[allow(non_snake_case, non_camel_case_types)]
@@ -20,10 +21,6 @@ pub struct _OSVERSIONINFOEXW {
 
     pub wProductType: u8,
     pub wReserved: u8,
-}
-
-extern "system" {
-    fn RtlGetVersion(info: &mut _OSVERSIONINFOEXW) -> NTSTATUS;
 }
 
 static OS_VERSION_INFO: SyncUnsafeCell<_OSVERSIONINFOEXW> =
@@ -45,7 +42,18 @@ pub fn os_info() -> &'static _OSVERSIONINFOEXW {
     unsafe { &*OS_VERSION_INFO.get() }
 }
 
-pub fn initialize_os_info() -> anyhow::Result<(), NTSTATUS> {
+// Using a private import table here, as the global import table might not be initialized yet.
+type RtlGetVersion = unsafe extern "C" fn(info: &mut _OSVERSIONINFOEXW) -> NTSTATUS;
+dynamic_import_table! {
+    imports IMPORTS {
+        pub RtlGetVersion: RtlGetVersion = SystemExport::new(obfstr::wide!("RtlGetVersion")),
+    }
+}
+
+pub fn initialize_os_info() -> anyhow::Result<()> {
+    let imports = IMPORTS.resolve()
+        .map_err(|err| anyhow!("{}: {}", "failed to resolve imports", err))?;
+
     let mut info = unsafe { &mut *OS_VERSION_INFO.get() };
-    unsafe { RtlGetVersion(&mut info).ok() }
+    unsafe { (imports.RtlGetVersion)(&mut info).ok().map_err(|err| anyhow!("{:X}", err)) }
 }

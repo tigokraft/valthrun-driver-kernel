@@ -2,12 +2,9 @@ use core::cell::SyncUnsafeCell;
 
 use obfstr::obfstr;
 use winapi::{
-    km::{
-        ndis::PMDL,
-        wdm::{
-            KPROCESSOR_MODE,
-            PIRP,
-        },
+    km::wdm::{
+        KPROCESSOR_MODE,
+        PIRP,
     },
     shared::ntdef::{
         PVOID,
@@ -19,19 +16,29 @@ use super::{
     seh,
     UnicodeStringEx,
 };
-use crate::kdef::MmGetSystemRoutineAddress;
+use crate::{
+    kdef::{
+        IoAllocateMdl,
+        IoFreeMdl,
+        MmGetSystemRoutineAddress,
+        MmMapLockedPagesSpecifyCache,
+        MmUnlockPages,
+    },
+    wsk::sys::PMDL, imports::GLOBAL_IMPORTS,
+};
+
 #[derive(Default)]
 struct MemFunctions {
     probe_for_read: u64,
     probe_for_write: u64,
-    probe_and_lock: u64,
+    probe_and_lock_process_pages: u64,
     memmove: u64,
 }
 static MEM_FUNCTIONS: SyncUnsafeCell<MemFunctions> = SyncUnsafeCell::new(MemFunctions {
     memmove: 0,
     probe_for_read: 0,
     probe_for_write: 0,
-    probe_and_lock: 0,
+    probe_and_lock_process_pages: 0,
 });
 
 pub fn init() -> anyhow::Result<()> {
@@ -61,12 +68,12 @@ pub fn init() -> anyhow::Result<()> {
         anyhow::bail!("{}", obfstr!("failed to resolve memmove"))
     }
 
-    function_table.probe_and_lock = unsafe {
-        let name = UNICODE_STRING::from_bytes(obfstr::wide!("MmProbeAndLockPages"));
+    function_table.probe_and_lock_process_pages = unsafe {
+        let name = UNICODE_STRING::from_bytes(obfstr::wide!("MmProbeAndLockProcessPages"));
         MmGetSystemRoutineAddress(&name) as u64
     };
-    if function_table.probe_and_lock == 0 {
-        anyhow::bail!("{}", obfstr!("failed to resolve MmProbeAndLockPages"))
+    if function_table.probe_and_lock_process_pages == 0 {
+        anyhow::bail!("{}", obfstr!("failed to resolve MmProbeAndLockProcessPages"))
     }
 
     Ok(())
@@ -91,18 +98,26 @@ pub fn probe_write(target: u64, length: usize, align: usize) -> bool {
 }
 
 pub fn probe_and_lock_pages(mdl: PMDL, access_mode: KPROCESSOR_MODE, operation: u32) -> bool {
-    let target_fn = unsafe { &*MEM_FUNCTIONS.get() }.probe_and_lock;
+    /*
+     * We must use MmProbeAndLockProcessPages instead of MmProbeAndLockPages as
+     * MmProbeAndLockPages writes to the shaddow stack, which we do not support.
+     * MmProbeAndLockProcessPages is identical when Process == PsGetCurrentProcess() therefore we're good here.
+     */
+    let target_fn = unsafe { &*MEM_FUNCTIONS.get() }.probe_and_lock_process_pages;
     if target_fn == 0 {
         return false;
     }
+
+    let imports = GLOBAL_IMPORTS.resolve().unwrap();
+    let current_process = unsafe { (imports.PsGetCurrentProcess)() };
 
     unsafe {
         seh::seh_invoke(
             target_fn,
             mdl as u64,
+            current_process as u64,
             access_mode as u64,
             operation as u64,
-            0,
         )
     }
 }
@@ -126,33 +141,57 @@ pub fn safe_copy(target: &mut [u8], source: u64) -> bool {
     }
 }
 
-extern "system" {
-    fn IoAllocateMdl(
-        VirtualAddress: PVOID,
-        Length: u32,
-        SecondaryBuffer: bool,
-        ChargeQuota: bool,
-        Irp: PIRP,
-    ) -> PMDL;
+pub struct Mdl {
+    inner: PMDL,
+}
 
-    fn IoFreeMdl(MemoryDescriptorList: PMDL);
+impl Mdl {
+    pub fn from_raw(mdl: PMDL) -> Self {
+        Self { inner: mdl }
+    }
 
-    fn MmProbeAndLockPages(MemoryDescriptorList: PMDL, AccessMode: KPROCESSOR_MODE, Operation: u32);
+    pub fn allocate(
+        address: PVOID,
+        length: usize,
+        secondary_buffer: bool,
+        charge_quota: bool,
+        irp: PIRP,
+    ) -> Option<Self> {
+        let mdl = unsafe {
+            IoAllocateMdl(
+                address as *mut _,
+                length as u32,
+                secondary_buffer,
+                charge_quota,
+                irp,
+            )
+        };
+        if mdl.is_null() {
+            return None;
+        }
 
-    fn MmUnlockPages(MemoryDescriptorList: PMDL);
+        Some(Self { inner: mdl })
+    }
 
-    fn MmMapLockedPagesSpecifyCache(
-        MemoryDescriptorList: PMDL,
-        AccessMode: KPROCESSOR_MODE,
-        CacheType: u32,
-        RequestedAddress: PVOID,
-        BugCheckOnFailure: u32,
-        Priority: u32,
-    ) -> PVOID;
+    pub fn mdl(&self) -> PMDL {
+        self.inner
+    }
 
-    fn MmGetSystemAddressForMdlSafe(MemoryDescriptorList: PMDL, Priority: u32) -> PVOID;
+    pub fn into_raw(mut self) -> PMDL {
+        let value = self.inner;
+        self.inner = core::ptr::null_mut();
+        value
+    }
+}
 
-    fn MmUnmapLockedPages(BaseAddress: PVOID, MemoryDescriptorList: PMDL);
+impl Drop for Mdl {
+    fn drop(&mut self) {
+        if self.inner.is_null() {
+            return;
+        }
+
+        unsafe { IoFreeMdl(self.inner) };
+    }
 }
 
 pub const MCT_NON_CACHED: u32 = 0x00;
@@ -182,11 +221,6 @@ impl LockedVirtMem {
         operation: u32,
         cache: u32,
     ) -> Option<Self> {
-        let access_mode2 = match &access_mode {
-            KPROCESSOR_MODE::KernelMode => KPROCESSOR_MODE::KernelMode,
-            KPROCESSOR_MODE::UserMode => KPROCESSOR_MODE::UserMode,
-        };
-
         log::debug!("MDL");
         let mdl = unsafe {
             IoAllocateMdl(

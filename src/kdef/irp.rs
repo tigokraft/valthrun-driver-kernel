@@ -1,8 +1,17 @@
 #![allow(unused)]
 
-use winapi::km::wdm::{
-    IRP,
-    PIRP,
+use winapi::{
+    km::wdm::{
+        IoGetCurrentIrpStackLocation,
+        IRP,
+        PIO_COMPLETION_ROUTINE,
+        PIO_STACK_LOCATION,
+        PIRP,
+        SL_INVOKE_ON_CANCEL,
+        SL_INVOKE_ON_ERROR,
+        SL_INVOKE_ON_SUCCESS,
+    },
+    shared::ntdef::PVOID,
 };
 
 pub const IRP_MJ_CREATE: usize = 0x00;
@@ -52,4 +61,46 @@ pub unsafe fn IoSkipCurrentIrpStackLocation(irp: *mut IRP) {
         .__bindgen_anon_1
         .CurrentStackLocation_mut();
     *stack_location = stack_location.wrapping_offset(1);
+}
+
+pub fn IoGetNextIrpStackLocation(pirp: PIRP) -> PIO_STACK_LOCATION {
+    unsafe {
+        return (&mut *pirp)
+            .Tail
+            .Overlay()
+            .__bindgen_anon_2
+            .__bindgen_anon_1
+            .CurrentStackLocation()
+            .wrapping_sub(1);
+    }
+}
+
+pub unsafe fn IoSetCompletionRoutine(
+    Irp: PIRP,
+    CompletionRoutine: PIO_COMPLETION_ROUTINE,
+    Context: PVOID,
+    InvokeOnSuccess: bool,
+    InvokeOnError: bool,
+    InvokeOnCancel: bool,
+) {
+    let irp_sp = &mut *IoGetNextIrpStackLocation(Irp);
+    irp_sp.CompletionRoutine = CompletionRoutine;
+    irp_sp.Context = Context;
+    irp_sp.Control = 0;
+
+    if InvokeOnSuccess {
+        irp_sp.Control |= SL_INVOKE_ON_SUCCESS;
+    }
+
+    if InvokeOnError {
+        irp_sp.Control |= SL_INVOKE_ON_ERROR;
+    }
+
+    if InvokeOnCancel {
+        irp_sp.Control |= SL_INVOKE_ON_CANCEL;
+    }
+}
+
+extern "system" {
+    pub fn IoCancelIrp(Irp: PIRP);
 }

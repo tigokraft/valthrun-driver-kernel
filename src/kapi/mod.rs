@@ -31,3 +31,6 @@ pub use object::*;
 
 mod allocator;
 pub use allocator::POOL_TAG;
+
+mod functions;
+pub use functions::*;

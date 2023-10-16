@@ -134,6 +134,7 @@ fn find_mouse_service_callback() -> anyhow::Result<MouseClassServiceCallbackFn> 
     )
 }
 
+#[allow(unused)]
 pub fn create_mouse_input() -> anyhow::Result<MouseInput> {
     let name = UNICODE_STRING::from_bytes(obfstr::wide!("\\Driver\\MouClass"));
     let mouse_device = Object::reference_by_name(&name, unsafe { *IoDriverObjectType })

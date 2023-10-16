@@ -120,6 +120,8 @@ pub fn setup_seh() -> anyhow::Result<()> {
     Ok(())
 }
 
+// Attention:
+// If the target function writes to the shaddow stack, this will most likely crash!
 pub unsafe fn seh_invoke(callback: u64, a1: u64, a2: u64, a3: u64, a4: u64) -> bool {
     let seh_target = SEH_TARGET.load(Ordering::Relaxed);
     if seh_target == 0 {
@@ -141,6 +143,7 @@ pub unsafe fn seh_invoke(callback: u64, a1: u64, a2: u64, a3: u64, a4: u64) -> b
         callback_a1: a1,
     };
 
+    // log::debug!("SEH invoke {:X}, {:X}, {:X}, {:X}", &info as *const _ as u64, a2, a3, a4);
     let result = unsafe { _seh_invoke(&info, a2, a3, a4) };
     result != 0xC000000E
 }
