@@ -1,16 +1,41 @@
+mod data;
 mod error;
 mod http;
-mod data;
 
-use alloc::{string::{String, ToString}, vec::Vec};
+use alloc::{
+    string::{
+        String,
+        ToString,
+    },
+    vec::Vec,
+};
+
 use anyhow::Context;
 pub use error::*;
 pub use http::*;
 use obfstr::obfstr;
+use winapi::shared::ntdef::UNICODE_STRING;
 
-use crate::{imports::GLOBAL_IMPORTS, util::KeQueryTickCount, WSK};
-
-use self::data::{MetricsEntry, MetricsReport, DeviceInfo};
+use self::data::{
+    DeviceInfo,
+    MetricsEntry,
+    MetricsReport,
+};
+use crate::{
+    imports::GLOBAL_IMPORTS,
+    kapi::UnicodeStringEx,
+    util::KeQueryTickCount,
+    wsk::{
+        sys::{
+            AF_INET,
+            AF_INET6,
+            SOCKADDR_INET,
+        },
+        SocketAddrInetEx,
+        WskInstance,
+    },
+    WSK,
+};
 
 pub struct MetricsClient {
     session_id: String,
@@ -31,11 +56,9 @@ impl MetricsClient {
         let mut session_id = String::with_capacity(16);
         for _ in 0..16 {
             let value = unsafe { (imports.RtlRandomEx)(&mut seed) } as usize;
-            session_id.push(
-                char::from(
-                    SESSION_ID_CHARS.as_bytes()[value % SESSION_ID_CHARS.len()]
-                )
-            );
+            session_id.push(char::from(
+                SESSION_ID_CHARS.as_bytes()[value % SESSION_ID_CHARS.len()],
+            ));
         }
 
         session_id
@@ -45,9 +68,7 @@ impl MetricsClient {
         Self {
             session_id: Self::generate_session_id(),
             pending_entries: Default::default(),
-            device_info: DeviceInfo {
-
-            }
+            device_info: DeviceInfo {},
         }
     }
 
@@ -69,13 +90,23 @@ impl MetricsClient {
 
     pub fn send_report(&mut self) -> anyhow::Result<()> {
         let wsk = unsafe { &*WSK.get() };
-        let wsk = wsk.as_ref().with_context(|| obfstr!("missing wsk instance").to_string())?;
+        let wsk = wsk
+            .as_ref()
+            .with_context(|| obfstr!("missing wsk instance").to_string())?;
 
         let (report_payload, _entries) = self.create_report_payload()?;
-        match http::send_report(wsk, "/report", &report_payload) {
+        let (metrics_host, server_address) = resolve_metrics_target(wsk)
+            .map_err(|err| anyhow::anyhow!("{}: {:#}", obfstr!("failed to resolve target"), err))?;
+
+        let request = HttpRequest {
+            host: &metrics_host,
+            target: "/report",
+            payload: report_payload.as_bytes(),
+        };
+        match http::execute_http_request(wsk, &server_address, &request) {
             Ok(response) => {
                 log::debug!("Report send with status code {}", response.status_code);
-            },
+            }
             Err(error) => {
                 /* FIXME: Reenqueue reports! */
                 anyhow::bail!("Failed to send report: {:#}", error);
@@ -86,7 +117,8 @@ impl MetricsClient {
     }
 
     fn create_report_payload(&mut self) -> anyhow::Result<(String, Vec<MetricsEntry>)> {
-        let entries = self.pending_entries
+        let entries = self
+            .pending_entries
             .drain(0..self.pending_entries.len().min(100))
             .collect::<Vec<_>>();
 
@@ -96,13 +128,15 @@ impl MetricsClient {
             entries: &entries,
         };
 
+        let estiamted_report_byte_size = 0
+            + report.session_id.len()
+            + report
+                .entries
+                .iter()
+                .map(|entry| entry.payload.len() + entry.report_type.len() + 128)
+                .sum::<usize>()
+            + 4096;
 
-        let estiamted_report_byte_size = 0 +
-            report.session_id.len() + 
-            report.entries.iter().map(|entry| entry.payload.len() + entry.report_type.len() + 128).sum::<usize>() +
-            4096;
-
-            
         let mut buffer = Vec::new();
         buffer.reserve(estiamted_report_byte_size);
 
@@ -111,16 +145,69 @@ impl MetricsClient {
             match serde_json_core::to_slice(&report, &mut buffer) {
                 Ok(length) => {
                     unsafe { buffer.set_len(length) };
-                    let payload = String::from_utf8(buffer).map_err(|_| anyhow::anyhow!("output contains null characters"))?;
+                    let payload = String::from_utf8(buffer)
+                        .map_err(|_| anyhow::anyhow!("output contains null characters"))?;
                     return Ok((payload, entries));
-                },
+                }
                 Err(_) => {
                     /* buffer too small, allow additional bytes */
                     buffer.reserve(8192);
                 }
             }
         }
-        
-        anyhow::bail!("{}", obfstr!("failed to allocate big enough buffer for the final report"))
+
+        anyhow::bail!(
+            "{}",
+            obfstr!("failed to allocate big enough buffer for the final report")
+        )
     }
+}
+
+const METRICS_DEFAULT_PORT: u16 = 80;
+fn resolve_metrics_target(wsk: &WskInstance) -> Result<(String, SOCKADDR_INET), HttpError> {
+    let target_host = if let Some(override_value) = option_env!("METRICS_HOST") {
+        String::from(override_value)
+            .encode_utf16()
+            .collect::<Vec<_>>()
+    } else {
+        obfstr::wide!("metrics.valth.run")
+            .iter()
+            .cloned()
+            .collect::<Vec<_>>()
+    };
+    let utarget_domain = UNICODE_STRING::from_bytes_unchecked(&target_host);
+
+    let target_address = wsk
+        .get_address_info(Some(&utarget_domain), None)
+        .map_err(HttpError::DnsLookupFailure)?
+        .iterate_results()
+        .filter(|address| {
+            address.ai_family == AF_INET as i32 || address.ai_family == AF_INET6 as i32
+        })
+        .next()
+        .ok_or(HttpError::DnsNoResults)?
+        .clone();
+
+    let mut inet_addr = unsafe { *(target_address.ai_addr as *mut SOCKADDR_INET).clone() };
+    if let Some(port) = option_env!("METRICS_PORT") {
+        *inet_addr.port_mut() = match port.parse::<u16>() {
+            Ok(port) => port.swap_bytes(),
+            Err(_) => {
+                log::warn!(
+                    "{}",
+                    obfstr!("Failed to parse custom metrics port. Using default port.")
+                );
+                METRICS_DEFAULT_PORT.swap_bytes()
+            }
+        };
+    } else {
+        *inet_addr.port_mut() = METRICS_DEFAULT_PORT.swap_bytes();
+    }
+
+    log::trace!(
+        "{}: {}",
+        obfstr!("Successfully resolved metrics target to"),
+        inet_addr.to_string()
+    );
+    Ok((String::from_utf16_lossy(&target_host), inet_addr))
 }

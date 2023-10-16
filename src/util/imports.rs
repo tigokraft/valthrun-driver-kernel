@@ -129,6 +129,13 @@ impl<T> DynamicImportTable<T> {
     pub fn resolve(&self) -> anyhow::Result<&T> {
         self.table.get_or_try_init(|| Ok(Box::new((*self.init)()?)))
     }
+
+    pub fn unwrap(&self) -> &T {
+        match self.resolve() {
+            Ok(table) => table,
+            Err(error) => panic!("{}: {:#}", obfstr!("Failed to load import table"), error)
+        }
+    }
 }
 
 #[macro_export]

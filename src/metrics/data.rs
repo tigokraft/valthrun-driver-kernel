@@ -1,4 +1,5 @@
 use alloc::string::String;
+
 use serde::Serialize;
 
 #[derive(Debug, Serialize)]
@@ -29,6 +30,4 @@ pub struct MetricsEntry {
 }
 
 #[derive(Debug, Serialize)]
-pub struct DeviceInfo {
-
-}
+pub struct DeviceInfo {}

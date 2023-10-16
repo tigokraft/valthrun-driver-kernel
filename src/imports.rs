@@ -5,7 +5,9 @@ use crate::{
     util::imports::SystemExport,
     wsk::sys::{
         IN6_ADDR,
-        IN_ADDR, _KTHREAD, _EPROCESS
+        IN_ADDR,
+        _EPROCESS,
+        _KTHREAD,
     },
 };
 
@@ -41,7 +43,7 @@ dynamic_import_table! {
         pub KeQueryTimeIncrement: KeQueryTimeIncrement = SystemExport::new(obfstr::wide!("KeQueryTimeIncrement")),
 
         pub RtlRandomEx: RtlRandomEx = SystemExport::new(obfstr::wide!("RtlRandomEx")),
-        
+
         pub KeGetCurrentThread: KeGetCurrentThread = SystemExport::new(obfstr::wide!("KeGetCurrentThread")),
         pub PsGetCurrentProcess: PsGetCurrentProcess = SystemExport::new(obfstr::wide!("PsGetCurrentProcess")),
     }

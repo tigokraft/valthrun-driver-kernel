@@ -5,3 +5,6 @@ pub use tcp::*;
 
 mod time;
 pub use time::*;
+
+mod rng;
+pub use rng::*;

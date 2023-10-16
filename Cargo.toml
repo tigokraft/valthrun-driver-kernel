@@ -28,6 +28,8 @@ httparse = { version = "1.8.0", default-features = false }
 embedded-io = { version = "0.6.0", features = ["alloc"] }
 serde = { version = "1.0", default-features = false, features = ["derive", "alloc"] }
 serde-json-core = "0.5.1"
+embedded-tls = { version = "0.16.0", default-features = false, features = ["log", "alloc"] }
+rand_core = { version = "0.6.4", features = ["alloc"] }
 
 [dependencies.winapi]
 git = "https://github.com/Trantect/winapi-rs.git"

@@ -6,8 +6,10 @@
 #![feature(new_uninit)]
 #![feature(const_transmute_copy)]
 
-use alloc::{boxed::Box, string::ToString};
-use metrics::MetricsClient;
+use alloc::{
+    boxed::Box,
+    string::ToString,
+};
 use core::cell::SyncUnsafeCell;
 
 use device::ValthrunDevice;
@@ -17,6 +19,7 @@ use kapi::{
     UnicodeStringEx,
 };
 use kb::KeyboardInput;
+use metrics::MetricsClient;
 use mouse::MouseInput;
 use obfstr::obfstr;
 use valthrun_driver_shared::requests::{
@@ -52,6 +55,7 @@ use crate::{
         handler_protection_toggle,
         handler_read,
     },
+    imports::GLOBAL_IMPORTS,
     kapi::device_general_irp_handler,
     kdef::{
         IoCreateDriver,
@@ -65,7 +69,7 @@ use crate::{
         initialize_os_info,
         os_info,
     },
-    wsk::{WskInstance, WskBuffer}, imports::GLOBAL_IMPORTS,
+    wsk::WskInstance,
 };
 
 mod device;
@@ -230,7 +234,11 @@ extern "C" fn internal_driver_entry(
 
     driver.DriverUnload = Some(driver_unload);
     if let Err(error) = GLOBAL_IMPORTS.resolve() {
-        log::error!("{} {:#}", obfstr!("Failed to load the global import table:"), error);
+        log::error!(
+            "{} {:#}",
+            obfstr!("Failed to load the global import table:"),
+            error
+        );
         return CSTATUS_DRIVER_INIT_FAILED;
     }
 
@@ -272,7 +280,7 @@ extern "C" fn internal_driver_entry(
     match WskInstance::create(1 << 8) {
         Ok(wsk) => {
             unsafe { *WSK.get() = Some(wsk) };
-        },
+        }
         Err(err) => {
             log::error!("{}: {:#}", obfstr!("WSK initialize error: "), err);
             return CSTATUS_DRIVER_INIT_FAILED;

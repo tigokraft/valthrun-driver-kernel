@@ -17,6 +17,7 @@ use super::{
     UnicodeStringEx,
 };
 use crate::{
+    imports::GLOBAL_IMPORTS,
     kdef::{
         IoAllocateMdl,
         IoFreeMdl,
@@ -24,7 +25,7 @@ use crate::{
         MmMapLockedPagesSpecifyCache,
         MmUnlockPages,
     },
-    wsk::sys::PMDL, imports::GLOBAL_IMPORTS,
+    wsk::sys::PMDL,
 };
 
 #[derive(Default)]
@@ -73,7 +74,10 @@ pub fn init() -> anyhow::Result<()> {
         MmGetSystemRoutineAddress(&name) as u64
     };
     if function_table.probe_and_lock_process_pages == 0 {
-        anyhow::bail!("{}", obfstr!("failed to resolve MmProbeAndLockProcessPages"))
+        anyhow::bail!(
+            "{}",
+            obfstr!("failed to resolve MmProbeAndLockProcessPages")
+        )
     }
 
     Ok(())

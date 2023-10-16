@@ -3,7 +3,11 @@ use core::cell::SyncUnsafeCell;
 use anyhow::anyhow;
 use winapi::shared::ntdef::NTSTATUS;
 
-use crate::{kapi::NTStatusEx, dynamic_import_table, util::imports::SystemExport};
+use crate::{
+    dynamic_import_table,
+    kapi::NTStatusEx,
+    util::imports::SystemExport,
+};
 
 #[repr(C)]
 #[allow(non_snake_case, non_camel_case_types)]
@@ -51,9 +55,14 @@ dynamic_import_table! {
 }
 
 pub fn initialize_os_info() -> anyhow::Result<()> {
-    let imports = IMPORTS.resolve()
+    let imports = IMPORTS
+        .resolve()
         .map_err(|err| anyhow!("{}: {}", "failed to resolve imports", err))?;
 
     let mut info = unsafe { &mut *OS_VERSION_INFO.get() };
-    unsafe { (imports.RtlGetVersion)(&mut info).ok().map_err(|err| anyhow!("{:X}", err)) }
+    unsafe {
+        (imports.RtlGetVersion)(&mut info)
+            .ok()
+            .map_err(|err| anyhow!("{:X}", err))
+    }
 }
