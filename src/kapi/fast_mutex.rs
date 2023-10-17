@@ -1,7 +1,6 @@
 //! Fast mutex implementation from https://github.com/StephanvanSchaik/windows-kernel-rs (MIT license)
 
 use alloc::boxed::Box;
-use winapi::shared::ntdef::SynchronizationEvent;
 use core::{
     cell::UnsafeCell,
     ops::{
@@ -10,9 +9,14 @@ use core::{
     },
 };
 
-use crate::{kdef::_FAST_MUTEX, dynamic_import_table, util::imports::SystemExport};
+use winapi::shared::ntdef::SynchronizationEvent;
 
 use super::KEVENT_IMPORTS;
+use crate::{
+    dynamic_import_table,
+    kdef::_FAST_MUTEX,
+    util::imports::SystemExport,
+};
 
 type ExAcquireFastMutex = unsafe extern "system" fn(FastMutex: *mut _FAST_MUTEX);
 type ExReleaseFastMutex = unsafe extern "system" fn(FastMutex: *mut _FAST_MUTEX);
@@ -35,7 +39,6 @@ pub unsafe fn ExInitializeFastMutex(FastMutex: &mut _FAST_MUTEX) {
     FastMutex.Contention = 0;
     (kevent_imports.KeInitializeEvent)(&mut FastMutex.Event, SynchronizationEvent, false);
 }
-
 
 /// A mutual exclusion primitive useful for protecting shared data.
 ///

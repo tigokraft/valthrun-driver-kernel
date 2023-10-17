@@ -24,7 +24,8 @@ use crate::{
     kapi::{
         KModule,
         Object,
-        UnicodeStringEx, OBJECT_TYPE_IMPORT,
+        UnicodeStringEx,
+        OBJECT_TYPE_IMPORT,
     },
     kdef::{
         MouseClassServiceCallbackFn,
@@ -136,8 +137,10 @@ fn find_mouse_service_callback() -> anyhow::Result<MouseClassServiceCallbackFn> 
 #[allow(unused)]
 pub fn create_mouse_input() -> anyhow::Result<MouseInput> {
     let name = UNICODE_STRING::from_bytes(obfstr::wide!("\\Driver\\MouClass"));
-    let mouse_device = Object::reference_by_name(&name, unsafe { *OBJECT_TYPE_IMPORT.unwrap().IoDriverObjectType })
-        .map_err(|code| anyhow!("{} 0x{:X}", obfstr!("Object::reference_by_name"), code))?;
+    let mouse_device = Object::reference_by_name(&name, unsafe {
+        *OBJECT_TYPE_IMPORT.unwrap().IoDriverObjectType
+    })
+    .map_err(|code| anyhow!("{} 0x{:X}", obfstr!("Object::reference_by_name"), code))?;
     let mouse_device = mouse_device.cast::<DRIVER_OBJECT>();
 
     /* To get all keyboard devices we could use kb_device.NextDevice. Currently we use the first one available. */

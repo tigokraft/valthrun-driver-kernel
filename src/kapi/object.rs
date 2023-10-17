@@ -18,11 +18,14 @@ use winapi::{
 
 use super::NTStatusEx;
 use crate::{
+    dynamic_import_table,
+    imports::GLOBAL_IMPORTS,
     kapi::UnicodeStringEx,
     kdef::{
         OBJECT_NAME_INFORMATION,
         POBJECT_TYPE,
-    }, imports::GLOBAL_IMPORTS, dynamic_import_table, util::imports::SystemExport,
+    },
+    util::imports::SystemExport,
 };
 
 pub struct Object(PVOID);

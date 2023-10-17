@@ -1,11 +1,16 @@
 use alloc::format;
-use anyhow::{Context, anyhow};
+
+use anyhow::{
+    anyhow,
+    Context,
+};
 use obfstr::obfstr;
 
+use super::{
+    ll,
+    DynamicImport,
+};
 use crate::kapi::KModule;
-
-use super::{DynamicImport, ll};
-
 
 #[derive(Debug)]
 pub struct ModuleExport {
@@ -26,12 +31,14 @@ impl<T> DynamicImport<T> for ModuleExport {
 
         ll::lookup_export(net_module.base_address as u64, self.function)
             .map(|value| unsafe { core::mem::transmute_copy(&value) })
-            .ok_or_else(|| anyhow!(
-                "{} {} in module {} ({:X})",
-                obfstr!("failed to find"),
-                self.function,
-                self.module,
-                net_module.base_address
-            ))
+            .ok_or_else(|| {
+                anyhow!(
+                    "{} {} in module {} ({:X})",
+                    obfstr!("failed to find"),
+                    self.function,
+                    self.module,
+                    net_module.base_address
+                )
+            })
     }
 }

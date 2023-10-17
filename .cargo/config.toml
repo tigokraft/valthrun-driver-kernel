@@ -3,6 +3,8 @@ target = "x86_64-pc-windows-msvc"
 rustflags = [
     # Compile settings
     # "-C", "force-unwind-tables=false",
+    # "-C", "build-std-features=panic_immediate_abort",
+    # "-C", "llvm-args='-fno-unwind-tables'",
 
     # Pre Link Args
     "-Z", "pre-link-arg=/NOLOGO",
@@ -21,5 +23,7 @@ rustflags = [
     "-C", "link-arg=/MERGE:.btext=.text",
     "-C", "link-arg=/MERGE:.edata=.rdata",
     "-C", "link-arg=/MERGE:.rustc=.data",
+    "-C", "link-arg=/DEF:.cargo/link.def",
     "-C", "link-arg=/INTEGRITYCHECK",
+
 ]

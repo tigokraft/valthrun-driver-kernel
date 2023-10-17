@@ -1,39 +1,53 @@
 #![allow(unused)]
 
 use winapi::{
-    km::{wdm::{
+    km::wdm::{
+        DEVICE_OBJECT,
         DEVICE_TYPE,
         DRIVER_OBJECT,
+        IO_PRIORITY::KPRIORITY_BOOST,
         KPROCESSOR_MODE,
         PDEVICE_OBJECT,
         PEPROCESS,
-        PETHREAD, PIRP, IO_PRIORITY::KPRIORITY_BOOST, DEVICE_OBJECT, POOL_TYPE,
-    }},
+        PETHREAD,
+        PIRP,
+        POOL_TYPE,
+    },
     shared::{
         guiddef::LPCGUID,
         ntdef::{
             BOOLEAN,
+            CCHAR,
             HANDLE,
+            KIRQL,
             NTSTATUS,
             PCUNICODE_STRING,
             PHANDLE,
             POBJECT_ATTRIBUTES,
             PVOID,
-            UNICODE_STRING, CCHAR, KIRQL,
+            UNICODE_STRING,
         },
-    }, um::winnt::{ACCESS_MASK, PIMAGE_NT_HEADERS},
+    },
+    um::winnt::{
+        ACCESS_MASK,
+        PIMAGE_NT_HEADERS,
+    },
 };
 
 use crate::{
     dynamic_import_table,
     kdef::{
+        OBJECT_NAME_INFORMATION,
+        POBJECT_TYPE,
         _KAPC_STATE,
-        _PEB, OBJECT_NAME_INFORMATION, POBJECT_TYPE, _OB_CALLBACK_REGISTRATION,
+        _OB_CALLBACK_REGISTRATION,
+        _PEB,
     },
     util::imports::SystemExport,
     wsk::sys::{
         IN6_ADDR,
-        IN_ADDR, PMDL,
+        IN_ADDR,
+        PMDL,
     },
 };
 
@@ -216,7 +230,7 @@ dynamic_import_table! {
 
         pub ZwQuerySystemInformation: ZwQuerySystemInformation = SystemExport::new(obfstr!("ZwQuerySystemInformation")),
         pub ZwClose: ZwClose = SystemExport::new(obfstr!("ZwClose")),
-        
+
         pub ObfDereferenceObject: ObfDereferenceObject = SystemExport::new(obfstr!("ObfDereferenceObject")),
         pub ObfReferenceObject: ObfReferenceObject = SystemExport::new(obfstr!("ObfReferenceObject")),
         pub ObQueryNameString: ObQueryNameString = SystemExport::new(obfstr!("ObQueryNameString")),
@@ -224,14 +238,15 @@ dynamic_import_table! {
         pub ObReferenceObjectByHandle: ObReferenceObjectByHandle = SystemExport::new(obfstr!("ObReferenceObjectByHandle")),
         pub ObRegisterCallbacks: ObRegisterCallbacks = SystemExport::new(obfstr!("ObRegisterCallbacks")),
         pub ObUnRegisterCallbacks: ObUnRegisterCallbacks = SystemExport::new(obfstr!("ObUnRegisterCallbacks")),
-        
+
         pub MmUnlockPages: MmUnlockPages = SystemExport::new(obfstr!("MmUnlockPages")),
         pub MmMapLockedPagesSpecifyCache: MmMapLockedPagesSpecifyCache = SystemExport::new(obfstr!("MmMapLockedPagesSpecifyCache")),
         pub MmIsAddressValid: MmIsAddressValid = SystemExport::new(obfstr!("MmIsAddressValid")),
     }
 }
 
-type IoCreateDriver = unsafe extern "system" fn(name: *const UNICODE_STRING, entry: *const ()) -> NTSTATUS;
+type IoCreateDriver =
+    unsafe extern "system" fn(name: *const UNICODE_STRING, entry: *const ()) -> NTSTATUS;
 type KeGetCurrentIrql = unsafe extern "system" fn() -> KIRQL;
 dynamic_import_table! {
     pub imports LL_GLOBAL_IMPORTS {

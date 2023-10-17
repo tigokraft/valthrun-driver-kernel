@@ -1,4 +1,5 @@
 #![no_std]
+#![feature(core_intrinsics)]
 #![feature(error_in_core)]
 #![feature(sync_unsafe_cell)]
 #![feature(pointer_byte_offsets)]
@@ -9,12 +10,11 @@
 #![allow(dead_code)]
 
 use alloc::boxed::Box;
-use imports::LL_GLOBAL_IMPORTS;
-use panic_hook::DEBUG_IMPORTS;
 use core::cell::SyncUnsafeCell;
 
 use device::ValthrunDevice;
 use handler::HandlerRegistry;
+use imports::LL_GLOBAL_IMPORTS;
 use kapi::{
     NTStatusEx,
     UnicodeStringEx,
@@ -23,6 +23,7 @@ use kb::KeyboardInput;
 use metrics::MetricsClient;
 use mouse::MouseInput;
 use obfstr::obfstr;
+use panic_hook::DEBUG_IMPORTS;
 use valthrun_driver_shared::requests::{
     RequestCSModule,
     RequestHealthCheck,
@@ -42,7 +43,7 @@ use winapi::{
             STATUS_OBJECT_NAME_COLLISION,
             STATUS_SUCCESS,
         },
-    }
+    },
 };
 
 use crate::{
@@ -58,6 +59,7 @@ use crate::{
     kdef::DPFLTR_LEVEL,
     logger::APP_LOGGER,
     offsets::initialize_nt_offsets,
+    util::imports::ll::KERNEL_BASE,
     winver::{
         initialize_os_info,
         os_info,
@@ -165,7 +167,11 @@ pub extern "system" fn driver_entry(
     let ll_imports = match LL_GLOBAL_IMPORTS.resolve() {
         Ok(imports) => imports,
         Err(error) => {
-            log::error!("{}: {:#}", obfstr!("Failed to initialize ll imports"), error);
+            log::error!(
+                "{}: {:#}",
+                obfstr!("Failed to initialize ll imports"),
+                error
+            );
             return CSTATUS_DRIVER_PREINIT_FAILED;
         }
     };
@@ -185,13 +191,17 @@ pub extern "system" fn driver_entry(
                 ll_imports.MmSystemRangeStart as u64,
                 target_driver_entry
             );
-            log::debug!("  IRQL level at {:X}", unsafe { (ll_imports.KeGetCurrentIrql)() });
+            log::debug!("  IRQL level at {:X}", unsafe {
+                (ll_imports.KeGetCurrentIrql)()
+            });
 
             // TODO(low): May improve hiding via:
             // https://research.checkpoint.com/2021/a-deep-dive-into-doublefeature-equation-groups-post-exploitation-dashboard/
             let driver_name =
                 UNICODE_STRING::from_bytes(obfstr::wide!("\\Driver\\valthrun-driver"));
-            let result = unsafe { (ll_imports.IoCreateDriver)(&driver_name, target_driver_entry as *const _) };
+            let result = unsafe {
+                (ll_imports.IoCreateDriver)(&driver_name, target_driver_entry as *const _)
+            };
             if let Err(code) = result.ok() {
                 if code == STATUS_OBJECT_NAME_COLLISION {
                     log::error!("{}", obfstr!("Failed to create valthrun driver as a driver with this name is already loaded."));
@@ -253,10 +263,11 @@ extern "C" fn internal_driver_entry(
             .unwrap_or("None");
 
         log::info!(
-            "Initialize driver at {:X} ({:?}). WinVer {}.",
+            "Initialize driver at {:X} ({:?}). WinVer {}. Kernel base at {:X}",
             driver as *mut _ as u64,
             registry_path,
-            os_info().dwBuildNumber
+            os_info().dwBuildNumber,
+            unsafe { *KERNEL_BASE.get() }
         );
     }
 

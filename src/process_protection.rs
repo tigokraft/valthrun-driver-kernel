@@ -22,8 +22,10 @@ use crate::{
     kapi::{
         FastMutex,
         KModule,
+        NTStatusEx,
         Process,
-        UnicodeStringEx, NTStatusEx, OBJECT_TYPE_IMPORT,
+        UnicodeStringEx,
+        OBJECT_TYPE_IMPORT,
     },
     kdef::{
         OB_FLT_REGISTRATION_VERSION,

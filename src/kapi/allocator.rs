@@ -9,14 +9,17 @@ use crate::util::imports::LLSystemExport;
 
 pub const POOL_TAG: u32 = 0x123333;
 
-type ExAllocatePoolWithTag = unsafe extern "system" fn(PoolType: POOL_TYPE, NumberOfBytes: usize, Tag: u32) -> PVOID;
+type ExAllocatePoolWithTag =
+    unsafe extern "system" fn(PoolType: POOL_TYPE, NumberOfBytes: usize, Tag: u32) -> PVOID;
 type ExFreePoolWithTag = unsafe extern "system" fn(P: PVOID, Tag: u32);
 
 #[allow(non_upper_case_globals)]
-static IMPORT_ExAllocatePoolWithTag: LLSystemExport<ExAllocatePoolWithTag> = LLSystemExport::new("ExAllocatePoolWithTag");
+static IMPORT_ExAllocatePoolWithTag: LLSystemExport<ExAllocatePoolWithTag> =
+    LLSystemExport::new("ExAllocatePoolWithTag");
 
 #[allow(non_upper_case_globals)]
-static IMPORT_ExFreePoolWithTag: LLSystemExport<ExFreePoolWithTag> = LLSystemExport::new("ExFreePoolWithTag");
+static IMPORT_ExFreePoolWithTag: LLSystemExport<ExFreePoolWithTag> =
+    LLSystemExport::new("ExFreePoolWithTag");
 
 struct NonPagedAllocator;
 unsafe impl GlobalAlloc for NonPagedAllocator {
@@ -28,7 +31,7 @@ unsafe impl GlobalAlloc for NonPagedAllocator {
              * Failed to find target import.
              * Alloc failed.
              */
-            None => return core::ptr::null_mut()
+            None => return core::ptr::null_mut(),
         };
 
         (ExAllocatePoolWithTag)(POOL_TYPE::NonPagedPool, layout.size(), POOL_TAG) as *mut u8

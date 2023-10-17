@@ -1,4 +1,7 @@
-use rand_core::{RngCore, CryptoRng};
+use rand_core::{
+    CryptoRng,
+    RngCore,
+};
 
 use crate::imports::GLOBAL_IMPORTS;
 

@@ -10,13 +10,15 @@ use super::{
     WskError,
     WskResult,
 };
-use crate::imports::GLOBAL_IMPORTS;
-use crate::kapi::mem::{
+use crate::{
+    imports::GLOBAL_IMPORTS,
+    kapi::mem::{
         self,
         Mdl,
         IO_READ_ACCESS,
         IO_WRITE_ACCESS,
-    };
+    },
+};
 
 pub struct WskBuffer<'a> {
     pub buffer: _WSK_BUF,

@@ -3,7 +3,10 @@ use alloc::{
     format,
 };
 
-use crate::{kdef::DPFLTR_LEVEL, panic_hook::DEBUG_IMPORTS};
+use crate::{
+    kdef::DPFLTR_LEVEL,
+    panic_hook::DEBUG_IMPORTS,
+};
 
 pub struct KernelLogger;
 

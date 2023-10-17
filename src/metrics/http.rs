@@ -26,7 +26,8 @@ use crate::{
     io::BufReader,
     metrics::HttpError,
     util::{
-        Win32Rng, TcpConnection,
+        TcpConnection,
+        Win32Rng,
     },
     wsk::{
         sys::SOCKADDR_INET,

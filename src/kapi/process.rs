@@ -4,10 +4,16 @@ use core::ffi::CStr;
 use valthrun_driver_shared::ModuleInfo;
 use winapi::{
     km::wdm::PEPROCESS,
-    shared::ntdef::{NT_SUCCESS, PVOID},
+    shared::ntdef::{
+        NT_SUCCESS,
+        PVOID,
+    },
 };
 
-use super::{UnicodeStringEx, Object};
+use super::{
+    Object,
+    UnicodeStringEx,
+};
 use crate::{
     imports::GLOBAL_IMPORTS,
     kdef::{
@@ -32,7 +38,7 @@ impl Process {
                 Object::from_owned(eprocess as PVOID)
             } else {
                 Object::reference(eprocess as PVOID)
-            }
+            },
         }
     }
 

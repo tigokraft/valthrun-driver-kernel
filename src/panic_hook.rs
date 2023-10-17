@@ -1,14 +1,20 @@
 use alloc::format;
-use core::cell::SyncUnsafeCell;
-use core::panic::PanicInfo;
+use core::{
+    cell::SyncUnsafeCell,
+    panic::PanicInfo,
+};
 
 use obfstr::obfstr;
 use winapi::shared::ntdef::NTSTATUS;
 
-use crate::{dynamic_import_table, util::imports::SystemExport};
-use crate::kdef::DPFLTR_LEVEL;
+use crate::{
+    dynamic_import_table,
+    kdef::DPFLTR_LEVEL,
+    util::imports::SystemExport,
+};
 
-type DbgPrintEx = unsafe extern "C" fn(ComponentId: u32, Level: u32, Format: *const u8, ...) -> NTSTATUS;
+type DbgPrintEx =
+    unsafe extern "C" fn(ComponentId: u32, Level: u32, Format: *const u8, ...) -> NTSTATUS;
 type DbgBreakPoint = unsafe extern "system" fn();
 type KeBugCheck = unsafe extern "system" fn(code: u32) -> !;
 
@@ -55,14 +61,10 @@ fn panic(info: &PanicInfo) -> ! {
             (imports.KeBugCheck)(BUGCHECK_CODE_RUST_PANIC);
         }
     } else {
-        unsafe {
-            /* 
-             * As long we're in virtual address space, this most likely will trigger some kind of system exception handling.
-             * If not, we're fucked and just loop forever.
-             */
-            core::ptr::write_volatile(0x00 as *mut u64, 0xDEADBEED);
-        }
-        loop { }
+        /*
+         * We can't to anything else...
+         */
+        core::intrinsics::abort();
     }
 }
 
@@ -70,13 +72,16 @@ fn panic(info: &PanicInfo) -> ! {
 #[export_name = "_fltused"]
 static _FLTUSED: i32 = 0;
 
+#[no_mangle]
+pub extern "C" fn __chkstk() {}
+
 /// When using the alloc crate it seems like it does some unwinding. Adding this
 /// export satisfies the compiler but may introduce undefined behaviour when a
 /// panic occurs.
 ///
 /// Source: https://github.com/memN0ps/rootkit-rs/blob/da9a9d04b18fea58870aa1dbb71eaf977b923664/driver/src/lib.rs#L32
 #[no_mangle]
-extern "C" fn __CxxFrameHandler3() {
+pub unsafe extern "C" fn __CxxFrameHandler3() {
     if unsafe { *PANIC_INITIATED.get() } {
         return;
     }

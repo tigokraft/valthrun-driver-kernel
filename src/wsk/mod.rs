@@ -42,7 +42,11 @@ use self::sys::{
 };
 use crate::{
     imports::GLOBAL_IMPORTS,
-    kapi::{NTStatusEx, KEvent}, kdef::IoSetCompletionRoutine,
+    kapi::{
+        KEvent,
+        NTStatusEx,
+    },
+    kdef::IoSetCompletionRoutine,
 };
 
 pub mod sys;
