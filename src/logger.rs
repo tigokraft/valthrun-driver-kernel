@@ -3,9 +3,7 @@ use alloc::{
     format,
 };
 
-use winapi::km::wdm::DbgPrintEx;
-
-use crate::kdef::DPFLTR_LEVEL;
+use crate::{kdef::DPFLTR_LEVEL, panic_hook::DEBUG_IMPORTS};
 
 pub struct KernelLogger;
 
@@ -18,6 +16,15 @@ impl log::Log for KernelLogger {
         if !self.enabled(record.metadata()) {
             return;
         }
+
+        let imports = match DEBUG_IMPORTS.get() {
+            Some(imports) => imports,
+            /*
+             * Debug imports have not been initialized.
+             * To avoid infinite looping, we must avoid initializing them.
+             */
+            None => return,
+        };
 
         let (level_prefix, log_level) = match record.level() {
             log::Level::Trace => ("T", DPFLTR_LEVEL::TRACE),
@@ -43,7 +50,7 @@ impl log::Log for KernelLogger {
         };
 
         unsafe {
-            DbgPrintEx(0, log_level as u32, "[VT]%s\n\0".as_ptr(), payload.as_ptr());
+            (imports.DbgPrintEx)(0, log_level as u32, "[VT]%s\n\0".as_ptr(), payload.as_ptr());
         }
     }
 

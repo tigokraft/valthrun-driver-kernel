@@ -1,11 +1,12 @@
 use winapi::{
     km::wdm::{
-        IoCompleteRequest,
         IO_PRIORITY::IO_NO_INCREMENT,
         IRP,
     },
     shared::ntdef::NTSTATUS,
 };
+
+use crate::imports::GLOBAL_IMPORTS;
 
 pub trait IrpEx {
     fn complete_request(&mut self, status: NTSTATUS) -> NTSTATUS;
@@ -13,8 +14,10 @@ pub trait IrpEx {
 
 impl IrpEx for IRP {
     fn complete_request(&mut self, status: NTSTATUS) -> NTSTATUS {
+        let imports = GLOBAL_IMPORTS.unwrap();
+
         self.IoStatus.Information = status as usize;
-        unsafe { IoCompleteRequest(self, IO_NO_INCREMENT) };
+        unsafe { (imports.IoCompleteRequest)(self, IO_NO_INCREMENT) };
         return status;
     }
 }

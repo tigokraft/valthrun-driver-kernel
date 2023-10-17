@@ -24,10 +24,9 @@ use crate::{
     kapi::{
         KModule,
         Object,
-        UnicodeStringEx,
+        UnicodeStringEx, OBJECT_TYPE_IMPORT,
     },
     kdef::{
-        IoDriverObjectType,
         MouseClassServiceCallbackFn,
         MOUSE_BUTTON_4_DOWN,
         MOUSE_BUTTON_4_UP,
@@ -137,7 +136,7 @@ fn find_mouse_service_callback() -> anyhow::Result<MouseClassServiceCallbackFn> 
 #[allow(unused)]
 pub fn create_mouse_input() -> anyhow::Result<MouseInput> {
     let name = UNICODE_STRING::from_bytes(obfstr::wide!("\\Driver\\MouClass"));
-    let mouse_device = Object::reference_by_name(&name, unsafe { *IoDriverObjectType })
+    let mouse_device = Object::reference_by_name(&name, unsafe { *OBJECT_TYPE_IMPORT.unwrap().IoDriverObjectType })
         .map_err(|code| anyhow!("{} 0x{:X}", obfstr!("Object::reference_by_name"), code))?;
     let mouse_device = mouse_device.cast::<DRIVER_OBJECT>();
 

@@ -18,12 +18,6 @@ use super::{
 };
 use crate::{
     imports::GLOBAL_IMPORTS,
-    kdef::{
-        IoAllocateMdl,
-        IoFreeMdl,
-        MmMapLockedPagesSpecifyCache,
-        MmUnlockPages,
-    },
     wsk::sys::PMDL,
 };
 
@@ -161,8 +155,9 @@ impl Mdl {
         charge_quota: bool,
         irp: PIRP,
     ) -> Option<Self> {
+        let imports = GLOBAL_IMPORTS.unwrap();
         let mdl = unsafe {
-            IoAllocateMdl(
+            (imports.IoAllocateMdl)(
                 address as *mut _,
                 length as u32,
                 secondary_buffer,
@@ -194,7 +189,8 @@ impl Drop for Mdl {
             return;
         }
 
-        unsafe { IoFreeMdl(self.inner) };
+        let imports = GLOBAL_IMPORTS.unwrap();
+        unsafe { (imports.IoFreeMdl)(self.inner) };
     }
 }
 
@@ -226,8 +222,9 @@ impl LockedVirtMem {
         cache: u32,
     ) -> Option<Self> {
         log::debug!("MDL");
+        let imports = GLOBAL_IMPORTS.unwrap();
         let mdl = unsafe {
-            IoAllocateMdl(
+            (imports.IoAllocateMdl)(
                 address as PVOID,
                 length as u32,
                 false,
@@ -242,7 +239,7 @@ impl LockedVirtMem {
         log::debug!("P&L");
         if !self::probe_and_lock_pages(mdl, access_mode, operation) {
             unsafe {
-                IoFreeMdl(mdl);
+                (imports.IoFreeMdl)(mdl);
             }
 
             return None;
@@ -250,7 +247,7 @@ impl LockedVirtMem {
 
         log::debug!("MmMapLockedPagesSpecifyCache");
         let address = unsafe {
-            MmMapLockedPagesSpecifyCache(
+            (imports.MmMapLockedPagesSpecifyCache)(
                 mdl,
                 KPROCESSOR_MODE::KernelMode,
                 cache,
@@ -265,8 +262,8 @@ impl LockedVirtMem {
 
         if address.is_null() {
             unsafe {
-                MmUnlockPages(mdl);
-                IoFreeMdl(mdl);
+                (imports.MmUnlockPages)(mdl);
+                (imports.IoFreeMdl)(mdl);
             }
 
             return None;
@@ -286,10 +283,11 @@ impl LockedVirtMem {
 
 impl Drop for LockedVirtMem {
     fn drop(&mut self) {
+        let imports = GLOBAL_IMPORTS.unwrap();
         unsafe {
             //MmUnmapLockedPages(self.address, self.mdl);
-            MmUnlockPages(self.mdl);
-            IoFreeMdl(self.mdl);
+            (imports.MmUnlockPages)(self.mdl);
+            (imports.IoFreeMdl)(self.mdl);
         }
     }
 }

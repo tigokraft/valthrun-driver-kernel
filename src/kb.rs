@@ -24,10 +24,9 @@ use crate::{
     kapi::{
         KModule,
         Object,
-        UnicodeStringEx,
+        UnicodeStringEx, OBJECT_TYPE_IMPORT,
     },
     kdef::{
-        IoDriverObjectType,
         KeyboardClassServiceCallbackFn,
         KEYBOARD_FLAG_BREAK,
         KEYBOARD_FLAG_MAKE,
@@ -96,7 +95,7 @@ fn find_keyboard_service_callback() -> anyhow::Result<KeyboardClassServiceCallba
 #[allow(unused)]
 pub fn create_keyboard_input() -> anyhow::Result<KeyboardInput> {
     let name = UNICODE_STRING::from_bytes(obfstr::wide!("\\Driver\\KbdClass"));
-    let kb_driver = Object::reference_by_name(&name, unsafe { *IoDriverObjectType })
+    let kb_driver = Object::reference_by_name(&name, unsafe { *OBJECT_TYPE_IMPORT.unwrap().IoDriverObjectType })
         .map_err(|code| anyhow!("{} 0x{:X}", obfstr!("Object::reference_by_name"), code))?;
     let kb_driver = kb_driver.cast::<DRIVER_OBJECT>();
 

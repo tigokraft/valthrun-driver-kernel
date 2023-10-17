@@ -22,14 +22,10 @@ use crate::{
     kapi::{
         FastMutex,
         KModule,
-        NTStatusEx,
         Process,
-        UnicodeStringEx,
+        UnicodeStringEx, NTStatusEx, OBJECT_TYPE_IMPORT,
     },
     kdef::{
-        ObRegisterCallbacks,
-        ObUnRegisterCallbacks,
-        PsProcessType,
         OB_FLT_REGISTRATION_VERSION,
         OB_OPERATION_HANDLE_CREATE,
         OB_OPERATION_HANDLE_DUPLICATE,
@@ -172,13 +168,16 @@ pub fn finalize() {
         }
     };
 
+    let imports = GLOBAL_IMPORTS.unwrap();
     unsafe {
-        ObUnRegisterCallbacks(context.ob_registration);
+        (imports.ObUnRegisterCallbacks)(context.ob_registration);
     }
 }
 
 #[allow(unused)]
 pub fn initialize() -> anyhow::Result<()> {
+    let imports = GLOBAL_IMPORTS.resolve()?;
+
     let mut context = process_protection_state().lock();
     if context.is_some() {
         anyhow::bail!("{}", obfstr!("process protection already initialized"));
@@ -231,7 +230,7 @@ pub fn initialize() -> anyhow::Result<()> {
         );
 
         let mut operation_reg = core::mem::zeroed::<_OB_OPERATION_REGISTRATION>();
-        operation_reg.ObjectType = PsProcessType;
+        operation_reg.ObjectType = OBJECT_TYPE_IMPORT.unwrap().PsProcessType;
         operation_reg.Operations = OB_OPERATION_HANDLE_CREATE | OB_OPERATION_HANDLE_DUPLICATE;
         operation_reg.PostOperation = None;
 
@@ -248,7 +247,7 @@ pub fn initialize() -> anyhow::Result<()> {
         // An anticheat which registers a lowest and highest altitude callback
         // can just reset the desiered permissions (especially with file name filtering).
         // Therefore this "protection" is easily removeable. Anyhow this requires a kernel module!
-        ObRegisterCallbacks(&callback_reg, &mut reg_handle)
+        (imports.ObRegisterCallbacks)(&callback_reg, &mut reg_handle)
             .ok()
             .map_err(|err| {
                 anyhow!(

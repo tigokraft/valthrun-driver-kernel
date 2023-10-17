@@ -5,9 +5,12 @@
 #![feature(result_flattening)]
 #![feature(new_uninit)]
 #![feature(const_transmute_copy)]
+#![feature(linkage)]
 #![allow(dead_code)]
 
-use alloc::{boxed::Box, string::ToString, format};
+use alloc::boxed::Box;
+use imports::LL_GLOBAL_IMPORTS;
+use panic_hook::DEBUG_IMPORTS;
 use core::cell::SyncUnsafeCell;
 
 use device::ValthrunDevice;
@@ -29,10 +32,7 @@ use valthrun_driver_shared::requests::{
     RequestRead,
 };
 use winapi::{
-    km::wdm::{
-        DbgPrintEx,
-        DRIVER_OBJECT,
-    },
+    km::wdm::DRIVER_OBJECT,
     shared::{
         ntdef::{
             NTSTATUS,
@@ -42,7 +42,7 @@ use winapi::{
             STATUS_OBJECT_NAME_COLLISION,
             STATUS_SUCCESS,
         },
-    },
+    }
 };
 
 use crate::{
@@ -55,11 +55,7 @@ use crate::{
     },
     imports::GLOBAL_IMPORTS,
     kapi::device_general_irp_handler,
-    kdef::{
-        IoCreateDriver,
-        KeGetCurrentIrql,
-        DPFLTR_LEVEL,
-    },
+    kdef::DPFLTR_LEVEL,
     logger::APP_LOGGER,
     offsets::initialize_nt_offsets,
     winver::{
@@ -68,6 +64,8 @@ use crate::{
     },
     wsk::WskInstance,
 };
+
+extern crate compiler_builtins;
 
 mod device;
 mod handler;
@@ -137,19 +135,24 @@ extern "system" fn driver_unload(_driver: &mut DRIVER_OBJECT) {
     log::info!("Driver Unloaded");
 }
 
-extern "system" {
-    pub static MmSystemRangeStart: *const ();
-}
-
 #[no_mangle]
 pub extern "system" fn driver_entry(
     driver: *mut DRIVER_OBJECT,
     registry_path: *const UNICODE_STRING,
 ) -> NTSTATUS {
+    util::imports::ll::init_import_ll();
+    if DEBUG_IMPORTS.resolve().is_err() {
+        /*
+         * If this import fails, we can't do anything else except return an appropiate status code.
+         */
+        return CSTATUS_DRIVER_BOOTSTRAP_FAILED;
+    }
+
     log::set_max_level(log::LevelFilter::Trace);
     if log::set_logger(&APP_LOGGER).is_err() {
+        let imports = DEBUG_IMPORTS.unwrap();
         unsafe {
-            DbgPrintEx(
+            (imports.DbgPrintEx)(
                 0,
                 DPFLTR_LEVEL::ERROR as u32,
                 obfstr!("[VT] Failed to initialize app logger!\n\0").as_ptr(),
@@ -159,8 +162,16 @@ pub extern "system" fn driver_entry(
         return CSTATUS_LOG_INIT_FAILED;
     }
 
+    let ll_imports = match LL_GLOBAL_IMPORTS.resolve() {
+        Ok(imports) => imports,
+        Err(error) => {
+            log::error!("{}: {:#}", obfstr!("Failed to initialize ll imports"), error);
+            return CSTATUS_DRIVER_PREINIT_FAILED;
+        }
+    };
+
     if let Err(error) = initialize_os_info() {
-        log::error!("{} {}", obfstr!("Failed to load OS version info:"), error);
+        log::error!("{}: {}", obfstr!("Failed to load OS version info"), error);
         return CSTATUS_DRIVER_PREINIT_FAILED;
     }
 
@@ -171,16 +182,16 @@ pub extern "system" fn driver_entry(
             log::info!("{}", obfstr!("Manually mapped driver."));
             log::debug!(
                 "  System range start is {:X}, driver entry mapped at {:X}.",
-                unsafe { MmSystemRangeStart } as u64,
+                ll_imports.MmSystemRangeStart as u64,
                 target_driver_entry
             );
-            log::debug!("  IRQL level at {:X}", unsafe { KeGetCurrentIrql() });
+            log::debug!("  IRQL level at {:X}", unsafe { (ll_imports.KeGetCurrentIrql)() });
 
             // TODO(low): May improve hiding via:
             // https://research.checkpoint.com/2021/a-deep-dive-into-doublefeature-equation-groups-post-exploitation-dashboard/
             let driver_name =
                 UNICODE_STRING::from_bytes(obfstr::wide!("\\Driver\\valthrun-driver"));
-            let result = unsafe { IoCreateDriver(&driver_name, target_driver_entry as *const _) };
+            let result = unsafe { (ll_imports.IoCreateDriver)(&driver_name, target_driver_entry as *const _) };
             if let Err(code) = result.ok() {
                 if code == STATUS_OBJECT_NAME_COLLISION {
                     log::error!("{}", obfstr!("Failed to create valthrun driver as a driver with this name is already loaded."));
@@ -347,14 +358,14 @@ extern "C" fn internal_driver_entry(
     //     }
     // }
 
-    // if let Err(error) = process_protection::initialize() {
-    //     log::error!(
-    //         "{} {:#}",
-    //         obfstr!("Failed to initialized process protection:"),
-    //         error
-    //     );
-    //     return CSTATUS_DRIVER_INIT_FAILED;
-    // };
+    if let Err(error) = process_protection::initialize() {
+        log::error!(
+            "{} {:#}",
+            obfstr!("Failed to initialized process protection:"),
+            error
+        );
+        return CSTATUS_DRIVER_INIT_FAILED;
+    };
 
     let device = match ValthrunDevice::create(driver) {
         Ok(device) => device,

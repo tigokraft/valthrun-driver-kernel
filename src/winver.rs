@@ -50,7 +50,7 @@ pub fn os_info() -> &'static _OSVERSIONINFOEXW {
 type RtlGetVersion = unsafe extern "C" fn(info: &mut _OSVERSIONINFOEXW) -> NTSTATUS;
 dynamic_import_table! {
     imports IMPORTS {
-        pub RtlGetVersion: RtlGetVersion = SystemExport::new(obfstr::wide!("RtlGetVersion")),
+        pub RtlGetVersion: RtlGetVersion = SystemExport::new(obfstr!("RtlGetVersion")),
     }
 }
 

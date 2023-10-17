@@ -1,6 +1,7 @@
 //! Fast mutex implementation from https://github.com/StephanvanSchaik/windows-kernel-rs (MIT license)
 
 use alloc::boxed::Box;
+use winapi::shared::ntdef::SynchronizationEvent;
 use core::{
     cell::UnsafeCell,
     ops::{
@@ -9,13 +10,32 @@ use core::{
     },
 };
 
-use crate::kdef::{
-    ExAcquireFastMutex,
-    ExInitializeFastMutex,
-    ExReleaseFastMutex,
-    ExTryToAcquireFastMutex,
-    _FAST_MUTEX,
-};
+use crate::{kdef::_FAST_MUTEX, dynamic_import_table, util::imports::SystemExport};
+
+use super::KEVENT_IMPORTS;
+
+type ExAcquireFastMutex = unsafe extern "system" fn(FastMutex: *mut _FAST_MUTEX);
+type ExReleaseFastMutex = unsafe extern "system" fn(FastMutex: *mut _FAST_MUTEX);
+type ExTryToAcquireFastMutex = unsafe extern "system" fn(FastMutex: *mut _FAST_MUTEX) -> i32;
+
+dynamic_import_table! {
+    imports FAST_MUTEX_IMPORTS {
+        pub ExAcquireFastMutex: ExAcquireFastMutex = SystemExport::new(obfstr!("ExAcquireFastMutex")),
+        pub ExReleaseFastMutex: ExReleaseFastMutex = SystemExport::new(obfstr!("ExReleaseFastMutex")),
+        pub ExTryToAcquireFastMutex: ExTryToAcquireFastMutex = SystemExport::new(obfstr!("ExTryToAcquireFastMutex")),
+    }
+}
+
+#[allow(non_snake_case)]
+pub unsafe fn ExInitializeFastMutex(FastMutex: &mut _FAST_MUTEX) {
+    let kevent_imports = KEVENT_IMPORTS.unwrap();
+
+    FastMutex.Count = 1;
+    FastMutex.Owner = core::ptr::null_mut();
+    FastMutex.Contention = 0;
+    (kevent_imports.KeInitializeEvent)(&mut FastMutex.Event, SynchronizationEvent, false);
+}
+
 
 /// A mutual exclusion primitive useful for protecting shared data.
 ///
@@ -64,7 +84,8 @@ impl<T> FastMutex<T> {
     /// This function does not block.
     #[inline]
     pub fn try_lock(&self) -> Option<FastMutexGuard<T>> {
-        let status = unsafe { ExTryToAcquireFastMutex(self.lock.get()) } != 0;
+        let imports = FAST_MUTEX_IMPORTS.unwrap();
+        let status = unsafe { (imports.ExTryToAcquireFastMutex)(self.lock.get()) } != 0;
 
         match status {
             true => Some(FastMutexGuard {
@@ -86,7 +107,8 @@ impl<T> FastMutex<T> {
     /// and tries to lock the mutex again, this function will return `None` instead.
     #[inline]
     pub fn lock(&self) -> FastMutexGuard<T> {
-        unsafe { ExAcquireFastMutex(&mut *self.lock.get()) };
+        let imports = FAST_MUTEX_IMPORTS.unwrap();
+        unsafe { (imports.ExAcquireFastMutex)(&mut *self.lock.get()) };
 
         FastMutexGuard {
             lock: unsafe { &mut *self.lock.get() },
@@ -124,7 +146,8 @@ pub struct FastMutexGuard<'a, T: 'a + ?Sized> {
 
 impl<'a, T: ?Sized> Drop for FastMutexGuard<'a, T> {
     fn drop(&mut self) {
-        unsafe { ExReleaseFastMutex(&mut *self.lock) };
+        let imports = FAST_MUTEX_IMPORTS.unwrap();
+        unsafe { (imports.ExReleaseFastMutex)(&mut *self.lock) };
     }
 }
 

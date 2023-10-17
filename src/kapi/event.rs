@@ -43,13 +43,13 @@ type KeClearEvent = unsafe extern "C" fn(Event: PKEVENT);
 
 dynamic_import_table! {
     pub imports KEVENT_IMPORTS {
-        pub KeInitializeEvent: KeInitializeEvent = SystemExport::new(obfstr::wide!("KeInitializeEvent")),
-        pub KeSetEvent: KeSetEvent = SystemExport::new(obfstr::wide!("KeSetEvent")),
-        pub KeReadStateEvent: KeReadStateEvent = SystemExport::new(obfstr::wide!("KeReadStateEvent")),
-        pub KeResetEvent: KeResetEvent = SystemExport::new(obfstr::wide!("KeResetEvent")),
-        pub KeClearEvent: KeClearEvent = SystemExport::new(obfstr::wide!("KeClearEvent")),
+        pub KeInitializeEvent: KeInitializeEvent = SystemExport::new(obfstr!("KeInitializeEvent")),
+        pub KeSetEvent: KeSetEvent = SystemExport::new(obfstr!("KeSetEvent")),
+        pub KeReadStateEvent: KeReadStateEvent = SystemExport::new(obfstr!("KeReadStateEvent")),
+        pub KeResetEvent: KeResetEvent = SystemExport::new(obfstr!("KeResetEvent")),
+        pub KeClearEvent: KeClearEvent = SystemExport::new(obfstr!("KeClearEvent")),
 
-        pub KeWaitForSingleObject: KeWaitForSingleObject = SystemExport::new(obfstr::wide!("KeWaitForSingleObject")),
+        pub KeWaitForSingleObject: KeWaitForSingleObject = SystemExport::new(obfstr!("KeWaitForSingleObject")),
     }
 }
 

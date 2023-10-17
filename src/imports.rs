@@ -1,14 +1,14 @@
 #![allow(unused)]
 
 use winapi::{
-    km::wdm::{
+    km::{wdm::{
         DEVICE_TYPE,
         DRIVER_OBJECT,
         KPROCESSOR_MODE,
         PDEVICE_OBJECT,
         PEPROCESS,
-        PETHREAD,
-    },
+        PETHREAD, PIRP, IO_PRIORITY::KPRIORITY_BOOST, DEVICE_OBJECT, POOL_TYPE,
+    }},
     shared::{
         guiddef::LPCGUID,
         ntdef::{
@@ -19,21 +19,21 @@ use winapi::{
             PHANDLE,
             POBJECT_ATTRIBUTES,
             PVOID,
-            UNICODE_STRING,
+            UNICODE_STRING, CCHAR, KIRQL,
         },
-    }, um::winnt::ACCESS_MASK,
+    }, um::winnt::{ACCESS_MASK, PIMAGE_NT_HEADERS},
 };
 
 use crate::{
     dynamic_import_table,
     kdef::{
         _KAPC_STATE,
-        _PEB, OBJECT_NAME_INFORMATION, POBJECT_TYPE,
+        _PEB, OBJECT_NAME_INFORMATION, POBJECT_TYPE, _OB_CALLBACK_REGISTRATION,
     },
     util::imports::SystemExport,
     wsk::sys::{
         IN6_ADDR,
-        IN_ADDR,
+        IN_ADDR, PMDL,
     },
 };
 
@@ -61,6 +61,7 @@ type RtlIpv6AddressToStringExA = unsafe extern "C" fn(
     Buffer: *mut u8,
     BufferLength: &mut u32,
 ) -> NTSTATUS;
+type RtlImageNtHeader = unsafe extern "C" fn(ModuleAddress: PVOID) -> PIMAGE_NT_HEADERS;
 
 type RtlRandomEx = unsafe extern "C" fn(Seed: *mut u32) -> u32;
 
@@ -102,6 +103,12 @@ type KeDelayExecutionThread = unsafe extern "C" fn(
 type MmGetSystemRoutineAddress =
     unsafe extern "C" fn(system_routine_name: *const UNICODE_STRING) -> PVOID;
 
+type ZwQuerySystemInformation = unsafe extern "system" fn(
+    SystemInformationClass: u32,
+    SystemInformation: *mut (),
+    SystemInformationLength: u32,
+    ReturnLength: *mut u32,
+) -> NTSTATUS;
 type ZwClose = unsafe extern "C" fn(Handle: HANDLE) -> NTSTATUS;
 
 type IoCreateDeviceSecure = unsafe extern "system" fn(
@@ -115,6 +122,19 @@ type IoCreateDeviceSecure = unsafe extern "system" fn(
     DeviceClassGuid: LPCGUID,
     DeviceObject: *mut PDEVICE_OBJECT,
 ) -> NTSTATUS;
+type IoAllocateIrp = unsafe extern "system" fn(StackSize: CCHAR, ChargeQuota: bool) -> PIRP;
+type IoCancelIrp = unsafe extern "system" fn(Irp: PIRP);
+type IoCompleteRequest = unsafe extern "system" fn(Irp: PIRP, PriorityBoost: KPRIORITY_BOOST);
+type IoDeleteDevice = unsafe extern "system" fn(DeviceObject: *mut DEVICE_OBJECT) -> NTSTATUS;
+type IoAllocateMdl = unsafe extern "system" fn(
+    VirtualAddress: PVOID,
+    Length: u32,
+    SecondaryBuffer: bool,
+    ChargeQuota: bool,
+    Irp: PIRP,
+) -> PMDL;
+type IoFreeMdl = unsafe extern "system" fn(MemoryDescriptorList: PMDL);
+type IoFreeIrp = unsafe extern "system" fn(Irp: PIRP);
 
 type ObfDereferenceObject = unsafe extern "system" fn(object: PVOID);
 type ObfReferenceObject = unsafe extern "system" fn(object: PVOID);
@@ -142,40 +162,81 @@ type ObReferenceObjectByHandle = unsafe extern "system" fn(
     Object: PVOID,
     HandleInformation: PVOID,
 ) -> NTSTATUS;
+type ObRegisterCallbacks = unsafe extern "system" fn(
+    CallbackRegistration: *const _OB_CALLBACK_REGISTRATION,
+    RegistrationHandle: *mut PVOID,
+) -> NTSTATUS;
+type ObUnRegisterCallbacks = unsafe extern "system" fn(RegistrationHandle: PVOID);
+
+type MmUnlockPages = unsafe extern "system" fn(MemoryDescriptorList: PMDL);
+type MmMapLockedPagesSpecifyCache = unsafe extern "system" fn(
+    MemoryDescriptorList: PMDL,
+    AccessMode: KPROCESSOR_MODE,
+    CacheType: u32,
+    RequestedAddress: PVOID,
+    BugCheckOnFailure: u32,
+    Priority: u32,
+) -> PVOID;
+type MmIsAddressValid = unsafe extern "system" fn(Address: PVOID) -> bool;
 
 dynamic_import_table! {
     pub imports GLOBAL_IMPORTS {
-        pub RtlIpv4AddressToStringExA: RtlIpv4AddressToStringExA = SystemExport::new(obfstr::wide!("RtlIpv4AddressToStringExA")),
-        pub RtlIpv6AddressToStringExA: RtlIpv6AddressToStringExA = SystemExport::new(obfstr::wide!("RtlIpv6AddressToStringExA")),
+        pub RtlIpv4AddressToStringExA: RtlIpv4AddressToStringExA = SystemExport::new(obfstr!("RtlIpv4AddressToStringExA")),
+        pub RtlIpv6AddressToStringExA: RtlIpv6AddressToStringExA = SystemExport::new(obfstr!("RtlIpv6AddressToStringExA")),
+        pub RtlImageNtHeader: RtlImageNtHeader = SystemExport::new(obfstr!("RtlImageNtHeader")),
 
-        pub KeQuerySystemTimePrecise: KeQuerySystemTimePrecise = SystemExport::new(obfstr::wide!("KeQuerySystemTimePrecise")),
-        pub KeQueryTimeIncrement: KeQueryTimeIncrement = SystemExport::new(obfstr::wide!("KeQueryTimeIncrement")),
-        pub KeStackAttachProcess: KeStackAttachProcess = SystemExport::new(obfstr::wide!("KeStackAttachProcess")),
-        pub KeUnstackDetachProcess: KeUnstackDetachProcess = SystemExport::new(obfstr::wide!("KeUnstackDetachProcess")),
-        pub KeWaitForSingleObject: KeWaitForSingleObject = SystemExport::new(obfstr::wide!("KeWaitForSingleObject")),
-        pub KeDelayExecutionThread: KeDelayExecutionThread = SystemExport::new(obfstr::wide!("KeDelayExecutionThread")),
+        pub KeQuerySystemTimePrecise: KeQuerySystemTimePrecise = SystemExport::new(obfstr!("KeQuerySystemTimePrecise")),
+        pub KeQueryTimeIncrement: KeQueryTimeIncrement = SystemExport::new(obfstr!("KeQueryTimeIncrement")),
+        pub KeStackAttachProcess: KeStackAttachProcess = SystemExport::new(obfstr!("KeStackAttachProcess")),
+        pub KeUnstackDetachProcess: KeUnstackDetachProcess = SystemExport::new(obfstr!("KeUnstackDetachProcess")),
+        pub KeWaitForSingleObject: KeWaitForSingleObject = SystemExport::new(obfstr!("KeWaitForSingleObject")),
+        pub KeDelayExecutionThread: KeDelayExecutionThread = SystemExport::new(obfstr!("KeDelayExecutionThread")),
 
-        pub RtlRandomEx: RtlRandomEx = SystemExport::new(obfstr::wide!("RtlRandomEx")),
+        pub RtlRandomEx: RtlRandomEx = SystemExport::new(obfstr!("RtlRandomEx")),
 
-        pub PsGetCurrentThread: PsGetCurrentThread = SystemExport::new(obfstr::wide!("PsGetCurrentThread")),
-        pub PsGetCurrentProcess: PsGetCurrentProcess = SystemExport::new(obfstr::wide!("PsGetCurrentProcess")),
-        pub PsGetProcessId: PsGetProcessId = SystemExport::new(obfstr::wide!("PsGetProcessId")),
-        pub PsGetProcessPeb: PsGetProcessPeb = SystemExport::new(obfstr::wide!("PsGetProcessPeb")),
-        pub PsGetProcessImageFileName: PsGetProcessImageFileName = SystemExport::new(obfstr::wide!("PsGetProcessImageFileName")),
-        pub PsLookupProcessByProcessId: PsLookupProcessByProcessId = SystemExport::new(obfstr::wide!("PsLookupProcessByProcessId")),
-        pub PsCreateSystemThread: PsCreateSystemThread = SystemExport::new(obfstr::wide!("PsCreateSystemThread")),
+        pub PsGetCurrentThread: PsGetCurrentThread = SystemExport::new(obfstr!("PsGetCurrentThread")),
+        pub PsGetCurrentProcess: PsGetCurrentProcess = SystemExport::new(obfstr!("PsGetCurrentProcess")),
+        pub PsGetProcessId: PsGetProcessId = SystemExport::new(obfstr!("PsGetProcessId")),
+        pub PsGetProcessPeb: PsGetProcessPeb = SystemExport::new(obfstr!("PsGetProcessPeb")),
+        pub PsGetProcessImageFileName: PsGetProcessImageFileName = SystemExport::new(obfstr!("PsGetProcessImageFileName")),
+        pub PsLookupProcessByProcessId: PsLookupProcessByProcessId = SystemExport::new(obfstr!("PsLookupProcessByProcessId")),
+        pub PsCreateSystemThread: PsCreateSystemThread = SystemExport::new(obfstr!("PsCreateSystemThread")),
 
-        pub MmGetSystemRoutineAddress: MmGetSystemRoutineAddress = SystemExport::new(obfstr::wide!("MmGetSystemRoutineAddress")),
-        //pub MmSystemRangeStart: MmSystemRangeStart = SystemExport::new(obfstr::wide!("MmSystemRangeStart")),
+        pub MmGetSystemRoutineAddress: MmGetSystemRoutineAddress = SystemExport::new(obfstr!("MmGetSystemRoutineAddress")),
+        //pub MmSystemRangeStart: MmSystemRangeStart = SystemExport::new(obfstr!("MmSystemRangeStart")),
 
-        pub IoCreateDeviceSecure: IoCreateDeviceSecure = SystemExport::new(obfstr::wide!("IoCreateDeviceSecure")),
+        pub IoCreateDeviceSecure: IoCreateDeviceSecure = SystemExport::new(obfstr!("IoCreateDeviceSecure")),
+        pub IoDeleteDevice: IoDeleteDevice = SystemExport::new(obfstr!("IoDeleteDevice")),
+        pub IoAllocateIrp: IoAllocateIrp = SystemExport::new(obfstr!("IoAllocateIrp")),
+        pub IoCompleteRequest: IoCompleteRequest = SystemExport::new(obfstr!("IoCompleteRequest")),
+        pub IoCancelIrp: IoCancelIrp = SystemExport::new(obfstr!("IoCancelIrp")),
+        pub IoFreeIrp: IoFreeIrp = SystemExport::new(obfstr!("IoFreeIrp")),
+        pub IoAllocateMdl: IoAllocateMdl = SystemExport::new(obfstr!("IoAllocateMdl")),
+        pub IoFreeMdl: IoFreeMdl = SystemExport::new(obfstr!("IoFreeMdl")),
 
-        pub ZwClose: ZwClose = SystemExport::new(obfstr::wide!("ZwClose")),
+        pub ZwQuerySystemInformation: ZwQuerySystemInformation = SystemExport::new(obfstr!("ZwQuerySystemInformation")),
+        pub ZwClose: ZwClose = SystemExport::new(obfstr!("ZwClose")),
         
-        pub ObfDereferenceObject: ObfDereferenceObject = SystemExport::new(obfstr::wide!("ObfDereferenceObject")),
-        pub ObfReferenceObject: ObfReferenceObject = SystemExport::new(obfstr::wide!("ObfReferenceObject")),
-        pub ObQueryNameString: ObQueryNameString = SystemExport::new(obfstr::wide!("ObQueryNameString")),
-        pub ObReferenceObjectByName: ObReferenceObjectByName = SystemExport::new(obfstr::wide!("ObReferenceObjectByName")),
-        pub ObReferenceObjectByHandle: ObReferenceObjectByHandle = SystemExport::new(obfstr::wide!("ObReferenceObjectByHandle")),
+        pub ObfDereferenceObject: ObfDereferenceObject = SystemExport::new(obfstr!("ObfDereferenceObject")),
+        pub ObfReferenceObject: ObfReferenceObject = SystemExport::new(obfstr!("ObfReferenceObject")),
+        pub ObQueryNameString: ObQueryNameString = SystemExport::new(obfstr!("ObQueryNameString")),
+        pub ObReferenceObjectByName: ObReferenceObjectByName = SystemExport::new(obfstr!("ObReferenceObjectByName")),
+        pub ObReferenceObjectByHandle: ObReferenceObjectByHandle = SystemExport::new(obfstr!("ObReferenceObjectByHandle")),
+        pub ObRegisterCallbacks: ObRegisterCallbacks = SystemExport::new(obfstr!("ObRegisterCallbacks")),
+        pub ObUnRegisterCallbacks: ObUnRegisterCallbacks = SystemExport::new(obfstr!("ObUnRegisterCallbacks")),
+        
+        pub MmUnlockPages: MmUnlockPages = SystemExport::new(obfstr!("MmUnlockPages")),
+        pub MmMapLockedPagesSpecifyCache: MmMapLockedPagesSpecifyCache = SystemExport::new(obfstr!("MmMapLockedPagesSpecifyCache")),
+        pub MmIsAddressValid: MmIsAddressValid = SystemExport::new(obfstr!("MmIsAddressValid")),
+    }
+}
+
+type IoCreateDriver = unsafe extern "system" fn(name: *const UNICODE_STRING, entry: *const ()) -> NTSTATUS;
+type KeGetCurrentIrql = unsafe extern "system" fn() -> KIRQL;
+dynamic_import_table! {
+    pub imports LL_GLOBAL_IMPORTS {
+        pub IoCreateDriver: IoCreateDriver = SystemExport::new(obfstr!("IoCreateDriver")),
+        pub KeGetCurrentIrql: KeGetCurrentIrql = SystemExport::new(obfstr!("KeGetCurrentIrql")),
+        pub MmSystemRangeStart: *const u64 = SystemExport::new(obfstr!("MmSystemRangeStart")),
     }
 }

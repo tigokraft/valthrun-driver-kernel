@@ -31,6 +31,10 @@ serde-json-core = "0.5.1"
 embedded-tls = { version = "0.16.0", default-features = false, features = ["log", "alloc"] }
 rand_core = { version = "0.6.4", features = ["alloc"] }
 
+[dependencies.compiler_builtins]
+git = "https://github.com/rust-lang/compiler-builtins"
+features = [ "mem" ]
+
 [dependencies.winapi]
 git = "https://github.com/Trantect/winapi-rs.git"
 branch = "feature/km"
@@ -46,7 +50,7 @@ features = [
 # on the stack even with Box::new() is expensive.
 opt-level = 1
 panic = "abort"
-lto = true
+# lto = true
 
 [profile.release]
 panic = "abort"

@@ -3,7 +3,6 @@ use core::pin::Pin;
 
 use winapi::{
     km::wdm::{
-        IoDeleteDevice,
         IoGetCurrentIrpStackLocation,
         DEVICE_FLAGS,
         DEVICE_OBJECT,
@@ -99,7 +98,8 @@ impl<T> DeviceHandle<T> {
 
 impl<T> Drop for DeviceHandle<T> {
     fn drop(&mut self) {
-        let result = unsafe { IoDeleteDevice(&mut *self.device) };
+        let imports = GLOBAL_IMPORTS.unwrap();
+        let result = unsafe { (imports.IoDeleteDevice)(&mut *self.device) };
 
         if !result.is_success() {
             log::warn!("Failed to destroy device: {}", result)

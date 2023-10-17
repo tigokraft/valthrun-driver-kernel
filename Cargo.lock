@@ -181,6 +181,11 @@ dependencies = [
 ]
 
 [[package]]
+name = "compiler_builtins"
+version = "0.1.101"
+source = "git+https://github.com/rust-lang/compiler-builtins#d1d785a538d51d0082c3e6209a28c9fb1a90ec3c"
+
+[[package]]
 name = "const-oid"
 version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -260,6 +265,7 @@ dependencies = [
  "anyhow",
  "bindgen",
  "cc",
+ "compiler_builtins",
  "embedded-io",
  "embedded-tls",
  "httparse",

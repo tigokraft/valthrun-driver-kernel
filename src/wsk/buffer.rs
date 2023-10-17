@@ -10,15 +10,13 @@ use super::{
     WskError,
     WskResult,
 };
-use crate::{
-    kapi::mem::{
+use crate::imports::GLOBAL_IMPORTS;
+use crate::kapi::mem::{
         self,
         Mdl,
         IO_READ_ACCESS,
         IO_WRITE_ACCESS,
-    },
-    kdef::MmUnlockPages,
-};
+    };
 
 pub struct WskBuffer<'a> {
     pub buffer: _WSK_BUF,
@@ -72,7 +70,8 @@ impl<'a> WskBuffer<'a> {
 
 impl<'a> Drop for WskBuffer<'a> {
     fn drop(&mut self) {
-        unsafe { MmUnlockPages(self.buffer.Mdl) };
+        let imports = GLOBAL_IMPORTS.unwrap();
+        unsafe { (imports.MmUnlockPages)(self.buffer.Mdl) };
         Mdl::from_raw(self.buffer.Mdl);
     }
 }

@@ -11,10 +11,9 @@ use winapi::{
 };
 
 use crate::{
-    imports::GLOBAL_IMPORTS,
     kapi::UnicodeStringEx,
     kdef::ProcessProtectionInformation,
-    process_protection,
+    process_protection, imports::GLOBAL_IMPORTS,
 };
 
 /// Gets ta pointer to a function from ntoskrnl exports

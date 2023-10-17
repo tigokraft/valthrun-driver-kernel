@@ -16,19 +16,17 @@ use valthrun_driver_shared::SearchPattern;
 use winapi::{
     shared::ntdef::{
         HANDLE,
-        NTSTATUS,
         PVOID,
     },
     um::winnt::{
         IMAGE_FILE_HEADER,
         IMAGE_SCN_CNT_CODE,
         IMAGE_SECTION_HEADER,
-        PIMAGE_NT_HEADERS,
     },
 };
 
 use super::NTStatusEx;
-use crate::kdef::MmIsAddressValid;
+use crate::imports::GLOBAL_IMPORTS;
 
 #[repr(C)]
 #[allow(non_snake_case, non_camel_case_types)]
@@ -63,15 +61,6 @@ impl _SYSTEM_MODULE_INFORMATION {
 
 #[allow(non_upper_case_globals)]
 const SystemModuleInformation: u32 = 0x0B;
-extern "system" {
-    fn RtlImageNtHeader(ModuleAddress: PVOID) -> PIMAGE_NT_HEADERS;
-    fn ZwQuerySystemInformation(
-        SystemInformationClass: u32,
-        SystemInformation: *mut (),
-        SystemInformationLength: u32,
-        ReturnLength: *mut u32,
-    ) -> NTSTATUS;
-}
 
 pub struct KModuleSection {
     pub name: String,
@@ -95,7 +84,8 @@ impl KModuleSection {
     }
 
     pub fn is_data_valid(&self) -> bool {
-        unsafe { MmIsAddressValid(self.raw_data_address() as *const () as PVOID) }
+        let imports = GLOBAL_IMPORTS.unwrap();
+        unsafe { (imports.MmIsAddressValid)(self.raw_data_address() as *const () as PVOID) }
     }
 
     pub fn raw_data(&self) -> Option<&[u8]> {
@@ -153,11 +143,13 @@ impl KModule {
 
 impl KModule {
     pub fn is_base_data_valid(&self) -> bool {
-        unsafe { MmIsAddressValid(self.base_address as *const () as PVOID) }
+        let imports = GLOBAL_IMPORTS.unwrap();
+        unsafe { (imports.MmIsAddressValid)(self.base_address as *const () as PVOID) }
     }
 
     fn section_headers(&self) -> anyhow::Result<&'static [IMAGE_SECTION_HEADER]> {
-        let header = unsafe { RtlImageNtHeader(self.base_address as PVOID).as_mut() }
+        let imports = GLOBAL_IMPORTS.resolve()?;
+        let header = unsafe { (imports.RtlImageNtHeader)(self.base_address as PVOID).as_mut() }
             .with_context(|| obfstr!("RtlImageNtHeader failed").to_string())?;
 
         let section_headers = (&header.FileHeader as *const _ as *const ())
@@ -194,9 +186,10 @@ impl KModule {
     }
 
     pub fn query_modules() -> anyhow::Result<Vec<KModule>> {
+        let imports = GLOBAL_IMPORTS.resolve()?;
         unsafe {
             let mut bytes = 0;
-            ZwQuerySystemInformation(
+            (imports.ZwQuerySystemInformation)(
                 SystemModuleInformation,
                 core::ptr::null_mut(),
                 0,
@@ -206,7 +199,7 @@ impl KModule {
             let mut buffer = Vec::<u8>::with_capacity(bytes as usize);
             buffer.set_len(bytes as usize);
 
-            ZwQuerySystemInformation(
+            (imports.ZwQuerySystemInformation)(
                 SystemModuleInformation,
                 buffer.as_mut_ptr() as *mut (),
                 bytes,

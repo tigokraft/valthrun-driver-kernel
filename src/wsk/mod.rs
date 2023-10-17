@@ -3,17 +3,9 @@ use alloc::boxed::Box;
 use obfstr::obfstr;
 use winapi::{
     km::wdm::{
-        IoAllocateIrp,
-        IoFreeIrp,
-        KeInitializeEvent,
-        KeSetEvent,
-        _KWAIT_REASON_Executive,
         DEVICE_OBJECT,
         IO_COMPLETION_ROUTINE_RESULT,
-        IO_PRIORITY::IO_NO_INCREMENT,
         IRP,
-        KEVENT,
-        KPROCESSOR_MODE,
         PIRP,
     },
     shared::{
@@ -50,11 +42,7 @@ use self::sys::{
 };
 use crate::{
     imports::GLOBAL_IMPORTS,
-    kapi::NTStatusEx,
-    kdef::{
-        IoCancelIrp,
-        IoSetCompletionRoutine,
-    },
+    kapi::{NTStatusEx, KEvent}, kdef::IoSetCompletionRoutine,
 };
 
 pub mod sys;
@@ -281,8 +269,10 @@ impl WskInstance {
 
         if status == STATUS_PENDING {
             if !context.await_event(None) {
+                let imports = GLOBAL_IMPORTS.unwrap();
+
                 /* timeout hit */
-                unsafe { IoCancelIrp(context.irp) };
+                unsafe { (imports.IoCancelIrp)(context.irp) };
                 context.await_event(None);
                 return Err(WskError::Timeout);
             }
@@ -311,7 +301,7 @@ impl Drop for WskInstance {
 
 struct SyncWskContext {
     irp: PIRP,
-    event: core::pin::Pin<Box<KEVENT>>,
+    event: Box<KEvent>,
 }
 
 extern "system" fn wsk_irp_sync_completion_routine(
@@ -319,19 +309,19 @@ extern "system" fn wsk_irp_sync_completion_routine(
     _irp: &mut IRP,
     context: PVOID,
 ) -> IO_COMPLETION_ROUTINE_RESULT {
-    let kevent = unsafe { &mut *(context as *mut KEVENT) };
+    let kevent = unsafe { &mut *(context as *mut KEvent) };
+    kevent.signal();
 
-    unsafe { KeSetEvent(kevent, IO_NO_INCREMENT.into(), false) };
     IO_COMPLETION_ROUTINE_RESULT::StopCompletion
 }
 
 impl SyncWskContext {
     /// Use the event to wait for the context
     pub fn allocate() -> WskResult<Self> {
-        let mut event = Box::pin(KEVENT::default());
-        unsafe { KeInitializeEvent(&mut *event, NotificationEvent, false) };
+        let imports = GLOBAL_IMPORTS.unwrap();
+        let mut event = Box::new(KEvent::new(NotificationEvent));
 
-        let irp = unsafe { IoAllocateIrp(1, false) };
+        let irp = unsafe { (imports.IoAllocateIrp)(1, false) };
         if irp.is_null() {
             return Err(WskError::OutOfMemory("allocate irp"));
         }
@@ -351,21 +341,7 @@ impl SyncWskContext {
     }
 
     pub fn await_event(&self, timeout: Option<u32>) -> bool {
-        let imports = GLOBAL_IMPORTS.unwrap();
-        unsafe {
-            (imports.KeWaitForSingleObject)(
-                &*self.event as *const _ as PVOID,
-                _KWAIT_REASON_Executive as u32,
-                KPROCESSOR_MODE::KernelMode,
-                false,
-                if let Some(timeout) = &timeout {
-                    timeout as *const _
-                } else {
-                    core::ptr::null()
-                },
-            )
-            .is_ok()
-        }
+        self.event.wait_for(timeout)
     }
 
     pub fn io_status(&self) -> NTSTATUS {
@@ -379,8 +355,9 @@ impl SyncWskContext {
 
 impl Drop for SyncWskContext {
     fn drop(&mut self) {
+        let imports = GLOBAL_IMPORTS.unwrap();
         unsafe {
-            IoFreeIrp(self.irp);
+            (imports.IoFreeIrp)(self.irp);
         }
     }
 }

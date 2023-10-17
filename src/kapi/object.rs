@@ -22,7 +22,7 @@ use crate::{
     kdef::{
         OBJECT_NAME_INFORMATION,
         POBJECT_TYPE,
-    }, imports::GLOBAL_IMPORTS,
+    }, imports::GLOBAL_IMPORTS, dynamic_import_table, util::imports::SystemExport,
 };
 
 pub struct Object(PVOID);
@@ -117,5 +117,24 @@ impl Drop for Object {
                 (imports.ObfDereferenceObject)(self.0);
             }
         }
+    }
+}
+
+dynamic_import_table! {
+    pub imports OBJECT_TYPE_IMPORT {
+        pub CmKeyObjectType: *const POBJECT_TYPE = SystemExport::new(obfstr!("CmKeyObjectType")),
+        pub IoFileObjectType: *const POBJECT_TYPE = SystemExport::new(obfstr!("IoFileObjectType")),
+        pub IoDriverObjectType: *const POBJECT_TYPE = SystemExport::new(obfstr!("IoDriverObjectType")),
+        pub IoDeviceObjectType: *const POBJECT_TYPE = SystemExport::new(obfstr!("IoDeviceObjectType")),
+        pub ExEventObjectType: *const POBJECT_TYPE = SystemExport::new(obfstr!("ExEventObjectType")),
+        pub ExSemaphoreObjectType: *const POBJECT_TYPE = SystemExport::new(obfstr!("ExSemaphoreObjectType")),
+        pub TmTransactionManagerObjectType: *const POBJECT_TYPE = SystemExport::new(obfstr!("TmTransactionManagerObjectType")),
+        pub TmResourceManagerObjectType: *const POBJECT_TYPE = SystemExport::new(obfstr!("TmResourceManagerObjectType")),
+        pub TmEnlistmentObjectType: *const POBJECT_TYPE = SystemExport::new(obfstr!("TmEnlistmentObjectType")),
+        pub TmTransactionObjectType: *const POBJECT_TYPE = SystemExport::new(obfstr!("TmTransactionObjectType")),
+        pub PsProcessType: *const POBJECT_TYPE = SystemExport::new(obfstr!("PsProcessType")),
+        pub PsThreadType: *const POBJECT_TYPE = SystemExport::new(obfstr!("PsThreadType")),
+        pub PsJobType: *const POBJECT_TYPE = SystemExport::new(obfstr!("PsJobType")),
+        pub SeTokenObjectType: *const POBJECT_TYPE = SystemExport::new(obfstr!("SeTokenObjectType")),
     }
 }
