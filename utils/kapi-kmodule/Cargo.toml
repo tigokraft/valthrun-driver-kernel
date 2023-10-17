@@ -1,0 +1,21 @@
+[package]
+name = "kapi-kmodule"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+log = "0.4.19"
+kdef = { version = "0.1.0", path = "../kdef" }
+utils-imports = { version = "0.1.0", path = "../imports" }
+anyhow = { version = "1.0", default-features = false }
+obfstr = "0.4.3"
+valthrun-driver-shared = { version = "0.1.0", path = "../../shared" }
+
+[dependencies.winapi]
+git = "https://github.com/Trantect/winapi-rs.git"
+branch = "feature/km"
+features = [
+    "wdm",
+    "ntstatus",
+    "impl-default"
+]

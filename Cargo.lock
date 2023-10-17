@@ -269,15 +269,19 @@ dependencies = [
  "embedded-io",
  "embedded-tls",
  "httparse",
+ "kapi",
+ "kapi-kmodule",
+ "kdef",
  "log",
  "modular-bitfield",
  "obfstr",
  "once_cell",
- "paste",
  "rand_core",
+ "seh",
  "serde",
  "serde-json-core",
  "thiserror-core",
+ "utils-imports",
  "valthrun-driver-shared",
  "winapi 0.3.7",
  "winreg",
@@ -495,6 +499,39 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a0c10553d664a4d0bcff9f4215d0aac67a639cc68ef660840afe309b807bc9f5"
 dependencies = [
  "generic-array 0.14.7",
+]
+
+[[package]]
+name = "kapi"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "kdef",
+ "log",
+ "obfstr",
+ "utils-imports",
+ "valthrun-driver-shared",
+ "winapi 0.3.7",
+]
+
+[[package]]
+name = "kapi-kmodule"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "kdef",
+ "log",
+ "obfstr",
+ "utils-imports",
+ "valthrun-driver-shared",
+ "winapi 0.3.7",
+]
+
+[[package]]
+name = "kdef"
+version = "0.1.0"
+dependencies = [
+ "winapi 0.3.7",
 ]
 
 [[package]]
@@ -768,6 +805,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "seh"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "kapi-kmodule",
+ "kdef",
+ "log",
+ "obfstr",
+ "utils-imports",
+ "winapi 0.3.7",
+]
+
+[[package]]
 name = "semver"
 version = "1.0.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -910,6 +960,17 @@ checksum = "fc1de2c688dc15305988b563c3854064043356019f97a4b46276fe734c4f07ea"
 dependencies = [
  "crypto-common",
  "subtle",
+]
+
+[[package]]
+name = "utils-imports"
+version = "0.1.0"
+dependencies = [
+ "obfstr",
+ "once_cell",
+ "paste",
+ "thiserror-core",
+ "winapi 0.3.7",
 ]
 
 [[package]]
