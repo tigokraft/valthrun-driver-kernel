@@ -7,7 +7,7 @@ use anyhow::{
     anyhow,
     Context,
 };
-use kapi::{UnicodeStringEx, Object, OBJECT_TYPE_IMPORT};
+use kapi::{UnicodeStringEx, Object, OBJECT_TYPE_IMPORT, KeRaiseIrql, DISPATCH_LEVEL, KeLowerIrql};
 use kapi_kmodule::KModule;
 use kdef::{KeyboardClassServiceCallbackFn, KEYBOARD_INPUT_DATA, KEYBOARD_FLAG_MAKE, KEYBOARD_FLAG_BREAK};
 use obfstr::obfstr;
@@ -53,12 +53,18 @@ impl KeyboardInput {
 
         let mut consumed = 0;
         let input_ptr = input_data.as_ptr_range();
+
+        let irql = KeRaiseIrql(DISPATCH_LEVEL);
         (self.service_callback)(
             self.kb_device.cast(),
             input_ptr.start,
             input_ptr.end,
             &mut consumed,
         );
+        KeLowerIrql(irql);
+        if consumed > 0 {
+            log::debug!("Consumed: {}/{}", consumed, state.len());
+        }
     }
 }
 
@@ -94,16 +100,19 @@ pub fn create_keyboard_input() -> anyhow::Result<KeyboardInput> {
     let kb_driver = kb_driver.cast::<DRIVER_OBJECT>();
 
     /* To get all keyboard devices we could use kb_device.NextDevice. Currently we use the first one available. */
-    let kb_device = unsafe { kb_driver.DeviceObject.as_mut() };
-    let kb_device = match kb_device {
-        Some(device) => Object::reference(device as *mut _ as PVOID),
-        None => anyhow::bail!("{}", obfstr!("no keyboard device detected")),
-    };
+    let mut kb_device = unsafe { kb_driver.DeviceObject.as_mut() }
+        .with_context(|| obfstr!("no keyboard device detected").to_string())?;
+
+    log::debug!("Initial KB device {:X}", kb_device as *mut _ as u64);
+    // while let Some(device) = unsafe { kb_device.NextDevice.as_mut() } {
+    //     log::debug!(" {:X} -> {:X}", kb_device as *mut _ as u64, device as *mut _ as u64);
+    //     kb_device = device;
+    // }
 
     let service_callback = find_keyboard_service_callback()?;
 
     Ok(KeyboardInput {
-        kb_device,
+        kb_device: Object::reference(kb_device as *mut _ as PVOID),
         service_callback,
     })
 }

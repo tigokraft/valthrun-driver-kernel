@@ -29,6 +29,9 @@ pub use fast_mutex::*;
 mod irp;
 pub use irp::*;
 
+mod irql;
+pub use irql::*;
+
 mod object;
 pub use object::*;
 

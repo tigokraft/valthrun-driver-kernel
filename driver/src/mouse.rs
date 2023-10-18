@@ -40,7 +40,7 @@ use kdef::{
 use kapi::{
     Object,
     UnicodeStringEx,
-    OBJECT_TYPE_IMPORT,
+    OBJECT_TYPE_IMPORT, KeLowerIrql, KeRaiseIrql, DISPATCH_LEVEL,
 };
 use crate::offsets::NtOffsets;
 
@@ -105,12 +105,15 @@ impl MouseInput {
 
         let mut consumed = 0;
         let input_ptr = input_data.as_ptr_range();
+        
+        let irql = KeRaiseIrql(DISPATCH_LEVEL);
         (self.service_callback)(
             self.mouse_device.cast(),
             input_ptr.start,
             input_ptr.end,
             &mut consumed,
         );
+        KeLowerIrql(irql);
     }
 }
 
