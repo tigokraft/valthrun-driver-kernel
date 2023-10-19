@@ -77,7 +77,7 @@ pub type KeWaitForSingleObject = unsafe extern "C" fn(
     WaitReason: u32,
     WaitMode: KPROCESSOR_MODE,
     Alertable: bool,
-    Timeout: *const u32,
+    Timeout: *const i64,
 ) -> NTSTATUS;
 type KeDelayExecutionThread = unsafe extern "C" fn(
     WaitMode: KPROCESSOR_MODE,

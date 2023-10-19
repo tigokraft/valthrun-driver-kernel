@@ -2,7 +2,7 @@ use alloc::{
     boxed::Box,
     sync::Arc,
 };
-use core::cell::UnsafeCell;
+use core::{cell::UnsafeCell, time::Duration};
 
 use obfstr::obfstr;
 use winapi::{
@@ -10,7 +10,7 @@ use winapi::{
         _KWAIT_REASON_Executive,
         KPROCESSOR_MODE,
     },
-    shared::ntdef::PVOID,
+    shared::{ntdef::PVOID, ntstatus::STATUS_SUCCESS},
 };
 
 use super::{
@@ -36,19 +36,49 @@ pub struct JoinHandle<T> {
 unsafe impl<T> Send for JoinHandle<T> {}
 unsafe impl<T> Sync for JoinHandle<T> {}
 
+pub enum TryJoinResult<T> {
+    Success(T),
+    Timeout(JoinHandle<T>)
+}
+
 impl<T> JoinHandle<T> {
+    pub fn try_join(self, timeout: Duration) -> TryJoinResult<T> {
+        let imports = GLOBAL_IMPORTS.unwrap();
+        let timeout = (timeout.as_nanos() / 100) as i64 * -1;
+        
+        let success = unsafe {
+            (imports.KeWaitForSingleObject)(
+                self.thread_object.cast(),
+                _KWAIT_REASON_Executive as u32,
+                KPROCESSOR_MODE::KernelMode,
+                false,
+                &timeout,
+            ) == STATUS_SUCCESS
+        };
+
+        if success {
+            /* thread has exited, therefore it's save to assume, that only we access it */
+            let result = unsafe { &mut *self.result.get() };
+            TryJoinResult::Success(result.take().unwrap())
+        } else {
+            TryJoinResult::Timeout(self)
+        }
+    }
+
     pub fn join(self) -> T {
         let imports = GLOBAL_IMPORTS.unwrap();
-        unsafe {
+        let success = unsafe {
             (imports.KeWaitForSingleObject)(
                 self.thread_object.cast(),
                 _KWAIT_REASON_Executive as u32,
                 KPROCESSOR_MODE::KernelMode,
                 false,
                 core::ptr::null(),
-            )
-            .ok()
-            .expect(obfstr!("to successfully wait for thread handle"))
+            ) == STATUS_SUCCESS
+        };
+
+        if !success {
+            panic!("{}", obfstr!("to successfully wait for thread handle"));
         }
 
         /* thread has exited, therefore it's save to assume, that only we access it */

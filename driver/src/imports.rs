@@ -91,13 +91,6 @@ type KeQueryTimeIncrement = unsafe extern "C" fn() -> u32;
 type KeStackAttachProcess =
     unsafe extern "C" fn(process: PEPROCESS, apc_state: *mut _KAPC_STATE) -> ();
 type KeUnstackDetachProcess = unsafe extern "C" fn(apc_state: *mut _KAPC_STATE) -> ();
-pub type KeWaitForSingleObject = unsafe extern "C" fn(
-    Object: PVOID,
-    WaitReason: u32,
-    WaitMode: KPROCESSOR_MODE,
-    Alertable: bool,
-    Timeout: *const u32,
-) -> NTSTATUS;
 type KeDelayExecutionThread = unsafe extern "C" fn(
     WaitMode: KPROCESSOR_MODE,
     Alertable: bool,
@@ -193,7 +186,6 @@ dynamic_import_table! {
         pub KeQueryTimeIncrement: KeQueryTimeIncrement = SystemExport::new(obfstr!("KeQueryTimeIncrement")),
         pub KeStackAttachProcess: KeStackAttachProcess = SystemExport::new(obfstr!("KeStackAttachProcess")),
         pub KeUnstackDetachProcess: KeUnstackDetachProcess = SystemExport::new(obfstr!("KeUnstackDetachProcess")),
-        pub KeWaitForSingleObject: KeWaitForSingleObject = SystemExport::new(obfstr!("KeWaitForSingleObject")),
         pub KeDelayExecutionThread: KeDelayExecutionThread = SystemExport::new(obfstr!("KeDelayExecutionThread")),
 
         pub RtlRandomEx: RtlRandomEx = SystemExport::new(obfstr!("RtlRandomEx")),

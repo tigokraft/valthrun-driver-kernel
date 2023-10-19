@@ -63,7 +63,9 @@ impl Read for TcpConnection {
 impl Write for TcpConnection {
     fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
         let mut wsk_buffer = WskBuffer::create_ro(buf)?;
+        
         self.socket.send(&mut wsk_buffer, 0)
+            .inspect_err(|err| log::trace!("write error: {:#}", err))
     }
 
     fn flush(&mut self) -> Result<(), Self::Error> {

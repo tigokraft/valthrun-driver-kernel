@@ -7,9 +7,10 @@
 #![feature(new_uninit)]
 #![feature(const_transmute_copy)]
 #![feature(linkage)]
+#![feature(result_option_inspect)]
 #![allow(dead_code)]
 
-use alloc::boxed::Box;
+use alloc::{boxed::Box, format};
 use imports::LL_GLOBAL_IMPORTS;
 use kapi::{UnicodeStringEx, device_general_irp_handler, NTStatusEx};
 use kdef::DPFLTR_LEVEL;
@@ -96,8 +97,11 @@ pub static MOUSE_INPUT: SyncUnsafeCell<Option<MouseInput>> = SyncUnsafeCell::new
 pub static METRICS_CLIENT: SyncUnsafeCell<Option<MetricsClient>> =
     SyncUnsafeCell::new(Option::None);
 
-#[no_mangle]
 extern "system" fn driver_unload(_driver: &mut DRIVER_OBJECT) {
+    real_driver_unload();
+}
+
+fn real_driver_unload() {
     log::info!("Unloading...");
 
     /* Remove the device */
@@ -173,7 +177,7 @@ pub extern "system" fn driver_entry(
         return CSTATUS_DRIVER_PREINIT_FAILED;
     }
 
-    match unsafe { driver.as_mut() } {
+    let status = match unsafe { driver.as_mut() } {
         Some(driver) => internal_driver_entry(driver, registry_path),
         None => {
             let target_driver_entry = internal_driver_entry as usize;
@@ -219,15 +223,22 @@ pub extern "system" fn driver_entry(
             // IoDeleteDriver (gDriverObject);
             // gDriverObject = NULL;
         }
+    };
+
+    if status != STATUS_SUCCESS {
+        /* cleanup all pending / initialized resources */
+        real_driver_unload();
     }
+
+    status
 }
 
 fn wsk_dummy() -> anyhow::Result<()> {
-    // if let Some(metrics) = unsafe { &*METRICS_CLIENT.get() } {
-    //     for i in 0..10 {
-    //         metrics.add_record("testing".to_string(), format!("my test paload {}", i));
-    //     }
-    // }
+    if let Some(metrics) = unsafe { &*METRICS_CLIENT.get() } {
+        for i in 0..1_000 {
+            metrics.add_record(format!("testing_{}", i), "some payload but the content is a little longer so it will trigger the message too long issue");
+        }
+    }
 
     // let wsk = unsafe { &*WSK.get() };
     // let wsk = wsk.as_ref().context("missing WSK instance")?;
@@ -325,33 +336,33 @@ extern "C" fn internal_driver_entry(
         return CSTATUS_DRIVER_INIT_FAILED;
     }
 
-    match kb::create_keyboard_input() {
-        Err(error) => {
-            log::error!(
-                "{} {:#}",
-                obfstr!("Failed to initialize keyboard input:"),
-                error
-            );
-            return CSTATUS_DRIVER_INIT_FAILED;
-        }
-        Ok(keyboard) => {
-            unsafe { *KEYBOARD_INPUT.get() = Some(keyboard) };
-        }
-    }
+    // match kb::create_keyboard_input() {
+    //     Err(error) => {
+    //         log::error!(
+    //             "{} {:#}",
+    //             obfstr!("Failed to initialize keyboard input:"),
+    //             error
+    //         );
+    //         return CSTATUS_DRIVER_INIT_FAILED;
+    //     }
+    //     Ok(keyboard) => {
+    //         unsafe { *KEYBOARD_INPUT.get() = Some(keyboard) };
+    //     }
+    // }
 
-    match mouse::create_mouse_input() {
-        Err(error) => {
-            log::error!(
-                "{} {:#}",
-                obfstr!("Failed to initialize mouse input:"),
-                error
-            );
-            return CSTATUS_DRIVER_INIT_FAILED;
-        }
-        Ok(mouse) => {
-            unsafe { *MOUSE_INPUT.get() = Some(mouse) };
-        }
-    }
+    // match mouse::create_mouse_input() {
+    //     Err(error) => {
+    //         log::error!(
+    //             "{} {:#}",
+    //             obfstr!("Failed to initialize mouse input:"),
+    //             error
+    //         );
+    //         return CSTATUS_DRIVER_INIT_FAILED;
+    //     }
+    //     Ok(mouse) => {
+    //         unsafe { *MOUSE_INPUT.get() = Some(mouse) };
+    //     }
+    // }
 
     if let Err(error) = process_protection::initialize() {
         log::error!(

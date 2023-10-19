@@ -1,3 +1,5 @@
+use core::time::Duration;
+
 use alloc::boxed::Box;
 
 use obfstr::obfstr;
@@ -6,7 +8,7 @@ use winapi::{
         DEVICE_OBJECT,
         IO_COMPLETION_ROUTINE_RESULT,
         IRP,
-        PIRP,
+        PIRP, _KWAIT_REASON_DelayExecution, KPROCESSOR_MODE,
     },
     shared::{
         ntdef::{
@@ -43,7 +45,7 @@ use self::sys::{
 use crate::imports::GLOBAL_IMPORTS;
 use kapi::{
     KEvent,
-    NTStatusEx,
+    NTStatusEx, Waitable,
 };
 use kdef::IoSetCompletionRoutine;
 
@@ -342,8 +344,8 @@ impl SyncWskContext {
         Ok(Self { irp, event })
     }
 
-    pub fn await_event(&self, timeout: Option<u32>) -> bool {
-        self.event.wait_for(timeout)
+    pub fn await_event(&self, timeout: Option<Duration>) -> bool {
+        self.event.wait_for(_KWAIT_REASON_DelayExecution, KPROCESSOR_MODE::KernelMode, false, timeout)
     }
 
     pub fn io_status(&self) -> NTSTATUS {

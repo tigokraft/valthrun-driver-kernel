@@ -8,6 +8,9 @@ use crate::wsk::WskError;
 
 #[derive(Error, Debug)]
 pub enum HttpError {
+    #[error("wsk has not been initialized")]
+    NotInitialized,
+
     #[error("dns lookup failed: {0}")]
     DnsLookupFailure(WskError),
 
@@ -47,3 +50,10 @@ impl From<embedded_tls::TlsError> for HttpError {
         HttpError::TlsTransportError(value)
     }
 }
+
+impl From<WriteFmtError<Infallible>> for HttpError {
+    fn from(value: WriteFmtError<Infallible>) -> Self {
+        HttpError::WriteFmtError(value)
+    }
+}
+

@@ -1,8 +1,9 @@
-use alloc::string::String;
+use alloc::{string::String, vec::Vec};
 
-use serde::Serialize;
+use serde::{ Serialize, Deserialize };
 
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct MetricsReport<'a> {
     /// Unique session id for this session.
     pub session_id: &'a str,
@@ -11,11 +12,12 @@ pub struct MetricsReport<'a> {
     pub device_info: &'a DeviceInfo,
 
     /// Entries for the report
-    pub entries: &'a [MetricsEntry],
+    pub records: &'a [MetricsRecord],
 }
 
 #[derive(Debug, Serialize)]
-pub struct MetricsEntry {
+#[serde(rename_all = "camelCase")]
+pub struct MetricsRecord {
     // Entry sequence number
     pub seq_no: u32,
 
@@ -34,3 +36,28 @@ pub struct MetricsEntry {
 
 #[derive(Debug, Serialize)]
 pub struct DeviceInfo {}
+
+pub type RequestPostReport<'a> = MetricsReport<'a>;
+
+#[derive(Debug, Deserialize)]
+#[serde(tag = "status")]
+pub enum ResponsePostReport {
+    #[serde(rename = "success")]
+    Success,
+
+    #[serde(rename_all = "camelCase")]
+    #[serde(rename = "rate-limited")]
+    RateLimited {
+        /// Retry delay in seconds
+        retry_delay: u32,
+
+        /// Sequence numbers of successfully submitted records
+        records_submitted: Vec<u32>,
+    },
+    
+    #[serde(rename_all = "camelCase")]
+    #[serde(rename = "generic-error")]
+    GenericError { 
+        drop_records: bool
+    },
+}

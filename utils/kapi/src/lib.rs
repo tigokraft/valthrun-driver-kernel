@@ -2,6 +2,7 @@
 #![allow(dead_code)]
 #![feature(sync_unsafe_cell)]
 #![feature(pointer_byte_offsets)]
+#![feature(new_uninit)]
 
 extern crate alloc;
 
@@ -42,3 +43,12 @@ pub mod thread;
 
 mod event;
 pub use event::*;
+
+mod time;
+pub use time::*;
+
+mod timer;
+pub use timer::*;
+
+mod waitable;
+pub use waitable::*;

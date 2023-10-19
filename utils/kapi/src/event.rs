@@ -4,33 +4,20 @@ use core::cell::SyncUnsafeCell;
 
 use winapi::{
     km::wdm::{
-        _KWAIT_REASON_Executive,
         IO_PRIORITY::{
             IO_NO_INCREMENT,
             KPRIORITY_BOOST,
         },
         KEVENT,
-        KPROCESSOR_MODE,
         PKEVENT,
     },
-    shared::{
-        ntdef::{
-            EVENT_TYPE,
-            NTSTATUS,
-            PVOID,
-        },
-        ntstatus::{
-            STATUS_ALERTED,
-            STATUS_SUCCESS,
-            STATUS_TIMEOUT,
-        },
+    shared::ntdef::{
+        EVENT_TYPE,
+        PVOID,
     },
-    um::winnt::STATUS_USER_APC,
 };
 
-use crate::imports::KeWaitForSingleObject;
-
-use super::NTStatusEx;
+use crate::Waitable;
 
 type KeInitializeEvent = unsafe extern "C" fn(Event: PKEVENT, event_type: EVENT_TYPE, state: bool);
 type KeSetEvent =
@@ -46,8 +33,6 @@ dynamic_import_table! {
         pub KeReadStateEvent: KeReadStateEvent = SystemExport::new(obfstr!("KeReadStateEvent")),
         pub KeResetEvent: KeResetEvent = SystemExport::new(obfstr!("KeResetEvent")),
         pub KeClearEvent: KeClearEvent = SystemExport::new(obfstr!("KeClearEvent")),
-
-        pub KeWaitForSingleObject: KeWaitForSingleObject = SystemExport::new(obfstr!("KeWaitForSingleObject")),
     }
 }
 
@@ -97,30 +82,14 @@ impl KEvent {
         let imports = KEVENT_IMPORTS.unwrap();
         unsafe { (imports.KeClearEvent)(self.inner.get()) }
     }
+}
 
-    pub fn wait_for(&self, timeout: Option<u32>) -> bool {
-        const STATUS_USER_APC_: NTSTATUS = STATUS_USER_APC as NTSTATUS;
-
-        let imports = KEVENT_IMPORTS.unwrap();
-        unsafe {
-            match {
-                (imports.KeWaitForSingleObject)(
-                    self.kevent() as PVOID,
-                    _KWAIT_REASON_Executive as u32,
-                    KPROCESSOR_MODE::KernelMode,
-                    false,
-                    if let Some(timeout) = &timeout {
-                        timeout as *const _
-                    } else {
-                        core::ptr::null()
-                    },
-                )
-            } {
-                STATUS_SUCCESS => true,
-                STATUS_ALERTED | STATUS_USER_APC_ => false,
-                STATUS_TIMEOUT => false,
-                status => status.is_ok(),
-            }
-        }
+impl Waitable for KEvent {
+    fn waitable(&self) -> &dyn Waitable {
+        self
+    }
+    
+    fn wait_object(&self) -> PVOID {
+        self.kevent() as PVOID
     }
 }

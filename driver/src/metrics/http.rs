@@ -3,7 +3,7 @@ use alloc::{
         String,
         ToString,
     },
-    vec::Vec,
+    vec::Vec, format,
 };
 use core::fmt::Debug;
 
@@ -36,9 +36,9 @@ use crate::{
 };
 
 pub struct HttpRequest<'a> {
-    // TODO: Headers...
-    pub host: &'a str,
+    pub method: &'a str,
     pub target: &'a str,
+    pub headers: HttpHeaders,
     pub payload: &'a [u8],
 }
 
@@ -47,23 +47,26 @@ impl<'a> HttpRequest<'a> {
         &self,
         output: &mut dyn Write<Error = E>,
     ) -> Result<(), HttpError> {
-        let mut buffer = Vec::with_capacity(500);
-        write!(&mut buffer, "POST {} HTTP/1.1\r\n", self.target)
-            .map_err(HttpError::WriteFmtError)?;
-        write!(
-            &mut buffer,
-            "User-Agent: Valthrun/Kernel v{}\r\n",
-            env!("CARGO_PKG_VERSION")
-        )
-        .map_err(HttpError::WriteFmtError)?;
-        write!(&mut buffer, "Connection: Close\r\n").map_err(HttpError::WriteFmtError)?;
-        write!(&mut buffer, "Host: {}\r\n", self.host).map_err(HttpError::WriteFmtError)?;
-        write!(&mut buffer, "Content-Type: application/json\r\n")
-            .map_err(HttpError::WriteFmtError)?;
-        write!(&mut buffer, "Content-Length: {}\r\n", self.payload.len())
-            .map_err(HttpError::WriteFmtError)?;
-        write!(&mut buffer, "\r\n").map_err(HttpError::WriteFmtError)?;
+        let default_user_agent = format!("Valthrun/Kernel v{}", env!("CARGO_PKG_VERSION"));
+        let user_agent = self.headers.find_header("User-Agent")
+            .map_or(&default_user_agent, |header| &header.value);
 
+        let connection = self.headers.find_header("Connection")
+            .map_or("Close", |header| &header.value);
+
+        let mut buffer = Vec::with_capacity(500);
+        write!(&mut buffer, "{} {} HTTP/1.1\r\n", self.method, self.target)?;
+        write!(&mut buffer, "User-Agent: {}\r\n", user_agent)?;
+        write!(&mut buffer, "Connection: {}\r\n", connection)?;
+        write!(&mut buffer, "Content-Length: {}\r\n", self.payload.len())?;
+        
+        for header in self.headers.headers.iter() {
+            write!(&mut buffer, "{}: {}\r\n", header.name, header.value)?;
+        }
+
+        write!(&mut buffer, "\r\n")?;
+
+        //log::debug!("Request: {}", String::from_utf8_lossy(&buffer));
         output
             .write_all(buffer.as_slice())
             .map_err(|err| err.into())?;
@@ -91,8 +94,12 @@ pub struct HttpHeaders {
 }
 
 impl HttpHeaders {
-    pub fn add_header(&mut self, name: String, value: String) -> &mut Self {
-        self.headers.push(HttpHeader { name, value });
+    pub fn new() -> Self {
+        Self { ..Default::default() }
+    }
+
+    pub fn add_header(&mut self, name: impl Into<String>, value: impl Into<String>) -> &mut Self {
+        self.headers.push(HttpHeader { name: name.into(), value: value.into() });
         self
     }
 
@@ -227,8 +234,9 @@ pub fn execute_https_request(
     let mut read_record_buffer = Vec::new();
     read_record_buffer.resize(16640, 0u8);
 
+    /* set the write buffer a little under the max record size to avoid any issues with other implementations */
     let mut write_record_buffer = Vec::new();
-    write_record_buffer.resize(16640, 0u8);
+    write_record_buffer.resize(16000, 0u8);
 
     let config = TlsConfig::new();
     let mut tls: TlsConnection<'_, TcpConnection, Aes128GcmSha256> = TlsConnection::new(
@@ -247,13 +255,17 @@ pub fn execute_https_request(
         log::trace!("{}: {:#}", obfstr!("send payload"), error);
         return Err(error);
     }
-    tls.flush()?;
+    tls.flush()
+        .inspect_err(|err| log::trace!("flush: {:?}", err))?;
 
     let mut reader = BufReader::new(tls);
     let mut response = HttpResponse::default();
 
-    response.read_headers(&mut reader)?;
-    response.read_payload(&mut reader)?;
+    response.read_headers(&mut reader)
+        .inspect_err(|err| log::trace!("read headers: {:#}", err))?;
+
+    response.read_payload(&mut reader)
+        .inspect_err(|err| log::trace!("read content: {:#}", err))?;
 
     log::debug!("Request succeeded -> {}", response.status_code);
     log::debug!("Response content length: {}", response.content.len());
