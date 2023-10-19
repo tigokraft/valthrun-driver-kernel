@@ -23,14 +23,7 @@ use kb::KeyboardInput;
 use metrics::MetricsClient;
 use mouse::MouseInput;
 use obfstr::obfstr;
-use valthrun_driver_shared::requests::{
-    RequestCSModule,
-    RequestHealthCheck,
-    RequestKeyboardState,
-    RequestMouseMove,
-    RequestProtectionToggle,
-    RequestRead,
-};
+use valthrun_driver_shared::requests::RequestHealthCheck;
 use winapi::{
     km::wdm::DRIVER_OBJECT,
     shared::{
@@ -51,7 +44,7 @@ use crate::{
         handler_keyboard_state,
         handler_mouse_move,
         handler_protection_toggle,
-        handler_read,
+        handler_read, handler_init, handler_metrics_record,
     },
     logger::APP_LOGGER,
     offsets::initialize_nt_offsets,
@@ -390,16 +383,18 @@ extern "C" fn internal_driver_entry(
 
     let mut handler = Box::new(HandlerRegistry::new());
 
-    handler.register::<RequestHealthCheck>(&|_req, res| {
+    handler.register(&|_req: &RequestHealthCheck, res| {
         res.success = true;
         Ok(())
     });
-    handler.register::<RequestCSModule>(&handler_get_modules);
-    handler.register::<RequestRead>(&handler_read);
-    handler.register::<RequestProtectionToggle>(&handler_protection_toggle);
-    handler.register::<RequestMouseMove>(&handler_mouse_move);
-    handler.register::<RequestKeyboardState>(&handler_keyboard_state);
-
+    handler.register(&handler_get_modules);
+    handler.register(&handler_read);
+    handler.register(&handler_protection_toggle);
+    handler.register(&handler_mouse_move);
+    handler.register(&handler_keyboard_state);
+    handler.register(&handler_init);
+    handler.register(&handler_metrics_record);
+    
     unsafe { *REQUEST_HANDLER.get() = Some(handler) };
 
     log::info!("Driver Initialized");

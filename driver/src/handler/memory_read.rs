@@ -5,7 +5,7 @@ use core::mem::size_of_val;
 use valthrun_driver_shared::{
     requests::{
         RequestRead,
-        ResponseRead,
+        ResponseRead, MemoryAccessMode,
     },
     IO_MAX_DEREF_COUNT,
 };
@@ -205,9 +205,11 @@ pub fn handler_read(req: &RequestRead, res: &mut ResponseRead) -> anyhow::Result
         offset_index: 0,
     };
 
-    let read_result = read_memory_attached(&mut read_ctx);
-    //let read_result = read_memory_mm(&mut read_ctx);
-    //let read_result = read_memory_physical(&mut read_ctx);
+    let read_result = match req.mode {
+        MemoryAccessMode::AttachProcess => read_memory_attached(&mut read_ctx),
+        MemoryAccessMode::CopyVirtualMemory => read_memory_mm(&mut read_ctx),
+        MemoryAccessMode::Physical => read_memory_physical(&mut read_ctx),
+    };
 
     if !read_result {
         *res = ResponseRead::InvalidAddress {

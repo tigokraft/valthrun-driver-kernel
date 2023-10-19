@@ -12,6 +12,12 @@ pub use protect::*;
 mod input;
 pub use input::*;
 
+mod init;
+pub use init::*;
+
+mod metrics;
+pub use metrics::*;
+
 pub const FUNCTION_CODE_MAX: usize = 0x20;
 
 type RequestHandlerGeneric = dyn (Fn(&(), &mut ()) -> anyhow::Result<()>) + Send + Sync;
