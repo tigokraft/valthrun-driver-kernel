@@ -1,13 +1,23 @@
 use core::marker::PhantomData;
 
-use kapi::{Mdl, IO_READ_ACCESS, IO_WRITE_ACCESS};
+use kapi::{
+    Mdl,
+    IO_READ_ACCESS,
+    IO_WRITE_ACCESS,
+};
 use winapi::{
-    km::{wdm::KPROCESSOR_MODE, ndis::PMDL},
+    km::{
+        ndis::PMDL,
+        wdm::KPROCESSOR_MODE,
+    },
     shared::ntdef::PVOID,
 };
 
 use super::{
-    sys::{_WSK_BUF, self},
+    sys::{
+        self,
+        _WSK_BUF,
+    },
     WskError,
     WskResult,
 };

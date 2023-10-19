@@ -2,10 +2,13 @@ use alloc::{
     format,
     string::ToString,
 };
-use kapi_kmodule::{KModule, KModuleSection};
 use core::cell::SyncUnsafeCell;
 
 use anyhow::Context;
+use kapi_kmodule::{
+    KModule,
+    KModuleSection,
+};
 use obfstr::obfstr;
 use valthrun_driver_shared::{
     ByteSequencePattern,

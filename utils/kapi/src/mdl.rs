@@ -1,7 +1,12 @@
-use winapi::{km::{ndis::PMDL, wdm::PIRP}, shared::ntdef::PVOID};
+use winapi::{
+    km::{
+        ndis::PMDL,
+        wdm::PIRP,
+    },
+    shared::ntdef::PVOID,
+};
 
 use crate::imports::GLOBAL_IMPORTS;
-
 
 pub struct Mdl {
     inner: PMDL,

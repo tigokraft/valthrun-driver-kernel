@@ -44,17 +44,26 @@ pub fn handler_get_modules(
     let attached_process = cs2_process.attach();
     module_info.client = attached_process
         .get_module(obfstr!("client.dll"))
-        .map(|module| valthrun_driver_shared::ModuleInfo { base_address: module.base_address, module_size: module.module_size })
+        .map(|module| valthrun_driver_shared::ModuleInfo {
+            base_address: module.base_address,
+            module_size: module.module_size,
+        })
         .with_context(|| format!("missing {}", obfstr!("client.dll")))?;
 
     module_info.engine = attached_process
         .get_module(obfstr!("engine2.dll"))
-        .map(|module| valthrun_driver_shared::ModuleInfo { base_address: module.base_address, module_size: module.module_size })
+        .map(|module| valthrun_driver_shared::ModuleInfo {
+            base_address: module.base_address,
+            module_size: module.module_size,
+        })
         .with_context(|| format!("missing {}", obfstr!("engine2.dll")))?;
 
     module_info.schemasystem = attached_process
         .get_module(obfstr!("schemasystem.dll"))
-        .map(|module| valthrun_driver_shared::ModuleInfo { base_address: module.base_address, module_size: module.module_size })
+        .map(|module| valthrun_driver_shared::ModuleInfo {
+            base_address: module.base_address,
+            module_size: module.module_size,
+        })
         .with_context(|| format!("missing {}", obfstr!("schemasystem.dll")))?;
     drop(attached_process);
 

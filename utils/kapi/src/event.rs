@@ -1,7 +1,10 @@
 use alloc::sync::Arc;
-use utils_imports::{dynamic_import_table, provider::SystemExport};
 use core::cell::SyncUnsafeCell;
 
+use utils_imports::{
+    dynamic_import_table,
+    provider::SystemExport,
+};
 use winapi::{
     km::wdm::{
         IO_PRIORITY::{
@@ -88,7 +91,7 @@ impl Waitable for KEvent {
     fn waitable(&self) -> &dyn Waitable {
         self
     }
-    
+
     fn wait_object(&self) -> PVOID {
         self.kevent() as PVOID
     }

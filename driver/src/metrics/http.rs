@@ -1,9 +1,10 @@
 use alloc::{
+    format,
     string::{
         String,
         ToString,
     },
-    vec::Vec, format,
+    vec::Vec,
 };
 use core::fmt::Debug;
 
@@ -48,10 +49,14 @@ impl<'a> HttpRequest<'a> {
         output: &mut dyn Write<Error = E>,
     ) -> Result<(), HttpError> {
         let default_user_agent = format!("Valthrun/Kernel v{}", env!("CARGO_PKG_VERSION"));
-        let user_agent = self.headers.find_header("User-Agent")
+        let user_agent = self
+            .headers
+            .find_header("User-Agent")
             .map_or(&default_user_agent, |header| &header.value);
 
-        let connection = self.headers.find_header("Connection")
+        let connection = self
+            .headers
+            .find_header("Connection")
             .map_or("Close", |header| &header.value);
 
         let mut buffer = Vec::with_capacity(500);
@@ -59,7 +64,7 @@ impl<'a> HttpRequest<'a> {
         write!(&mut buffer, "User-Agent: {}\r\n", user_agent)?;
         write!(&mut buffer, "Connection: {}\r\n", connection)?;
         write!(&mut buffer, "Content-Length: {}\r\n", self.payload.len())?;
-        
+
         for header in self.headers.headers.iter() {
             write!(&mut buffer, "{}: {}\r\n", header.name, header.value)?;
         }
@@ -95,11 +100,16 @@ pub struct HttpHeaders {
 
 impl HttpHeaders {
     pub fn new() -> Self {
-        Self { ..Default::default() }
+        Self {
+            ..Default::default()
+        }
     }
 
     pub fn add_header(&mut self, name: impl Into<String>, value: impl Into<String>) -> &mut Self {
-        self.headers.push(HttpHeader { name: name.into(), value: value.into() });
+        self.headers.push(HttpHeader {
+            name: name.into(),
+            value: value.into(),
+        });
         self
     }
 
@@ -261,10 +271,12 @@ pub fn execute_https_request(
     let mut reader = BufReader::new(tls);
     let mut response = HttpResponse::default();
 
-    response.read_headers(&mut reader)
+    response
+        .read_headers(&mut reader)
         .inspect_err(|err| log::trace!("read headers: {:#}", err))?;
 
-    response.read_payload(&mut reader)
+    response
+        .read_payload(&mut reader)
         .inspect_err(|err| log::trace!("read content: {:#}", err))?;
 
     log::debug!("Request succeeded -> {}", response.status_code);

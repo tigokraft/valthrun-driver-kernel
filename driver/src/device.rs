@@ -1,8 +1,17 @@
 use alloc::boxed::Box;
-use kapi::{DeviceHandle, UnicodeStringEx, IrpEx, Process};
-use kdef::{IRP_MJ_CREATE, IRP_MJ_CLOSE, IRP_MJ_DEVICE_CONTROL};
 use core::pin::Pin;
 
+use kapi::{
+    DeviceHandle,
+    IrpEx,
+    Process,
+    UnicodeStringEx,
+};
+use kdef::{
+    IRP_MJ_CLOSE,
+    IRP_MJ_CREATE,
+    IRP_MJ_DEVICE_CONTROL,
+};
 use obfstr::obfstr;
 use winapi::{
     km::{

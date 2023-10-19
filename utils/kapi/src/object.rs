@@ -4,8 +4,14 @@ use alloc::{
 };
 
 use anyhow::anyhow;
-use kdef::{POBJECT_TYPE, OBJECT_NAME_INFORMATION};
-use utils_imports::{dynamic_import_table, provider::SystemExport};
+use kdef::{
+    OBJECT_NAME_INFORMATION,
+    POBJECT_TYPE,
+};
+use utils_imports::{
+    dynamic_import_table,
+    provider::SystemExport,
+};
 use winapi::{
     km::wdm::KPROCESSOR_MODE,
     shared::ntdef::{
@@ -19,7 +25,10 @@ use winapi::{
 };
 
 use super::NTStatusEx;
-use crate::{GLOBAL_IMPORTS, UnicodeStringEx};
+use crate::{
+    UnicodeStringEx,
+    GLOBAL_IMPORTS,
+};
 
 pub struct Object(PVOID);
 

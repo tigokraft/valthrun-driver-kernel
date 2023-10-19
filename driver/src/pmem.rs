@@ -1,6 +1,9 @@
 use core::mem::size_of;
 
-use kapi::{Process, NTStatusEx};
+use kapi::{
+    NTStatusEx,
+    Process,
+};
 use winapi::{
     ctypes::c_void,
     shared::ntdef::{

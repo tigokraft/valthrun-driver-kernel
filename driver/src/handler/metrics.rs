@@ -1,12 +1,18 @@
 use alloc::string::String;
+
 use anyhow::anyhow;
 use obfstr::obfstr;
-use valthrun_driver_shared::requests::{RequestReportSend, ResponseReportSend};
+use valthrun_driver_shared::requests::{
+    RequestReportSend,
+    ResponseReportSend,
+};
 
 use crate::METRICS_CLIENT;
 
-
-pub fn handler_metrics_record(req: &RequestReportSend, _res: &mut ResponseReportSend) -> anyhow::Result<()> {
+pub fn handler_metrics_record(
+    req: &RequestReportSend,
+    _res: &mut ResponseReportSend,
+) -> anyhow::Result<()> {
     let metrics = match unsafe { &*METRICS_CLIENT.get() } {
         Some(client) => client,
         None => return Ok(()),
@@ -31,7 +37,6 @@ pub fn handler_metrics_record(req: &RequestReportSend, _res: &mut ResponseReport
     };
     let report_payload = String::from_utf8(report_payload.to_vec())
         .map_err(|_| anyhow!("{}", obfstr!("report_payload is not utf-8")))?;
-
 
     metrics.add_record(report_type, report_payload);
     Ok(())

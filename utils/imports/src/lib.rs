@@ -6,8 +6,8 @@
 extern crate alloc;
 
 pub mod ll;
-pub use paste::paste;
 pub use obfstr::obfstr;
+pub use paste::paste;
 
 pub mod provider;
 

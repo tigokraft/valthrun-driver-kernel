@@ -1,13 +1,25 @@
 // Initial idea: https://github.com/cs1ime/sehcall/tree/main
 // Modified for Valthruns use cases.
 
-use core::{arch::global_asm, sync::atomic::{AtomicU64, Ordering}};
+use alloc::{
+    format,
+    string::ToString,
+};
+use core::{
+    arch::global_asm,
+    sync::atomic::{
+        AtomicU64,
+        Ordering,
+    },
+};
 
-use alloc::{string::ToString, format};
 use anyhow::Context;
-use kapi_kmodule::{KModule, ByteSequencePattern, SearchPattern};
+use kapi_kmodule::{
+    ByteSequencePattern,
+    KModule,
+    SearchPattern,
+};
 use obfstr::obfstr;
-
 
 #[repr(C)]
 struct SehInvokeInfo {
@@ -20,9 +32,7 @@ struct SehInvokeInfo {
 // RDX -> Callback A2
 // R8 -> Callback A3
 // R9 -> Callback A4
-global_asm!(
-    include_str!("./wrapper.asm")
-);
+global_asm!(include_str!("./wrapper.asm"));
 
 extern "system" {
     fn _seh_invoke(

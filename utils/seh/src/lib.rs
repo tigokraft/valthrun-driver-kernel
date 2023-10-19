@@ -12,8 +12,13 @@ pub use mem::*;
 
 pub fn init() -> anyhow::Result<()> {
     wrapper::init()?;
-    mem::init()
-        .map_err(|err| anyhow!("{}: {:#}", obfstr!("failed to lookup SEH wrapped functions"), err))?;
+    mem::init().map_err(|err| {
+        anyhow!(
+            "{}: {:#}",
+            obfstr!("failed to lookup SEH wrapped functions"),
+            err
+        )
+    })?;
 
     Ok(())
 }

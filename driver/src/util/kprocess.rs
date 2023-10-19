@@ -1,10 +1,12 @@
+use alloc::vec::Vec;
 use core::ffi::CStr;
 
-use alloc::vec::Vec;
 use kapi::Process;
 
-use crate::{imports::GLOBAL_IMPORTS, offsets::get_nt_offsets};
-
+use crate::{
+    imports::GLOBAL_IMPORTS,
+    offsets::get_nt_offsets,
+};
 
 pub fn find_processes_by_name(target_name: &str) -> anyhow::Result<Vec<Process>> {
     let imports = GLOBAL_IMPORTS.unwrap();

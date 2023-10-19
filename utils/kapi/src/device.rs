@@ -22,7 +22,10 @@ use winapi::{
 };
 
 use super::NTStatusEx;
-use crate::{GLOBAL_IMPORTS, IrpEx};
+use crate::{
+    IrpEx,
+    GLOBAL_IMPORTS,
+};
 
 type DeviceMajorFn<T> = fn(device: &mut DeviceHandle<T>, irp: &mut IRP) -> NTSTATUS;
 

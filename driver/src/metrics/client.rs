@@ -1,5 +1,3 @@
-use core::{time::Duration, sync::atomic::{Ordering, AtomicU8}};
-
 use alloc::{
     collections::VecDeque,
     string::{
@@ -9,24 +7,58 @@ use alloc::{
     sync::Arc,
     vec::Vec,
 };
+use core::{
+    sync::atomic::{
+        AtomicU8,
+        Ordering,
+    },
+    time::Duration,
+};
 
 use anyhow::anyhow;
-use kapi::{KEvent, FastMutex, thread::{JoinHandle, self, TryJoinResult}, UnicodeStringEx, KTimer, Waitable, MultipleWait};
+use kapi::{
+    thread::{
+        self,
+        JoinHandle,
+        TryJoinResult,
+    },
+    FastMutex,
+    KEvent,
+    KTimer,
+    MultipleWait,
+    UnicodeStringEx,
+    Waitable,
+};
 use obfstr::obfstr;
 use rand_core::RngCore;
 use winapi::{
-    km::wdm::{NotificationEvent, _KWAIT_REASON_DelayExecution, KPROCESSOR_MODE},
+    km::wdm::{
+        NotificationEvent,
+        _KWAIT_REASON_DelayExecution,
+        KPROCESSOR_MODE,
+    },
     shared::ntdef::UNICODE_STRING,
 };
 
-use super::{data::{
-    DeviceInfo,
-    MetricsRecord,
-    MetricsReport, ResponsePostReport, 
-}, crypto::MetricsCrypto, HttpRequest, HttpHeaders, http};
+use super::{
+    crypto::MetricsCrypto,
+    data::{
+        DeviceInfo,
+        MetricsRecord,
+        MetricsReport,
+        ResponsePostReport,
+    },
+    http,
+    HttpHeaders,
+    HttpRequest,
+};
 use crate::{
     imports::GLOBAL_IMPORTS,
-    util::{KeQueryTickCount, Win32Rng},
+    metrics::HttpError,
+    util::{
+        KeQueryTickCount,
+        Win32Rng,
+    },
     wsk::{
         sys::{
             AF_INET,
@@ -36,15 +68,15 @@ use crate::{
         SocketAddrInetEx,
         WskInstance,
     },
-    WSK, metrics::HttpError,
+    WSK,
 };
 
-const SUBMIT_BACKOFF_INTERVALS: [ Duration; 6 ] = [
-    Duration::from_secs(5), /* 5 secs */
-    Duration::from_secs(60), /* 1 min */
-    Duration::from_secs(150), /* 2min 30sec */
-    Duration::from_secs(300), /* 5min */
-    Duration::from_secs(600), /* 10min */
+const SUBMIT_BACKOFF_INTERVALS: [Duration; 6] = [
+    Duration::from_secs(5),    /* 5 secs */
+    Duration::from_secs(60),   /* 1 min */
+    Duration::from_secs(150),  /* 2min 30sec */
+    Duration::from_secs(300),  /* 5min */
+    Duration::from_secs(600),  /* 10min */
     Duration::from_secs(1800), /* 30min */
 ];
 
@@ -86,13 +118,15 @@ impl RecordQueue {
         Some(entries)
     }
 
-    pub fn enqueue_failed(&mut self, failed_reports: impl DoubleEndedIterator<Item = MetricsRecord>) {
+    pub fn enqueue_failed(
+        &mut self,
+        failed_reports: impl DoubleEndedIterator<Item = MetricsRecord>,
+    ) {
         for entry in failed_reports.rev() {
             self.pending_entries.push_front(entry);
         }
     }
 }
-
 
 #[derive(Debug)]
 struct SubmitError {
@@ -111,12 +145,12 @@ struct SubmitError {
 
 impl Default for SubmitError {
     fn default() -> Self {
-        Self { 
+        Self {
             records_submitted: Default::default(),
             drop_records: true,
 
             retry_delay: None,
-            reason: anyhow!("unknown")
+            reason: anyhow!("unknown"),
         }
     }
 }
@@ -142,7 +176,7 @@ impl MetricsSender {
         let target_port = if let Some(port) = option_env!("METRICS_PORT") {
             match port.parse::<u16>() {
                 Ok(port) => port,
-                Err(_) => anyhow::bail!("{}: {}", obfstr!("invalid metrics port"), port)
+                Err(_) => anyhow::bail!("{}: {}", obfstr!("invalid metrics port"), port),
             }
         } else {
             METRICS_DEFAULT_PORT
@@ -153,16 +187,18 @@ impl MetricsSender {
             target_port,
 
             session_id,
-            device_info: DeviceInfo {  },
+            device_info: DeviceInfo {},
 
-            crypto: MetricsCrypto::new()?
+            crypto: MetricsCrypto::new()?,
         })
     }
 
-    pub fn submit_records(&mut self, records: &[ MetricsRecord ]) -> Result<(), SubmitError> {
-        let wsk = unsafe { &*WSK.get() }
-            .as_ref()
-            .ok_or_else(|| SubmitError{ reason: anyhow!("wsk not initialized"), drop_records: false, ..Default::default() })?;
+    pub fn submit_records(&mut self, records: &[MetricsRecord]) -> Result<(), SubmitError> {
+        let wsk = unsafe { &*WSK.get() }.as_ref().ok_or_else(|| SubmitError {
+            reason: anyhow!("wsk not initialized"),
+            drop_records: false,
+            ..Default::default()
+        })?;
 
         let report = MetricsReport {
             session_id: &self.session_id,
@@ -170,57 +206,77 @@ impl MetricsSender {
             records: &records,
         };
 
-        let mut report = serde_json::to_string(&report)
-            .map_err(|err| SubmitError{ reason: anyhow!("{:#}", err), ..Default::default() })?;
+        let mut report = serde_json::to_string(&report).map_err(|err| SubmitError {
+            reason: anyhow!("{:#}", err),
+            ..Default::default()
+        })?;
 
-        let report = self.crypto.encrypt(unsafe { report.as_bytes_mut() })
-            .map_err(|err| SubmitError{ reason: anyhow!("{:#}", err), ..Default::default() })?;
+        let report = self
+            .crypto
+            .encrypt(unsafe { report.as_bytes_mut() })
+            .map_err(|err| SubmitError {
+                reason: anyhow!("{:#}", err),
+                ..Default::default()
+            })?;
 
-        let target_host = self.resolve_target(&wsk)
-            .map_err(|error| SubmitError{ reason: anyhow!("{:#}", error), drop_records: false, ..Default::default() })?;
+        let target_host = self.resolve_target(&wsk).map_err(|error| SubmitError {
+            reason: anyhow!("{:#}", error),
+            drop_records: false,
+            ..Default::default()
+        })?;
 
         let mut request = HttpRequest {
             method: "POST",
             target: "/report",
             payload: &report,
-            headers: HttpHeaders::new()
+            headers: HttpHeaders::new(),
         };
-        request.headers
+        request
+            .headers
             .add_header("Host", &self.target_host)
             .add_header("Content-Type", "application/x-valthrun-report")
             .add_header("x-message-key-id", self.crypto.key_id());
 
         let response = match http::execute_https_request(wsk, &target_host, &request) {
             Ok(response) => response,
-            Err(error) => return Err(SubmitError{ 
-                reason: anyhow!("{:#}", error), 
-                drop_records: false, 
-                ..Default::default() 
-            }),
+            Err(error) => {
+                return Err(SubmitError {
+                    reason: anyhow!("{:#}", error),
+                    drop_records: false,
+                    ..Default::default()
+                })
+            }
         };
 
         if !matches!(response.status_code, 200 | 201) {
-            return Err(SubmitError{ 
-                reason: anyhow!("invalid status code {:#}", response.status_code), 
-                drop_records: false, 
-                ..Default::default() 
+            return Err(SubmitError {
+                reason: anyhow!("invalid status code {:#}", response.status_code),
+                drop_records: false,
+                ..Default::default()
             });
         }
 
         let response: ResponsePostReport = serde_json::from_slice(&response.content)
             /* When we can not parse the response, assume the server accepted our reports. */
-            .map_err(|err| SubmitError{ reason: anyhow!("response error: {:#}", err), drop_records: true, ..Default::default() })?;
+            .map_err(|err| SubmitError {
+                reason: anyhow!("response error: {:#}", err),
+                drop_records: true,
+                ..Default::default()
+            })?;
 
         match response {
             ResponsePostReport::Success => Ok(()),
-            ResponsePostReport::RateLimited { retry_delay, records_submitted } => Err(SubmitError {
+            ResponsePostReport::RateLimited {
+                retry_delay,
+                records_submitted,
+            } => Err(SubmitError {
                 reason: anyhow!("rate limited"),
                 drop_records: false,
 
                 records_submitted,
-                retry_delay: Some(retry_delay)
+                retry_delay: Some(retry_delay),
             }),
-            ResponsePostReport::GenericError { drop_records } => Err(SubmitError { 
+            ResponsePostReport::GenericError { drop_records } => Err(SubmitError {
                 reason: anyhow!("generic server error"),
                 drop_records,
 
@@ -232,7 +288,7 @@ impl MetricsSender {
     fn resolve_target(&self, wsk: &WskInstance) -> Result<SOCKADDR_INET, HttpError> {
         let target_host = self.target_host.encode_utf16().collect::<Vec<_>>();
         let utarget_host = UNICODE_STRING::from_bytes_unchecked(&target_host);
-    
+
         let target_address = wsk
             .get_address_info(Some(&utarget_host), None)
             .map_err(HttpError::DnsLookupFailure)?
@@ -243,7 +299,7 @@ impl MetricsSender {
             .next()
             .ok_or(HttpError::DnsNoResults)?
             .clone();
-    
+
         let mut inet_addr = unsafe { *(target_address.ai_addr as *mut SOCKADDR_INET).clone() };
         *inet_addr.port_mut() = self.target_port.swap_bytes();
 
@@ -320,15 +376,15 @@ fn metrics_worker_thread(ctx: &mut WorkerThreadContext) {
                 /* wait for the next event */
                 log::debug!("Wait for event ({:?})", ctx.send_timer_mode);
                 let result = MultipleWait::wait_any(
-                    &[ ctx.wakeup_event.waitable(), ctx.send_timer.waitable() ], 
-                    _KWAIT_REASON_DelayExecution, 
-                    KPROCESSOR_MODE::KernelMode, 
-                    false, 
-                    None
+                    &[ctx.wakeup_event.waitable(), ctx.send_timer.waitable()],
+                    _KWAIT_REASON_DelayExecution,
+                    KPROCESSOR_MODE::KernelMode,
+                    false,
+                    None,
                 );
 
                 if !matches!(ctx.send_timer_mode, SendTimerMode::Normal) {
-                    /* 
+                    /*
                      * Timer fired and backoff expired or the wakeup event has been signalled.
                      * In this case we reset the timer mode regardless of the previous mode to poll the queue again.
                      */
@@ -349,15 +405,16 @@ fn metrics_worker_thread(ctx: &mut WorkerThreadContext) {
                     log::debug!("Switched into normal timer mode (submit success).");
                     ctx.send_timer_mode = SendTimerMode::Normal;
                 }
-            },
+            }
             Err(info) => {
                 log::trace!("Failed to submit {} reports: {:#}. Retry: {:?}, drop all: {}, submitted reports: {:?}", report_records_slice.len(), info.reason, info.retry_delay, info.drop_records, info.records_submitted);
 
                 if !info.drop_records {
                     let mut queue = ctx.record_queue.lock();
                     queue.enqueue_failed(
-                        report_records.into_iter()
-                            .filter(|entry| !info.records_submitted.contains(&entry.seq_no))
+                        report_records
+                            .into_iter()
+                            .filter(|entry| !info.records_submitted.contains(&entry.seq_no)),
                     );
                 }
 
@@ -369,10 +426,15 @@ fn metrics_worker_thread(ctx: &mut WorkerThreadContext) {
                     /* Reset the backoff level as after cleating the backoff received by the server we should not have any more backoffs */
                     ctx.backoff_level = 0;
                 } else {
-                    let backoff = SUBMIT_BACKOFF_INTERVALS[ctx.backoff_level % SUBMIT_BACKOFF_INTERVALS.len()];
-                    log::trace!("Switching into backoff with level {} ({:#?})", ctx.backoff_level, backoff);
+                    let backoff = SUBMIT_BACKOFF_INTERVALS
+                        [ctx.backoff_level % SUBMIT_BACKOFF_INTERVALS.len()];
+                    log::trace!(
+                        "Switching into backoff with level {} ({:#?})",
+                        ctx.backoff_level,
+                        backoff
+                    );
                     ctx.backoff_level += 1;
-                    
+
                     ctx.send_timer.set(backoff);
                     ctx.send_timer_mode = SendTimerMode::Backoff;
                 }
@@ -437,7 +499,6 @@ impl MetricsClient {
             }
         });
 
-
         Ok(Self {
             session_id,
 
@@ -448,7 +509,6 @@ impl MetricsClient {
             worker_shutdown_event: worker_event,
         })
     }
-
 
     pub fn add_record(&self, report_type: impl Into<String>, payload: impl Into<String>) {
         let mut record = MetricsRecord {
@@ -478,13 +538,18 @@ impl MetricsClient {
         log::trace!("Requesting flush & shutdown");
         self.add_record("shutdown", "now? :D");
 
-        self.worker_shutdown.store(SHUTDOWN_MODE_FLUSH, Ordering::Relaxed);
+        self.worker_shutdown
+            .store(SHUTDOWN_MODE_FLUSH, Ordering::Relaxed);
         self.worker_shutdown_event.signal();
 
         if let TryJoinResult::Timeout(handle) = worker_handle.try_join(Duration::from_secs(5)) {
-            log::warn!("{}", obfstr!("Failed to flush metrics worker within 5 seconds. Force shutdown."));
-            
-            self.worker_shutdown.store(SHUTDOWN_MODE_NOW, Ordering::Relaxed);
+            log::warn!(
+                "{}",
+                obfstr!("Failed to flush metrics worker within 5 seconds. Force shutdown.")
+            );
+
+            self.worker_shutdown
+                .store(SHUTDOWN_MODE_NOW, Ordering::Relaxed);
             self.worker_shutdown_event.signal();
 
             handle.join();

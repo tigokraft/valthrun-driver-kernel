@@ -1,6 +1,12 @@
-use core::{ops::Sub, time::Duration};
+use core::{
+    ops::Sub,
+    time::Duration,
+};
 
-use utils_imports::{dynamic_import_table, provider::SystemExport};
+use utils_imports::{
+    dynamic_import_table,
+    provider::SystemExport,
+};
 
 type KeQueryPerformanceCounter = unsafe extern "C" fn(PerformanceFrequency: *mut u64) -> u64;
 type KeQueryTimeIncrement = unsafe extern "C" fn() -> u32;
@@ -16,16 +22,17 @@ dynamic_import_table! {
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Instant {
     /// Value in nanoseconds
-    value: u64
+    value: u64,
 }
 
 impl Instant {
     pub fn new() -> Self {
         let imports = TIME_IMPORTS.unwrap();
-        let performance_counter = unsafe { (imports.KeQueryPerformanceCounter)(core::ptr::null_mut()) } as u64;
+        let performance_counter =
+            unsafe { (imports.KeQueryPerformanceCounter)(core::ptr::null_mut()) } as u64;
         let time_increment = unsafe { (imports.KeQueryTimeIncrement)() } as u64 * 100;
         Self {
-            value: performance_counter * time_increment
+            value: performance_counter * time_increment,
         }
     }
 }

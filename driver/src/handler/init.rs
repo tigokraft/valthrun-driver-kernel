@@ -1,11 +1,19 @@
 use obfstr::obfstr;
-use valthrun_driver_shared::requests::{RequestInitialize, ResponseInitialize, INIT_STATUS_SUCCESS, INIT_STATUS_DRIVER_OUTDATED, INIT_STATUS_CONTROLLER_OUTDATED, DriverInfo, ControllerInfo};
+use valthrun_driver_shared::requests::{
+    ControllerInfo,
+    DriverInfo,
+    RequestInitialize,
+    ResponseInitialize,
+    INIT_STATUS_CONTROLLER_OUTDATED,
+    INIT_STATUS_DRIVER_OUTDATED,
+    INIT_STATUS_SUCCESS,
+};
 
 fn driver_version() -> u32 {
     let major = env!("CARGO_PKG_VERSION_MAJOR").parse::<u32>().unwrap();
     let minor = env!("CARGO_PKG_VERSION_MINOR").parse::<u32>().unwrap();
     let patch = env!("CARGO_PKG_VERSION_PATCH").parse::<u32>().unwrap();
-    return (major << 24) | (minor << 16) | (patch << 8); 
+    return (major << 24) | (minor << 16) | (patch << 8);
 }
 
 pub fn handler_init(req: &RequestInitialize, res: &mut ResponseInitialize) -> anyhow::Result<()> {
@@ -14,6 +22,12 @@ pub fn handler_init(req: &RequestInitialize, res: &mut ResponseInitialize) -> an
 
     if res.driver_version < req.target_version {
         /* driver is outdated */
+        log::debug!(
+            "{}. Requested: {:X}, Current: {:X}",
+            obfstr!("Received init request for version which is newer then the current version"),
+            req.target_version,
+            res.driver_version
+        );
         res.status_code = INIT_STATUS_DRIVER_OUTDATED;
         return Ok(());
     }
@@ -34,7 +48,7 @@ pub fn handler_init(req: &RequestInitialize, res: &mut ResponseInitialize) -> an
 
         &*req.controller_info
     };
-    
+
     let _driver_info = unsafe {
         if !seh::probe_write(req.driver_info as u64, req.driver_info_length, 0x01) {
             anyhow::bail!("{}", obfstr!("faild to write driver info"));

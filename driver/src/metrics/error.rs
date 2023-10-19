@@ -56,4 +56,3 @@ impl From<WriteFmtError<Infallible>> for HttpError {
         HttpError::WriteFmtError(value)
     }
 }
-

@@ -1,6 +1,9 @@
-use kdef::{_KAPC_STATE, _LDR_DATA_TABLE_ENTRY};
 use core::ffi::CStr;
 
+use kdef::{
+    _KAPC_STATE,
+    _LDR_DATA_TABLE_ENTRY,
+};
 use winapi::{
     km::wdm::PEPROCESS,
     shared::ntdef::{
@@ -85,7 +88,7 @@ impl Process {
 
 pub struct ModuleInfo {
     pub base_address: usize,
-    pub module_size: usize
+    pub module_size: usize,
 }
 
 pub struct AttachedProcess<'a> {

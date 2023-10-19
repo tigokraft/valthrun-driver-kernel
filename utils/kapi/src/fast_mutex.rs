@@ -1,8 +1,6 @@
 //! Fast mutex implementation from https://github.com/StephanvanSchaik/windows-kernel-rs (MIT license)
 
 use alloc::boxed::Box;
-use kdef::_FAST_MUTEX;
-use utils_imports::{dynamic_import_table, provider::SystemExport};
 use core::{
     cell::UnsafeCell,
     ops::{
@@ -11,6 +9,11 @@ use core::{
     },
 };
 
+use kdef::_FAST_MUTEX;
+use utils_imports::{
+    dynamic_import_table,
+    provider::SystemExport,
+};
 use winapi::shared::ntdef::SynchronizationEvent;
 
 use super::KEVENT_IMPORTS;

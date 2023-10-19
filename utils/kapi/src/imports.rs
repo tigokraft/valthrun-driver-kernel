@@ -1,20 +1,32 @@
 #![allow(unused)]
 
-use kdef::{_PEB, _KAPC_STATE, OBJECT_NAME_INFORMATION, POBJECT_TYPE, _OB_CALLBACK_REGISTRATION};
-use utils_imports::{dynamic_import_table, provider::SystemExport};
+use kdef::{
+    OBJECT_NAME_INFORMATION,
+    POBJECT_TYPE,
+    _KAPC_STATE,
+    _OB_CALLBACK_REGISTRATION,
+    _PEB,
+};
+use utils_imports::{
+    dynamic_import_table,
+    provider::SystemExport,
+};
 use winapi::{
-    km::{wdm::{
-        DEVICE_OBJECT,
-        DEVICE_TYPE,
-        DRIVER_OBJECT,
-        IO_PRIORITY::KPRIORITY_BOOST,
-        KPROCESSOR_MODE,
-        PDEVICE_OBJECT,
-        PEPROCESS,
-        PETHREAD,
-        PIRP,
-        POOL_TYPE,
-    }, ndis::PMDL},
+    km::{
+        ndis::PMDL,
+        wdm::{
+            DEVICE_OBJECT,
+            DEVICE_TYPE,
+            DRIVER_OBJECT,
+            IO_PRIORITY::KPRIORITY_BOOST,
+            KPROCESSOR_MODE,
+            PDEVICE_OBJECT,
+            PEPROCESS,
+            PETHREAD,
+            PIRP,
+            POOL_TYPE,
+        },
+    },
     shared::{
         guiddef::LPCGUID,
         ntdef::{
@@ -167,7 +179,7 @@ type MmIsAddressValid = unsafe extern "system" fn(Address: PVOID) -> bool;
 dynamic_import_table! {
     pub imports GLOBAL_IMPORTS {
         pub RtlImageNtHeader: RtlImageNtHeader = SystemExport::new(obfstr!("RtlImageNtHeader")),
-        
+
         pub KeQuerySystemTimePrecise: KeQuerySystemTimePrecise = SystemExport::new(obfstr!("KeQuerySystemTimePrecise")),
         pub KeQueryTimeIncrement: KeQueryTimeIncrement = SystemExport::new(obfstr!("KeQueryTimeIncrement")),
         pub KeStackAttachProcess: KeStackAttachProcess = SystemExport::new(obfstr!("KeStackAttachProcess")),

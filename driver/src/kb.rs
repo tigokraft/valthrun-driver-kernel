@@ -7,9 +7,21 @@ use anyhow::{
     anyhow,
     Context,
 };
-use kapi::{UnicodeStringEx, Object, OBJECT_TYPE_IMPORT, KeRaiseIrql, DISPATCH_LEVEL, KeLowerIrql};
+use kapi::{
+    KeLowerIrql,
+    KeRaiseIrql,
+    Object,
+    UnicodeStringEx,
+    DISPATCH_LEVEL,
+    OBJECT_TYPE_IMPORT,
+};
 use kapi_kmodule::KModule;
-use kdef::{KeyboardClassServiceCallbackFn, KEYBOARD_INPUT_DATA, KEYBOARD_FLAG_MAKE, KEYBOARD_FLAG_BREAK};
+use kdef::{
+    KeyboardClassServiceCallbackFn,
+    KEYBOARD_FLAG_BREAK,
+    KEYBOARD_FLAG_MAKE,
+    KEYBOARD_INPUT_DATA,
+};
 use obfstr::obfstr;
 use valthrun_driver_shared::{
     ByteSequencePattern,
@@ -93,7 +105,7 @@ fn find_keyboard_service_callback() -> anyhow::Result<KeyboardClassServiceCallba
 #[allow(unused)]
 pub fn create_keyboard_input() -> anyhow::Result<KeyboardInput> {
     let service_callback = find_keyboard_service_callback()?;
-    
+
     let name = UNICODE_STRING::from_bytes(obfstr::wide!("\\Driver\\KbdClass"));
     let kb_driver = Object::reference_by_name(&name, unsafe {
         *OBJECT_TYPE_IMPORT.unwrap().IoDriverObjectType

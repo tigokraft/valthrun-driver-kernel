@@ -1,14 +1,29 @@
-use core::{pin::Pin, time::Duration, cell::UnsafeCell};
-
 use alloc::boxed::Box;
-use utils_imports::{dynamic_import_table, provider::SystemExport};
-use winapi::{km::wdm::DISPATCHER_HEADER, shared::ntdef::{ULARGE_INTEGER, LIST_ENTRY, PVOID}};
+use core::{
+    cell::UnsafeCell,
+    pin::Pin,
+    time::Duration,
+};
+
+use utils_imports::{
+    dynamic_import_table,
+    provider::SystemExport,
+};
+use winapi::{
+    km::wdm::DISPATCHER_HEADER,
+    shared::ntdef::{
+        LIST_ENTRY,
+        PVOID,
+        ULARGE_INTEGER,
+    },
+};
 
 use crate::Waitable;
 
 type KeInitializeTimer = unsafe extern "C" fn(Timer: *mut _KTIMER);
 type KeCancelTimer = unsafe extern "C" fn(Timer: *mut _KTIMER) -> bool;
-type KeSetTimerEx = unsafe extern "C" fn(Timer: *mut _KTIMER, DueTime: i64, Period: i32, *mut ()) -> bool;
+type KeSetTimerEx =
+    unsafe extern "C" fn(Timer: *mut _KTIMER, DueTime: i64, Period: i32, *mut ()) -> bool;
 
 dynamic_import_table! {
     pub imports TIMER_IMPORTS {
@@ -46,10 +61,10 @@ impl KTimer {
         let imports = TIMER_IMPORTS.unwrap();
         unsafe {
             (imports.KeSetTimerEx)(
-                &mut *self.inner.get(), 
-                (duration.as_nanos() / 100) as i64 * -1, 
-                0, 
-                core::ptr::null_mut()
+                &mut *self.inner.get(),
+                (duration.as_nanos() / 100) as i64 * -1,
+                0,
+                core::ptr::null_mut(),
             )
         }
     }
@@ -64,9 +79,9 @@ impl KTimer {
     //     let initial_period = (interval.as_nanos() / 100) as i64 * -1;
     //     unsafe {
     //         (imports.KeSetTimerEx)(
-    //             &mut *self.inner.get(), 
-    //             initial_period, 
-    //             interval.as_millis() as i32, 
+    //             &mut *self.inner.get(),
+    //             initial_period,
+    //             interval.as_millis() as i32,
     //             core::ptr::null_mut()
     //         )
     //     }

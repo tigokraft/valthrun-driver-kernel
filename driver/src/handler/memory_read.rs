@@ -1,31 +1,25 @@
 use alloc::vec::Vec;
-use kapi::Process;
 use core::mem::size_of_val;
 
+use kapi::Process;
 use valthrun_driver_shared::{
     requests::{
+        MemoryAccessMode,
         RequestRead,
-        ResponseRead, MemoryAccessMode,
+        ResponseRead,
     },
     IO_MAX_DEREF_COUNT,
 };
 use winapi::{
     ctypes::c_void,
-    km::wdm::{
-        KPROCESSOR_MODE,
-        PEPROCESS,
-    },
-    shared::{
-        ntdef::{
-            NTSTATUS,
-            PCVOID,
-            PVOID,
-        },
-        ntstatus::STATUS_SUCCESS,
-    },
+    km::wdm::KPROCESSOR_MODE,
+    shared::ntstatus::STATUS_SUCCESS,
 };
 
-use crate::pmem;
+use crate::{
+    imports::GLOBAL_IMPORTS,
+    pmem,
+};
 
 struct ReadContext<'a> {
     /// Target process where we want to read the data from
@@ -75,20 +69,9 @@ fn read_memory_attached(ctx: &mut ReadContext) -> bool {
     seh::safe_copy(ctx.read_buffer, current_address)
 }
 
-extern "system" {
-    fn MmCopyVirtualMemory(
-        FromProcess: PEPROCESS,
-        FromAddress: PCVOID,
-        ToProcess: PEPROCESS,
-        ToAddress: PVOID,
-        BufferSize: usize,
-        PreviousMode: KPROCESSOR_MODE,
-        NumberOfBytesCopied: *mut usize,
-    ) -> NTSTATUS;
-}
-
 #[allow(unused)]
 fn read_memory_mm(ctx: &mut ReadContext) -> bool {
+    let imports = GLOBAL_IMPORTS.unwrap();
     let current_process = Process::current();
 
     let mut current_address = ctx.offsets[0];
@@ -104,7 +87,7 @@ fn read_memory_mm(ctx: &mut ReadContext) -> bool {
 
         let success = unsafe {
             let mut bytes_copied = 0usize;
-            MmCopyVirtualMemory(
+            (imports.MmCopyVirtualMemory)(
                 ctx.process.eprocess(),
                 current_address as *const c_void,
                 current_process.eprocess(),
@@ -130,7 +113,7 @@ fn read_memory_mm(ctx: &mut ReadContext) -> bool {
 
     unsafe {
         let mut bytes_copied = 0usize;
-        let status = MmCopyVirtualMemory(
+        let status = (imports.MmCopyVirtualMemory)(
             ctx.process.eprocess(),
             current_address as *const c_void,
             current_process.eprocess(),
@@ -207,8 +190,15 @@ pub fn handler_read(req: &RequestRead, res: &mut ResponseRead) -> anyhow::Result
 
     let read_result = match req.mode {
         MemoryAccessMode::AttachProcess => read_memory_attached(&mut read_ctx),
-        MemoryAccessMode::CopyVirtualMemory => read_memory_mm(&mut read_ctx),
-        MemoryAccessMode::Physical => read_memory_physical(&mut read_ctx),
+
+        // Do not expose them currently for normal valthrun users. CS2 does not check these.
+        // MemoryAccessMode::CopyVirtualMemory => read_memory_mm(&mut read_ctx),
+        // MemoryAccessMode::Physical => read_memory_physical(&mut read_ctx),
+        #[allow(unreachable_patterns)]
+        _ => {
+            *res = ResponseRead::AccessModeUnavailable;
+            return Ok(());
+        }
     };
 
     if !read_result {

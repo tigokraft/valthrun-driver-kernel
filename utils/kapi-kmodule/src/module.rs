@@ -14,10 +14,13 @@ use anyhow::Context;
 use obfstr::obfstr;
 use valthrun_driver_shared::SearchPattern;
 use winapi::{
-    shared::{ntdef::{
-        HANDLE,
-        PVOID,
-    }, ntstatus::STATUS_SUCCESS},
+    shared::{
+        ntdef::{
+            HANDLE,
+            PVOID,
+        },
+        ntstatus::STATUS_SUCCESS,
+    },
     um::winnt::{
         IMAGE_FILE_HEADER,
         IMAGE_SCN_CNT_CODE,

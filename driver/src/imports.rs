@@ -1,7 +1,16 @@
 #![allow(dead_code)]
 
-use kdef::{_PEB, _KAPC_STATE, OBJECT_NAME_INFORMATION, POBJECT_TYPE, _OB_CALLBACK_REGISTRATION};
-use utils_imports::{dynamic_import_table, provider::SystemExport};
+use kdef::{
+    OBJECT_NAME_INFORMATION,
+    POBJECT_TYPE,
+    _KAPC_STATE,
+    _OB_CALLBACK_REGISTRATION,
+    _PEB,
+};
+use utils_imports::{
+    dynamic_import_table,
+    provider::SystemExport,
+};
 use winapi::{
     km::wdm::{
         DEVICE_OBJECT,
@@ -23,6 +32,7 @@ use winapi::{
             KIRQL,
             NTSTATUS,
             PCUNICODE_STRING,
+            PCVOID,
             PHANDLE,
             POBJECT_ATTRIBUTES,
             PVOID,
@@ -175,6 +185,15 @@ type MmMapLockedPagesSpecifyCache = unsafe extern "system" fn(
     Priority: u32,
 ) -> PVOID;
 type MmIsAddressValid = unsafe extern "system" fn(Address: PVOID) -> bool;
+type MmCopyVirtualMemory = unsafe extern "system" fn(
+    FromProcess: PEPROCESS,
+    FromAddress: PCVOID,
+    ToProcess: PEPROCESS,
+    ToAddress: PVOID,
+    BufferSize: usize,
+    PreviousMode: KPROCESSOR_MODE,
+    NumberOfBytesCopied: *mut usize,
+) -> NTSTATUS;
 
 dynamic_import_table! {
     pub imports GLOBAL_IMPORTS {
@@ -224,6 +243,7 @@ dynamic_import_table! {
         pub MmUnlockPages: MmUnlockPages = SystemExport::new(obfstr!("MmUnlockPages")),
         pub MmMapLockedPagesSpecifyCache: MmMapLockedPagesSpecifyCache = SystemExport::new(obfstr!("MmMapLockedPagesSpecifyCache")),
         pub MmIsAddressValid: MmIsAddressValid = SystemExport::new(obfstr!("MmIsAddressValid")),
+        pub MmCopyVirtualMemory: MmCopyVirtualMemory = SystemExport::new(obfstr!("MmCopyVirtualMemory")),
     }
 }
 

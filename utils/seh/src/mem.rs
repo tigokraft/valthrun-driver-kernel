@@ -1,6 +1,13 @@
 use kdef::_PEB;
-use utils_imports::{dynamic_import_table, provider::SystemExport, ImportResult};
-use winapi::km::{wdm::KPROCESSOR_MODE, ndis::PMDL};
+use utils_imports::{
+    dynamic_import_table,
+    provider::SystemExport,
+    ImportResult,
+};
+use winapi::km::{
+    ndis::PMDL,
+    wdm::KPROCESSOR_MODE,
+};
 
 use crate::wrapper;
 
@@ -16,8 +23,7 @@ dynamic_import_table! {
 }
 
 pub fn init() -> ImportResult<()> {
-    MEM_IMPORTS.resolve()
-        .map(|_| ())
+    MEM_IMPORTS.resolve().map(|_| ())
 }
 
 pub fn probe_read(target: u64, length: usize, align: usize) -> bool {

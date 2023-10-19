@@ -10,19 +10,26 @@
 #![feature(result_option_inspect)]
 #![allow(dead_code)]
 
-use alloc::{boxed::Box, format};
-use imports::LL_GLOBAL_IMPORTS;
-use kapi::{UnicodeStringEx, device_general_irp_handler, NTStatusEx};
-use kdef::DPFLTR_LEVEL;
-use panic_hook::DEBUG_IMPORTS;
+use alloc::{
+    boxed::Box,
+    format,
+};
 use core::cell::SyncUnsafeCell;
 
 use device::ValthrunDevice;
 use handler::HandlerRegistry;
+use imports::LL_GLOBAL_IMPORTS;
+use kapi::{
+    device_general_irp_handler,
+    NTStatusEx,
+    UnicodeStringEx,
+};
 use kb::KeyboardInput;
+use kdef::DPFLTR_LEVEL;
 use metrics::MetricsClient;
 use mouse::MouseInput;
 use obfstr::obfstr;
+use panic_hook::DEBUG_IMPORTS;
 use valthrun_driver_shared::requests::RequestHealthCheck;
 use winapi::{
     km::wdm::DRIVER_OBJECT,
@@ -41,18 +48,23 @@ use winapi::{
 use crate::{
     handler::{
         handler_get_modules,
+        handler_init,
         handler_keyboard_state,
+        handler_metrics_record,
         handler_mouse_move,
         handler_protection_toggle,
-        handler_read, handler_init, handler_metrics_record,
+        handler_read,
+        handler_write,
     },
+    imports::GLOBAL_IMPORTS,
     logger::APP_LOGGER,
+    metrics::REPORT_TYPE_DRIVER_STATUS,
     offsets::initialize_nt_offsets,
     winver::{
         initialize_os_info,
         os_info,
     },
-    wsk::WskInstance, imports::GLOBAL_IMPORTS,
+    wsk::WskInstance,
 };
 
 extern crate compiler_builtins;
@@ -96,6 +108,11 @@ extern "system" fn driver_unload(_driver: &mut DRIVER_OBJECT) {
 
 fn real_driver_unload() {
     log::info!("Unloading...");
+
+    if let Some(metrics) = unsafe { &mut *METRICS_CLIENT.get() } {
+        /* notify the metrics server about the unload */
+        metrics.add_record(REPORT_TYPE_DRIVER_STATUS, "unload");
+    }
 
     /* Remove the device */
     let device_handle = unsafe { &mut *VALTHRUN_DEVICE.get() };
@@ -218,6 +235,14 @@ pub extern "system" fn driver_entry(
         }
     };
 
+    if let Some(metrics) = unsafe { &*METRICS_CLIENT.get() } {
+        /* report the load result if metrics could be already initialized */
+        metrics.add_record(
+            REPORT_TYPE_DRIVER_STATUS,
+            format!("load:{:X}, manual:{:X}", status, driver.is_null() as u8),
+        );
+    }
+
     if status != STATUS_SUCCESS {
         /* cleanup all pending / initialized resources */
         real_driver_unload();
@@ -227,11 +252,11 @@ pub extern "system" fn driver_entry(
 }
 
 fn wsk_dummy() -> anyhow::Result<()> {
-    if let Some(metrics) = unsafe { &*METRICS_CLIENT.get() } {
-        for i in 0..1_000 {
-            metrics.add_record(format!("testing_{}", i), "some payload but the content is a little longer so it will trigger the message too long issue");
-        }
-    }
+    // if let Some(metrics) = unsafe { &*METRICS_CLIENT.get() } {
+    //     for i in 0..1_000 {
+    //         metrics.add_record(format!("testing_{}", i), "some payload but the content is a little longer so it will trigger the message too long issue");
+    //     }
+    // }
 
     // let wsk = unsafe { &*WSK.get() };
     // let wsk = wsk.as_ref().context("missing WSK instance")?;
@@ -283,27 +308,6 @@ extern "C" fn internal_driver_entry(
         return CSTATUS_DRIVER_INIT_FAILED;
     }
 
-    // {
-    //     let mut buffer = [ 0x76u8; 32 ];
-    //     let x = WskBuffer::create(&mut buffer);
-    //     log::debug!("WSK Buffer error: {:?}", x.err());
-    // }
-    // return CSTATUS_DRIVER_INIT_FAILED;
-
-    /* Needs to be done first as it's assumed to be init */
-    if let Err(error) = initialize_nt_offsets() {
-        log::error!(
-            "{}: {:#}",
-            obfstr!("Failed to initialize NT_OFFSETS"),
-            error
-        );
-        return CSTATUS_DRIVER_INIT_FAILED;
-    }
-
-    for function in driver.MajorFunction.iter_mut() {
-        *function = Some(device_general_irp_handler);
-    }
-
     match WskInstance::create(1 << 8) {
         Ok(wsk) => {
             unsafe { *WSK.get() = Some(wsk) };
@@ -327,6 +331,19 @@ extern "C" fn internal_driver_entry(
     if let Err(err) = wsk_dummy() {
         log::error!("{}: {:#}", obfstr!("WSK dummy error"), err);
         return CSTATUS_DRIVER_INIT_FAILED;
+    }
+
+    if let Err(error) = initialize_nt_offsets() {
+        log::error!(
+            "{}: {:#}",
+            obfstr!("Failed to initialize NT_OFFSETS"),
+            error
+        );
+        return CSTATUS_DRIVER_INIT_FAILED;
+    }
+
+    for function in driver.MajorFunction.iter_mut() {
+        *function = Some(device_general_irp_handler);
     }
 
     // match kb::create_keyboard_input() {
@@ -389,12 +406,13 @@ extern "C" fn internal_driver_entry(
     });
     handler.register(&handler_get_modules);
     handler.register(&handler_read);
+    handler.register(&handler_write);
     handler.register(&handler_protection_toggle);
     handler.register(&handler_mouse_move);
     handler.register(&handler_keyboard_state);
     handler.register(&handler_init);
     handler.register(&handler_metrics_record);
-    
+
     unsafe { *REQUEST_HANDLER.get() = Some(handler) };
 
     log::info!("Driver Initialized");

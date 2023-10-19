@@ -1,11 +1,27 @@
-use aes_gcm::{Key, Aes256Gcm, KeyInit, AeadCore, AeadInPlace};
-use alloc::{string::String, vec::Vec};
+use alloc::{
+    string::String,
+    vec::Vec,
+};
+
+use aes_gcm::{
+    AeadCore,
+    AeadInPlace,
+    Aes256Gcm,
+    Key,
+    KeyInit,
+};
+use anyhow::anyhow;
 use base64::prelude::*;
 use obfstr::obfstr;
-use rsa::{RsaPublicKey, Pkcs1v15Encrypt, pkcs8::DecodePublicKey};
-
-use anyhow::anyhow;
-use sha1::{ Sha1, Digest };
+use rsa::{
+    pkcs8::DecodePublicKey,
+    Pkcs1v15Encrypt,
+    RsaPublicKey,
+};
+use sha1::{
+    Digest,
+    Sha1,
+};
 
 use crate::util::Win32Rng;
 
@@ -33,13 +49,13 @@ impl MetricsCrypto {
 
         let mut rng = Win32Rng::new();
         let aes_key = Aes256Gcm::generate_key(&mut rng);
-        
+
         Ok(Self {
             key_id,
             public_key,
 
             rng,
-            aes_key
+            aes_key,
         })
     }
 
@@ -51,17 +67,20 @@ impl MetricsCrypto {
         let nonce = Aes256Gcm::generate_nonce(&mut self.rng);
 
         let cipher = Aes256Gcm::new(&self.aes_key);
-        let tag = cipher.encrypt_in_place_detached(&nonce, b"", &mut payload)
+        let tag = cipher
+            .encrypt_in_place_detached(&nonce, b"", &mut payload)
             .map_err(|err| anyhow!("{}: {:#}", obfstr!("payload encrypt"), err))?;
 
         let mut crypto_header = [0u8; 0x20 + 0x0C + 0x10];
         crypto_header[0x00..0x20].copy_from_slice(self.aes_key.as_slice());
         crypto_header[0x20..0x2C].copy_from_slice(nonce.as_slice());
         crypto_header[0x2C..0x3C].copy_from_slice(tag.as_slice());
-        
-        let mut crypto_header = self.public_key.encrypt(&mut self.rng, Pkcs1v15Encrypt, &crypto_header)
+
+        let mut crypto_header = self
+            .public_key
+            .encrypt(&mut self.rng, Pkcs1v15Encrypt, &crypto_header)
             .map_err(|err| anyhow!("{}: {:#}", obfstr!("header encrypt"), err))?;
-        
+
         crypto_header.extend_from_slice(&payload);
         Ok(crypto_header)
     }

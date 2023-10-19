@@ -1,14 +1,16 @@
 use alloc::format;
-use kdef::DPFLTR_LEVEL;
-use utils_imports::{dynamic_import_table, provider::SystemExport};
 use core::{
     cell::SyncUnsafeCell,
     panic::PanicInfo,
 };
 
+use kdef::DPFLTR_LEVEL;
 use obfstr::obfstr;
+use utils_imports::{
+    dynamic_import_table,
+    provider::SystemExport,
+};
 use winapi::shared::ntdef::NTSTATUS;
-
 
 type DbgPrintEx =
     unsafe extern "C" fn(ComponentId: u32, Level: u32, Format: *const u8, ...) -> NTSTATUS;

@@ -1,6 +1,12 @@
-use alloc::{string::String, vec::Vec};
+use alloc::{
+    string::String,
+    vec::Vec,
+};
 
-use serde::{ Serialize, Deserialize };
+use serde::{
+    Deserialize,
+    Serialize,
+};
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -54,10 +60,8 @@ pub enum ResponsePostReport {
         /// Sequence numbers of successfully submitted records
         records_submitted: Vec<u32>,
     },
-    
+
     #[serde(rename_all = "camelCase")]
     #[serde(rename = "generic-error")]
-    GenericError { 
-        drop_records: bool
-    },
+    GenericError { drop_records: bool },
 }

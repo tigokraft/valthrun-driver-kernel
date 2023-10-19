@@ -2,7 +2,10 @@ use alloc::{
     boxed::Box,
     sync::Arc,
 };
-use core::{cell::UnsafeCell, time::Duration};
+use core::{
+    cell::UnsafeCell,
+    time::Duration,
+};
 
 use obfstr::obfstr;
 use winapi::{
@@ -10,7 +13,10 @@ use winapi::{
         _KWAIT_REASON_Executive,
         KPROCESSOR_MODE,
     },
-    shared::{ntdef::PVOID, ntstatus::STATUS_SUCCESS},
+    shared::{
+        ntdef::PVOID,
+        ntstatus::STATUS_SUCCESS,
+    },
 };
 
 use super::{
@@ -38,14 +44,14 @@ unsafe impl<T> Sync for JoinHandle<T> {}
 
 pub enum TryJoinResult<T> {
     Success(T),
-    Timeout(JoinHandle<T>)
+    Timeout(JoinHandle<T>),
 }
 
 impl<T> JoinHandle<T> {
     pub fn try_join(self, timeout: Duration) -> TryJoinResult<T> {
         let imports = GLOBAL_IMPORTS.unwrap();
         let timeout = (timeout.as_nanos() / 100) as i64 * -1;
-        
+
         let success = unsafe {
             (imports.KeWaitForSingleObject)(
                 self.thread_object.cast(),

@@ -1,5 +1,6 @@
 use core::{
-    marker::PhantomData, cell::SyncUnsafeCell,
+    cell::SyncUnsafeCell,
+    marker::PhantomData,
 };
 
 use crate::ll;

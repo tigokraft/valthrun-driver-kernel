@@ -2,7 +2,10 @@ use core::cell::SyncUnsafeCell;
 
 use anyhow::anyhow;
 use kapi::NTStatusEx;
-use utils_imports::{dynamic_import_table, provider::SystemExport};
+use utils_imports::{
+    dynamic_import_table,
+    provider::SystemExport,
+};
 use winapi::shared::ntdef::NTSTATUS;
 
 #[repr(C)]

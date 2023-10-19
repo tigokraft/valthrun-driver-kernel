@@ -6,6 +6,9 @@ pub use cs_module::*;
 mod memory_read;
 pub use memory_read::*;
 
+mod memory_write;
+pub use memory_write::*;
+
 mod protect;
 pub use protect::*;
 

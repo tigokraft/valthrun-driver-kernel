@@ -8,9 +8,24 @@ use anyhow::{
     anyhow,
     Context,
 };
-use kapi::{FastMutex, Process, OBJECT_TYPE_IMPORT, UnicodeStringEx, NTStatusEx};
+use kapi::{
+    FastMutex,
+    NTStatusEx,
+    Process,
+    UnicodeStringEx,
+    OBJECT_TYPE_IMPORT,
+};
 use kapi_kmodule::KModule;
-use kdef::{_OB_PRE_OPERATION_INFORMATION, _OB_PRE_CREATE_HANDLE_INFORMATION, _OB_PRE_DUPLICATE_HANDLE_INFORMATION, _OB_OPERATION_REGISTRATION, _OB_CALLBACK_REGISTRATION, OB_OPERATION_HANDLE_DUPLICATE, OB_OPERATION_HANDLE_CREATE, OB_FLT_REGISTRATION_VERSION};
+use kdef::{
+    OB_FLT_REGISTRATION_VERSION,
+    OB_OPERATION_HANDLE_CREATE,
+    OB_OPERATION_HANDLE_DUPLICATE,
+    _OB_CALLBACK_REGISTRATION,
+    _OB_OPERATION_REGISTRATION,
+    _OB_PRE_CREATE_HANDLE_INFORMATION,
+    _OB_PRE_DUPLICATE_HANDLE_INFORMATION,
+    _OB_PRE_OPERATION_INFORMATION,
+};
 use log::Level;
 use obfstr::obfstr;
 use once_cell::race::OnceBox;
@@ -20,8 +35,10 @@ use winapi::shared::ntdef::{
     UNICODE_STRING,
 };
 
-use crate::{imports::GLOBAL_IMPORTS, offsets::get_nt_offsets};
-
+use crate::{
+    imports::GLOBAL_IMPORTS,
+    offsets::get_nt_offsets,
+};
 
 struct ProtectionState {
     ob_registration: PVOID,

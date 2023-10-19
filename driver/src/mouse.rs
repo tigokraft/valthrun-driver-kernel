@@ -7,20 +7,15 @@ use anyhow::{
     anyhow,
     Context,
 };
+use kapi::{
+    KeLowerIrql,
+    KeRaiseIrql,
+    Object,
+    UnicodeStringEx,
+    DISPATCH_LEVEL,
+    OBJECT_TYPE_IMPORT,
+};
 use kapi_kmodule::KModule;
-use obfstr::obfstr;
-use valthrun_driver_shared::{
-    ByteSequencePattern,
-    MouseState,
-};
-use winapi::{
-    km::wdm::DRIVER_OBJECT,
-    shared::ntdef::{
-        PVOID,
-        UNICODE_STRING,
-    },
-};
-
 use kdef::{
     MouseClassServiceCallbackFn,
     MOUSE_BUTTON_4_DOWN,
@@ -37,11 +32,19 @@ use kdef::{
     MOUSE_BUTTON_WHEEL,
     MOUSE_INPUT_DATA,
 };
-use kapi::{
-    Object,
-    UnicodeStringEx,
-    OBJECT_TYPE_IMPORT, KeLowerIrql, KeRaiseIrql, DISPATCH_LEVEL,
+use obfstr::obfstr;
+use valthrun_driver_shared::{
+    ByteSequencePattern,
+    MouseState,
 };
+use winapi::{
+    km::wdm::DRIVER_OBJECT,
+    shared::ntdef::{
+        PVOID,
+        UNICODE_STRING,
+    },
+};
+
 use crate::offsets::NtOffsets;
 
 pub struct MouseInput {
@@ -105,7 +108,7 @@ impl MouseInput {
 
         let mut consumed = 0;
         let input_ptr = input_data.as_ptr_range();
-        
+
         let irql = KeRaiseIrql(DISPATCH_LEVEL);
         (self.service_callback)(
             self.mouse_device.cast(),

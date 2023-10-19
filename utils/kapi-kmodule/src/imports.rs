@@ -1,5 +1,14 @@
-use utils_imports::{dynamic_import_table, provider::SystemExport};
-use winapi::{shared::ntdef::{PVOID, NTSTATUS}, um::winnt::PIMAGE_NT_HEADERS};
+use utils_imports::{
+    dynamic_import_table,
+    provider::SystemExport,
+};
+use winapi::{
+    shared::ntdef::{
+        NTSTATUS,
+        PVOID,
+    },
+    um::winnt::PIMAGE_NT_HEADERS,
+};
 
 type RtlImageNtHeader = unsafe extern "C" fn(ModuleAddress: PVOID) -> PIMAGE_NT_HEADERS;
 

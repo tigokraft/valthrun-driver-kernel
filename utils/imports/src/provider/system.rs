@@ -1,9 +1,14 @@
+use alloc::string::ToString;
 use core::fmt::Debug;
 
-use alloc::string::ToString;
 use obfstr::obfstr;
 
-use crate::{DynamicImport, ll, ImportResult, ImportError};
+use crate::{
+    ll,
+    DynamicImport,
+    ImportError,
+    ImportResult,
+};
 
 #[derive(Debug)]
 pub struct SystemExport<'a> {
@@ -20,6 +25,9 @@ impl<'a, T> DynamicImport<T> for SystemExport<'a> {
     fn resolve(self) -> ImportResult<T> {
         ll::lookup_system_export(self.function)
             .map(|value| unsafe { core::mem::transmute_copy(&value) })
-            .ok_or_else(|| ImportError::SymbolUnknown { module: obfstr!("system").to_string(), symbol: self.function.to_string() })
+            .ok_or_else(|| ImportError::SymbolUnknown {
+                module: obfstr!("system").to_string(),
+                symbol: self.function.to_string(),
+            })
     }
 }
