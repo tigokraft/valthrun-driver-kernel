@@ -4,9 +4,9 @@ if(-not $?) {
     exit 1
 }
 
-cp ./target/x86_64-pc-windows-msvc/release/driver.dll ./target/x86_64-pc-windows-msvc/release/valthrun-driver.sys
+& "./Strip-Driver.ps1" .-InputFile ./target/x86_64-pc-windows-msvc/release/driver.dll -OutputFile ./target/x86_64-pc-windows-msvc/release/valthrun-driver.sys
 if(-not $?) {
-    Write-Host "Failed to copy driver"
+    Write-Host "Failed to strip driver"
     exit 1
 }
 
