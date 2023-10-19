@@ -1,0 +1,45 @@
+-- prints string to the current report and goes to new line
+function AddToReport(str)
+    -- we can do this because hReport is a global variable
+    LogPrint(hReport, str .. "\n")
+end
+
+function string.tohex(str)
+    return (str:gsub('.', function (c)
+        return string.format('%02X', string.byte(c))
+    end))
+end
+
+hReport = CreateLog("strip_driver.log")
+if hReport == null then
+   return
+end
+
+if argc < 2 then
+    AddToReport("Expected <input> and <output> file")
+    return
+end
+
+DriverHandle = OpenFile(argv[1])
+if DriverHandle == null then
+    AddToReport("Failed to open driver dll.")
+    return
+end
+
+OffsetDataDirectories = GetOffset(DriverHandle, PE_DataDirectories)
+RvaExceptionDirectory = ReadDword(DriverHandle, OffsetDataDirectories + 0x8 * 0x03)
+
+AddToReport("RVA exception directory: 0x" .. string.format("%X", RvaExceptionDirectory))
+if RvaExceptionDirectory > 0 then
+    EDSectionIndex = SectionFromRva(DriverHandle, RvaExceptionDirectory)
+    if not DeleteSection(DriverHandle, EDSectionIndex) then
+        AddToReport("Failed to delete exception directory section")
+        return
+    end 
+
+    AddToReport("Deleted exception directory section (" .. EDSectionIndex .. ")")
+    WriteDword(DriverHandle, OffsetDataDirectories + 0x8 * 0x03, 0x00) -- clear ed rva
+    WriteDword(DriverHandle, OffsetDataDirectories + 0x8 * 0x03 + 0x04) -- set ed length to zero
+end 
+SaveFileAs(DriverHandle, argv[2])
+AddToReport("-- success --")

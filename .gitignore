@@ -1,4 +1,6 @@
 /target
 *.cer
 *.exe
+!/tools/*
 .vscode
+strip_driver.log
