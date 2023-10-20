@@ -18,7 +18,7 @@ use crate::{
 };
 
 const FT_PROVIDER_RSMB: u32 = 0x52534d42; // hex for 'RSMB'
-fn get_bios_unique_id() -> anyhow::Result<Option<[u8; 16]>> {
+fn get_bios_unique_id() -> anyhow::Result<Option<String>> {
     let table_size = unsafe {
         let mut result = 0;
         let status_code = (GLOBAL_IMPORTS.unwrap().ExGetSystemFirmwareTable)(
@@ -80,14 +80,12 @@ fn get_bios_unique_id() -> anyhow::Result<Option<[u8; 16]>> {
         /* bios uuid found */
         offset += 0x08; // UUID offset
 
-        let mut result = [0u8; 16];
         /*
          * Note:
          * As off version 2.6 of the SMBIOS specification, the first 3 fields of the UUID are supposed to be encoded on little-endian. (para 7.2.1)
          * We ignore this here, asd it's still unique, just not in a proper uuid format.
          */
-        result.copy_from_slice(&buffer[offset..offset + 16]);
-        return Ok(Some(result));
+        return Ok(Some(hex::encode(&buffer[offset..offset + 16])));
     }
 
     Ok(None)

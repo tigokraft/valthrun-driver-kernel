@@ -43,7 +43,7 @@ pub struct MetricsRecord {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DeviceInfo {
-    pub bios_uuid: Option<[u8; 16]>,
+    pub bios_uuid: Option<String>,
 
     pub win_major_version: u32,
     pub win_minor_version: u32,

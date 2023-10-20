@@ -38,6 +38,7 @@ sha1 = { version = "0.10.6", default-features = false, features = [ ]}
 base64 = { version = "0.21.4", default-features = false, features = [ "alloc" ]}
 serde_json = { version = "1.0.107", default-features = false, features = [ "alloc" ]}
 aes-gcm = "0.10.3"
+hex = { version = "0.4.3", default-features = false, features = ["alloc"] }
 
 [dependencies.compiler_builtins]
 git = "https://github.com/rust-lang/compiler-builtins"
