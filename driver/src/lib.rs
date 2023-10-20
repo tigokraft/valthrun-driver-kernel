@@ -239,7 +239,12 @@ pub extern "system" fn driver_entry(
         /* report the load result if metrics could be already initialized */
         metrics.add_record(
             REPORT_TYPE_DRIVER_STATUS,
-            format!("load:{:X}, version:{}, manual:{:X}", status, env!("CARGO_PKG_VERSION"), driver.is_null() as u8),
+            format!(
+                "load:{:X}, version:{}, manual:{:X}",
+                status,
+                env!("CARGO_PKG_VERSION"),
+                driver.is_null() as u8
+            ),
         );
     }
 
