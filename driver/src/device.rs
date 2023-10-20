@@ -10,7 +10,7 @@ use kapi::{
 use kdef::{
     IRP_MJ_CLOSE,
     IRP_MJ_CREATE,
-    IRP_MJ_DEVICE_CONTROL,
+    IRP_MJ_DEVICE_CONTROL, IRP_MJ_SHUTDOWN,
 };
 use obfstr::obfstr;
 use winapi::{
@@ -38,7 +38,7 @@ use winapi::{
 
 use crate::{
     process_protection,
-    REQUEST_HANDLER,
+    REQUEST_HANDLER, METRICS_CLIENT, imports::GLOBAL_IMPORTS, metrics::REPORT_TYPE_DRIVER_STATUS,
 };
 
 type ValthrunDeviceHandle = DeviceHandle<()>;
@@ -49,6 +49,8 @@ pub struct ValthrunDevice {
 unsafe impl Sync for ValthrunDevice {}
 impl ValthrunDevice {
     pub fn create(driver: &mut DRIVER_OBJECT) -> anyhow::Result<Self> {
+        let imports = GLOBAL_IMPORTS.unwrap();
+
         let device_name = UNICODE_STRING::from_bytes(obfstr::wide!("\\Device\\valthrun"));
         let sddl =
             UNICODE_STRING::from_bytes(obfstr::wide!("D:P(A;;GA;;;SY)(A;;GA;;;BU)(A;;GA;;;AU)"));
@@ -71,12 +73,22 @@ impl ValthrunDevice {
         device.major_function[IRP_MJ_CREATE] = Some(irp_create);
         device.major_function[IRP_MJ_CLOSE] = Some(irp_close);
         device.major_function[IRP_MJ_DEVICE_CONTROL] = Some(irp_control);
+        device.major_function[IRP_MJ_SHUTDOWN] = Some(irp_shutdown);
 
         *device.flags_mut() |= DEVICE_FLAGS::DO_DIRECT_IO as u32;
         device.mark_initialized();
+        
+        unsafe { (imports.IoRegisterShutdownNotification)(device.device) };
         Ok(Self {
             device_handle: device,
         })
+    }
+}
+
+impl Drop for ValthrunDevice {
+    fn drop(&mut self) {
+        let imports = GLOBAL_IMPORTS.unwrap();
+        unsafe { (imports.IoUnregisterShutdownNotification)(self.device_handle.device) };
     }
 }
 
@@ -145,4 +157,17 @@ fn irp_control(_device: &mut ValthrunDeviceHandle, irp: &mut IRP) -> NTSTATUS {
             irp.complete_request(STATUS_INVALID_PARAMETER)
         }
     }
+}
+
+
+fn irp_shutdown(_device: &mut ValthrunDeviceHandle, _irp: &mut IRP) -> NTSTATUS {
+    log::debug!("{}", obfstr!("Received shutdown IRP"));
+
+    if let Some(mut metrics) = unsafe { &mut *METRICS_CLIENT.get() }.take() {
+        /* flush and shutdown metrics */
+        metrics.add_record(REPORT_TYPE_DRIVER_STATUS, "shutdown");
+        metrics.shutdown();
+    }
+
+    STATUS_SUCCESS
 }

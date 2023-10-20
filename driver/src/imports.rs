@@ -142,6 +142,8 @@ type IoAllocateMdl = unsafe extern "system" fn(
 ) -> PMDL;
 type IoFreeMdl = unsafe extern "system" fn(MemoryDescriptorList: PMDL);
 type IoFreeIrp = unsafe extern "system" fn(Irp: PIRP);
+type IoRegisterShutdownNotification = unsafe extern "system" fn(DeviceObject: PDEVICE_OBJECT) -> NTSTATUS;
+type IoUnregisterShutdownNotification = unsafe extern "system" fn(DeviceObject: PDEVICE_OBJECT);
 
 type ObfDereferenceObject = unsafe extern "system" fn(object: PVOID);
 type ObfReferenceObject = unsafe extern "system" fn(object: PVOID);
@@ -236,6 +238,8 @@ dynamic_import_table! {
         pub IoFreeIrp: IoFreeIrp = SystemExport::new(obfstr!("IoFreeIrp")),
         pub IoAllocateMdl: IoAllocateMdl = SystemExport::new(obfstr!("IoAllocateMdl")),
         pub IoFreeMdl: IoFreeMdl = SystemExport::new(obfstr!("IoFreeMdl")),
+        pub IoRegisterShutdownNotification: IoRegisterShutdownNotification = SystemExport::new(obfstr!("IoRegisterShutdownNotification")),
+        pub IoUnregisterShutdownNotification: IoUnregisterShutdownNotification = SystemExport::new(obfstr!("IoUnregisterShutdownNotification")),
 
         pub ZwQuerySystemInformation: ZwQuerySystemInformation = SystemExport::new(obfstr!("ZwQuerySystemInformation")),
         pub ZwClose: ZwClose = SystemExport::new(obfstr!("ZwClose")),
