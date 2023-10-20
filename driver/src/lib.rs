@@ -12,7 +12,7 @@
 
 use alloc::{
     boxed::Box,
-    format
+    format,
 };
 use core::cell::SyncUnsafeCell;
 

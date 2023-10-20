@@ -44,16 +44,16 @@ pub struct MetricsRecord {
 #[serde(rename_all = "camelCase")]
 pub struct DeviceInfo {
     pub bios_uuid: Option<[u8; 16]>,
- 
+
     pub win_major_version: u32,
     pub win_minor_version: u32,
     pub win_build_no: u32,
     pub win_platform_id: u32,
- 
+
     pub win_csd_version: String,
     pub win_service_pack_major: u16,
     pub win_service_pack_minor: u16,
- 
+
     pub win_suite_mask: u16,
     pub win_product_type: u8,
 }

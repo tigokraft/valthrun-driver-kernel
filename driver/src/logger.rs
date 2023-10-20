@@ -14,8 +14,7 @@ impl log::Log for KernelLogger {
     fn enabled(&self, metadata: &log::Metadata) -> bool {
         if cfg!(debug_assertions) && false {
             true
-        } else 
-        {
+        } else {
             if metadata.target().contains(obfstr!("embedded_tls")) {
                 metadata.level() <= log::Level::Error
             } else if metadata.target().contains(obfstr!("metrics")) {
@@ -64,7 +63,12 @@ impl log::Log for KernelLogger {
         };
 
         unsafe {
-            (imports.DbgPrintEx)(0, log_level as u32, obfstr!("[VT]%s\n\0").as_ptr(), payload.as_ptr());
+            (imports.DbgPrintEx)(
+                0,
+                log_level as u32,
+                obfstr!("[VT]%s\n\0").as_ptr(),
+                payload.as_ptr(),
+            );
         }
     }
 

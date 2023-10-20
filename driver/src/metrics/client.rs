@@ -48,9 +48,10 @@ use super::{
         MetricsReport,
         ResponsePostReport,
     },
+    device,
     http,
     HttpHeaders,
-    HttpRequest, device,
+    HttpRequest,
 };
 use crate::{
     imports::GLOBAL_IMPORTS,

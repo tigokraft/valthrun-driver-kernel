@@ -14,10 +14,11 @@ use embedded_io::{
     Write,
 };
 use embedded_tls::blocking::{
+    Aes256GcmSha384,
     NoVerify,
     TlsConfig,
     TlsConnection,
-    TlsContext, Aes256GcmSha384,
+    TlsContext,
 };
 use httparse::Status;
 use obfstr::obfstr;
@@ -247,12 +248,13 @@ pub fn execute_https_request(
     let mut write_record_buffer = Vec::new();
     write_record_buffer.resize(16000, 0u8);
 
-    let server_name = &request.headers.find_header("Host")
+    let server_name = &request
+        .headers
+        .find_header("Host")
         .ok_or(HttpError::MissingHostHeader)?
         .value;
 
-    let config = TlsConfig::new()
-        .with_server_name(server_name);
+    let config = TlsConfig::new().with_server_name(server_name);
 
     let mut tls: TlsConnection<'_, TcpConnection, Aes256GcmSha384> = TlsConnection::new(
         connection,
