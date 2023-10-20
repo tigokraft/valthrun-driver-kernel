@@ -142,7 +142,8 @@ type IoAllocateMdl = unsafe extern "system" fn(
 ) -> PMDL;
 type IoFreeMdl = unsafe extern "system" fn(MemoryDescriptorList: PMDL);
 type IoFreeIrp = unsafe extern "system" fn(Irp: PIRP);
-type IoRegisterShutdownNotification = unsafe extern "system" fn(DeviceObject: PDEVICE_OBJECT) -> NTSTATUS;
+type IoRegisterShutdownNotification =
+    unsafe extern "system" fn(DeviceObject: PDEVICE_OBJECT) -> NTSTATUS;
 type IoUnregisterShutdownNotification = unsafe extern "system" fn(DeviceObject: PDEVICE_OBJECT);
 
 type ObfDereferenceObject = unsafe extern "system" fn(object: PVOID);

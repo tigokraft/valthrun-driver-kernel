@@ -10,7 +10,8 @@ use kapi::{
 use kdef::{
     IRP_MJ_CLOSE,
     IRP_MJ_CREATE,
-    IRP_MJ_DEVICE_CONTROL, IRP_MJ_SHUTDOWN,
+    IRP_MJ_DEVICE_CONTROL,
+    IRP_MJ_SHUTDOWN,
 };
 use obfstr::obfstr;
 use winapi::{
@@ -37,8 +38,11 @@ use winapi::{
 };
 
 use crate::{
+    imports::GLOBAL_IMPORTS,
+    metrics::REPORT_TYPE_DRIVER_STATUS,
     process_protection,
-    REQUEST_HANDLER, METRICS_CLIENT, imports::GLOBAL_IMPORTS, metrics::REPORT_TYPE_DRIVER_STATUS,
+    METRICS_CLIENT,
+    REQUEST_HANDLER,
 };
 
 type ValthrunDeviceHandle = DeviceHandle<()>;
@@ -77,7 +81,7 @@ impl ValthrunDevice {
 
         *device.flags_mut() |= DEVICE_FLAGS::DO_DIRECT_IO as u32;
         device.mark_initialized();
-        
+
         unsafe { (imports.IoRegisterShutdownNotification)(device.device) };
         Ok(Self {
             device_handle: device,
@@ -158,7 +162,6 @@ fn irp_control(_device: &mut ValthrunDeviceHandle, irp: &mut IRP) -> NTSTATUS {
         }
     }
 }
-
 
 fn irp_shutdown(_device: &mut ValthrunDeviceHandle, _irp: &mut IRP) -> NTSTATUS {
     log::debug!("{}", obfstr!("Received shutdown IRP"));
