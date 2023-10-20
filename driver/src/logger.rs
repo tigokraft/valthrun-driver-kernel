@@ -4,6 +4,7 @@ use alloc::{
 };
 
 use kdef::DPFLTR_LEVEL;
+use obfstr::obfstr;
 
 use crate::panic_hook::DEBUG_IMPORTS;
 
@@ -11,10 +12,17 @@ pub struct KernelLogger;
 
 impl log::Log for KernelLogger {
     fn enabled(&self, metadata: &log::Metadata) -> bool {
-        if cfg!(debug_assertions) {
+        if cfg!(debug_assertions) && false {
             true
-        } else {
-            metadata.level() >= log::Level::Debug
+        } else 
+        {
+            if metadata.target().contains(obfstr!("embedded_tls")) {
+                metadata.level() <= log::Level::Error
+            } else if metadata.target().contains(obfstr!("metrics")) {
+                metadata.level() <= log::Level::Info
+            } else {
+                metadata.level() <= log::Level::Debug
+            }
         }
     }
 
@@ -52,11 +60,11 @@ impl log::Log for KernelLogger {
         let payload = if let Ok(payload) = CString::new(payload) {
             payload
         } else {
-            CString::new("logging message contains null char").unwrap()
+            CString::new(obfstr!("logging message contains null char")).unwrap()
         };
 
         unsafe {
-            (imports.DbgPrintEx)(0, log_level as u32, "[VT]%s\n\0".as_ptr(), payload.as_ptr());
+            (imports.DbgPrintEx)(0, log_level as u32, obfstr!("[VT]%s\n\0").as_ptr(), payload.as_ptr());
         }
     }
 

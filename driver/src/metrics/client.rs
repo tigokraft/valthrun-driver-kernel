@@ -564,7 +564,7 @@ impl Drop for MetricsClient {
     }
 }
 
-const METRICS_DEFAULT_PORT: u16 = 80;
+const METRICS_DEFAULT_PORT: u16 = 443;
 
 pub fn initialize() -> anyhow::Result<MetricsClient> {
     Ok(MetricsClient::new()?)

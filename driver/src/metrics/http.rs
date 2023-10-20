@@ -14,11 +14,10 @@ use embedded_io::{
     Write,
 };
 use embedded_tls::blocking::{
-    Aes128GcmSha256,
     NoVerify,
     TlsConfig,
     TlsConnection,
-    TlsContext,
+    TlsContext, Aes256GcmSha384,
 };
 use httparse::Status;
 use obfstr::obfstr;
@@ -248,8 +247,14 @@ pub fn execute_https_request(
     let mut write_record_buffer = Vec::new();
     write_record_buffer.resize(16000, 0u8);
 
-    let config = TlsConfig::new();
-    let mut tls: TlsConnection<'_, TcpConnection, Aes128GcmSha256> = TlsConnection::new(
+    let server_name = &request.headers.find_header("Host")
+        .ok_or(HttpError::MissingHostHeader)?
+        .value;
+
+    let config = TlsConfig::new()
+        .with_server_name(server_name);
+
+    let mut tls: TlsConnection<'_, TcpConnection, Aes256GcmSha384> = TlsConnection::new(
         connection,
         &mut read_record_buffer,
         &mut write_record_buffer,
@@ -279,9 +284,9 @@ pub fn execute_https_request(
         .read_payload(&mut reader)
         .inspect_err(|err| log::trace!("read content: {:#}", err))?;
 
-    log::debug!("Request succeeded -> {}", response.status_code);
-    log::debug!("Response content length: {}", response.content.len());
-    log::debug!("{}", String::from_utf8_lossy(response.content.as_slice()));
+    // log::debug!("Request succeeded -> {}", response.status_code);
+    // log::debug!("Response content length: {}", response.content.len());
+    // log::debug!("{}", String::from_utf8_lossy(response.content.as_slice()));
     Ok(response)
 }
 
@@ -314,8 +319,8 @@ pub fn execute_http_request(
     response.read_headers(&mut reader)?;
     response.read_payload(&mut reader)?;
 
-    log::debug!("Request succeeded -> {}", response.status_code);
-    log::debug!("Response content length: {}", response.content.len());
-    log::debug!("{}", String::from_utf8_lossy(response.content.as_slice()));
+    // log::debug!("Request succeeded -> {}", response.status_code);
+    // log::debug!("Response content length: {}", response.content.len());
+    // log::debug!("{}", String::from_utf8_lossy(response.content.as_slice()));
     Ok(response)
 }

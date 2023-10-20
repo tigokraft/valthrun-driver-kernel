@@ -43,6 +43,9 @@ pub enum HttpError {
 
     #[error("fmt error")]
     WriteFmtError(WriteFmtError<Infallible>),
+
+    #[error("host header in request not set")]
+    MissingHostHeader,
 }
 
 impl From<embedded_tls::TlsError> for HttpError {
