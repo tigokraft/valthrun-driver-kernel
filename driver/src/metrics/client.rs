@@ -554,8 +554,6 @@ impl MetricsClient {
         };
 
         log::trace!("Requesting flush & shutdown");
-        self.add_record("shutdown", "now? :D");
-
         self.worker_shutdown
             .store(SHUTDOWN_MODE_FLUSH, Ordering::Relaxed);
         self.worker_shutdown_event.signal();

@@ -12,7 +12,7 @@ pub struct KernelLogger;
 
 impl log::Log for KernelLogger {
     fn enabled(&self, metadata: &log::Metadata) -> bool {
-        if cfg!(debug_assertions) && false {
+        if cfg!(debug_assertions) {
             true
         } else {
             if metadata.target().contains(obfstr!("embedded_tls")) {
