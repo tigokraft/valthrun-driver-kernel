@@ -5,7 +5,7 @@ use alloc::{
         ToString,
     },
     sync::Arc,
-    vec::Vec,
+    vec::Vec, format,
 };
 use core::{
     sync::atomic::{
@@ -101,6 +101,18 @@ impl RecordQueue {
 
     pub fn add_record(&mut self, mut record: MetricsRecord) {
         record.seq_no = self.next_sequence_id();
+
+        if self.pending_entries.len() > 50_000 {
+            self.pending_entries.drain(10_000..15_000);
+            self.add_record(MetricsRecord { 
+                seq_no: 0, 
+                timestamp: record.timestamp,
+                uptime: record.uptime,
+                report_type: obfstr!("metrics-dropped").to_string(),
+                payload: format!("count:{}", 5_000),
+            });
+        }
+        
         self.pending_entries.push_back(record);
     }
 
