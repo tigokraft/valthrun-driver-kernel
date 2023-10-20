@@ -50,7 +50,7 @@ use super::{
     },
     http,
     HttpHeaders,
-    HttpRequest,
+    HttpRequest, device,
 };
 use crate::{
     imports::GLOBAL_IMPORTS,
@@ -187,7 +187,7 @@ impl MetricsSender {
             target_port,
 
             session_id,
-            device_info: DeviceInfo {},
+            device_info: device::resolve_info()?,
 
             crypto: MetricsCrypto::new()?,
         })

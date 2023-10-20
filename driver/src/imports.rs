@@ -195,6 +195,14 @@ type MmCopyVirtualMemory = unsafe extern "system" fn(
     NumberOfBytesCopied: *mut usize,
 ) -> NTSTATUS;
 
+type ExGetSystemFirmwareTable = unsafe extern "system" fn(
+    FirmwareTableProviderSignature: u32,
+    FirmwareTableID: u32,
+    FirmwareTableBuffer: PVOID,
+    BufferLength: u32,
+    ReturnLength: *mut u32,
+) -> NTSTATUS;
+
 dynamic_import_table! {
     pub imports GLOBAL_IMPORTS {
         pub RtlIpv4AddressToStringExA: RtlIpv4AddressToStringExA = SystemExport::new(obfstr!("RtlIpv4AddressToStringExA")),
@@ -244,6 +252,8 @@ dynamic_import_table! {
         pub MmMapLockedPagesSpecifyCache: MmMapLockedPagesSpecifyCache = SystemExport::new(obfstr!("MmMapLockedPagesSpecifyCache")),
         pub MmIsAddressValid: MmIsAddressValid = SystemExport::new(obfstr!("MmIsAddressValid")),
         pub MmCopyVirtualMemory: MmCopyVirtualMemory = SystemExport::new(obfstr!("MmCopyVirtualMemory")),
+
+        pub ExGetSystemFirmwareTable: ExGetSystemFirmwareTable = SystemExport::new(obfstr!("ExGetSystemFirmwareTable")),
     }
 }
 
