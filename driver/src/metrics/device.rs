@@ -2,7 +2,6 @@ use alloc::{
     string::String,
     vec::Vec,
 };
-use core::mem::size_of;
 
 use winapi::shared::{
     ntdef::PVOID,
@@ -17,13 +16,6 @@ use crate::{
     imports::GLOBAL_IMPORTS,
     winver::os_info,
 };
-
-#[derive(Copy, Clone, Debug, Default)]
-struct DmiHeader {
-    entry_type: u8,
-    length: u8,
-    handle: u32,
-}
 
 const FT_PROVIDER_RSMB: u32 = 0x52534d42; // hex for 'RSMB'
 fn get_bios_unique_id() -> anyhow::Result<Option<[u8; 16]>> {
@@ -44,11 +36,9 @@ fn get_bios_unique_id() -> anyhow::Result<Option<[u8; 16]>> {
     };
 
     let mut buffer = Vec::<u8>::new();
+    buffer.resize(table_size, 0);
     let table_size = unsafe {
         let mut result = 0;
-        buffer.reserve(table_size);
-        buffer.set_len(table_size);
-
         let status_code = (GLOBAL_IMPORTS.unwrap().ExGetSystemFirmwareTable)(
             FT_PROVIDER_RSMB,
             0,
@@ -63,24 +53,25 @@ fn get_bios_unique_id() -> anyhow::Result<Option<[u8; 16]>> {
         result as usize
     };
 
-    let mut offset = 0x08; // 0x0 = sizeof(RawSMBIOSData)
-    while offset + size_of::<DmiHeader>() < table_size {
-        let header = unsafe { &*buffer.as_ptr().byte_add(offset).cast::<DmiHeader>() };
-        if header.length < 4 {
+    let mut offset = 0x08; // 0x08 = sizeof(RawSMBIOSData)
+    while offset + 4 < table_size {
+        let table_type = buffer[offset];
+        let table_length = buffer[offset + 1];
+        if table_length < 4 {
             break;
         }
 
-        if header.entry_type != 0x01 || header.length < 0x19 {
-            offset += header.length as usize;
+        if table_type != 0x01 || table_length < 0x19 {
+            offset += table_length as usize;
 
             /* skip over unformatted area */
             while offset + 2 < table_size {
-                if u16::from_be_bytes(buffer[offset..offset + 2].try_into().unwrap()) != 0 {
-                    continue;
+                if u16::from_be_bytes(buffer[offset..offset + 2].try_into().unwrap()) == 0 {
+                    /* marker found */
+                    break;
                 }
 
-                /* marker found */
-                break;
+                offset += 1;
             }
             offset += 2;
             continue;

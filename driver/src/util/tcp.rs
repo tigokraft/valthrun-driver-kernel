@@ -29,7 +29,7 @@ impl TcpConnection {
     pub fn connect(wsk: &WskInstance, target: &SOCKADDR_INET) -> anyhow::Result<Self> {
         let mut socket = wsk
             .create_connection_socket(
-                AF_INET as u16,
+                target.si_family(),
                 SOCK_STREAM as u16,
                 IPPROTO_IPPROTO_TCP as u32,
             )
