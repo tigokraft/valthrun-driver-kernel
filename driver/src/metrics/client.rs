@@ -241,7 +241,7 @@ impl MetricsSender {
 
         let mut request = HttpRequest {
             method: "POST",
-            target: "/report",
+            target: "/api/v1/report",
             payload: &report,
             headers: HttpHeaders::new(),
         };
