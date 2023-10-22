@@ -1,24 +1,36 @@
-use alloc::format;
+use core::mem::size_of;
 
-use anyhow::Context;
 use obfstr::obfstr;
 use valthrun_driver_shared::{
     requests::{
         RequestCSModule,
         ResponseCsModule,
     },
-    CS2ModuleInfo,
+    ModuleInfo,
+    ProcessModuleInfo,
 };
 
 use crate::util::kprocess;
 
 pub fn handler_get_modules(
-    _req: &RequestCSModule,
+    req: &RequestCSModule,
     res: &mut ResponseCsModule,
 ) -> anyhow::Result<()> {
+    let module_buffer = unsafe {
+        if !seh::probe_write(
+            req.module_buffer as u64,
+            req.module_buffer_length * size_of::<ModuleInfo>(),
+            0x01,
+        ) {
+            anyhow::bail!("{}", obfstr!("response buffer not writeable"));
+        }
+
+        core::slice::from_raw_parts_mut(req.module_buffer, req.module_buffer_length)
+    };
+
     log::debug!("{}", obfstr!("Searching for CS2 process."));
     let cs2_process_candidates = kprocess::find_processes_by_name(obfstr!("cs2.exe"))?;
-    let cs2_process = match cs2_process_candidates.len() {
+    let process = match cs2_process_candidates.len() {
         0 => {
             *res = ResponseCsModule::NoProcess;
             return Ok(());
@@ -30,43 +42,31 @@ pub fn handler_get_modules(
         }
     };
 
-    let cs2_process_id = cs2_process.get_id();
+    let process_id = process.get_id();
     log::trace!(
         "{} process id {}. PEP at {:X}",
         obfstr!("CS2"),
-        cs2_process_id,
-        cs2_process.eprocess() as u64
+        process_id,
+        process.eprocess() as u64
     );
 
-    let mut module_info: CS2ModuleInfo = Default::default();
-    module_info.process_id = cs2_process_id;
+    let modules = {
+        let attached_process = process.attach();
+        attached_process.get_modules()
+    };
 
-    let attached_process = cs2_process.attach();
-    module_info.client = attached_process
-        .get_module(obfstr!("client.dll"))
-        .map(|module| valthrun_driver_shared::ModuleInfo {
-            base_address: module.base_address,
-            module_size: module.module_size,
-        })
-        .with_context(|| format!("missing {}", obfstr!("client.dll")))?;
+    if modules.len() < module_buffer.len() {
+        *res = ResponseCsModule::BufferTooSmall {
+            expected: modules.len(),
+        };
+        return Ok(());
+    }
 
-    module_info.engine = attached_process
-        .get_module(obfstr!("engine2.dll"))
-        .map(|module| valthrun_driver_shared::ModuleInfo {
-            base_address: module.base_address,
-            module_size: module.module_size,
-        })
-        .with_context(|| format!("missing {}", obfstr!("engine2.dll")))?;
+    module_buffer[0..modules.len()].copy_from_slice(&modules);
 
-    module_info.schemasystem = attached_process
-        .get_module(obfstr!("schemasystem.dll"))
-        .map(|module| valthrun_driver_shared::ModuleInfo {
-            base_address: module.base_address,
-            module_size: module.module_size,
-        })
-        .with_context(|| format!("missing {}", obfstr!("schemasystem.dll")))?;
-    drop(attached_process);
-
+    let mut module_info: ProcessModuleInfo = Default::default();
+    module_info.process_id = process_id;
+    module_info.module_count = modules.len();
     *res = ResponseCsModule::Success(module_info);
     Ok(())
 }

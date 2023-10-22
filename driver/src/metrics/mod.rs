@@ -9,3 +9,4 @@ pub use client::*;
 pub mod device;
 
 pub const REPORT_TYPE_DRIVER_STATUS: &'static str = "driver-status";
+pub const REPORT_TYPE_DRIVER_IRP_STATUS: &'static str = "driver-status-irp";

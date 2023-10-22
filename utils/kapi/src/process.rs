@@ -1,9 +1,11 @@
+use alloc::vec::Vec;
 use core::ffi::CStr;
 
 use kdef::{
     _KAPC_STATE,
     _LDR_DATA_TABLE_ENTRY,
 };
+use valthrun_driver_shared::ModuleInfo;
 use winapi::{
     km::wdm::PEPROCESS,
     shared::ntdef::{
@@ -86,11 +88,6 @@ impl Process {
     }
 }
 
-pub struct ModuleInfo {
-    pub base_address: usize,
-    pub module_size: usize,
-}
-
 pub struct AttachedProcess<'a> {
     process: &'a Process,
     apc_state: _KAPC_STATE,
@@ -101,13 +98,15 @@ impl AttachedProcess<'_> {
         self.process.get_id()
     }
 
-    pub fn get_module(&self, name: &str) -> Option<ModuleInfo> {
+    pub fn get_modules(&self) -> Vec<ModuleInfo> {
         let imports = GLOBAL_IMPORTS.unwrap();
+        let mut result = Vec::with_capacity(64);
+
         let peb = match unsafe { (imports.PsGetProcessPeb)(self.process.eprocess()).as_ref() } {
             Some(peb) => peb,
             None => {
                 log::warn!("Failed to get PEB for {:X}", self.process.eprocess() as u64);
-                return None;
+                return result;
             }
         };
 
@@ -118,7 +117,7 @@ impl AttachedProcess<'_> {
                     "Missing process module list for {:X}",
                     self.process.eprocess() as u64
                 );
-                return None;
+                return result;
             }
         };
 
@@ -131,17 +130,22 @@ impl AttachedProcess<'_> {
                     .read()
             };
             let base_name = entry.BaseDllName.as_string_lossy();
-            if base_name == name {
-                return Some(ModuleInfo {
-                    base_address: entry.DllBase as usize,
-                    module_size: entry.SizeOfImage as usize,
-                });
-            }
+            let mut module_info = ModuleInfo {
+                base_dll_name: [0u8; 0xFF],
+                base_address: entry.DllBase as usize,
+                module_size: entry.SizeOfImage as usize,
+            };
 
+            let name_bytes = base_name.as_bytes();
+            let name_bytes_length = module_info.base_dll_name.len().min(name_bytes.len());
+            module_info.base_dll_name[0..name_bytes_length]
+                .copy_from_slice(&name_bytes[0..name_bytes_length]);
+
+            result.push(module_info);
             current_entry = unsafe { (*current_entry).Flink };
         }
 
-        None
+        result
     }
 }
 

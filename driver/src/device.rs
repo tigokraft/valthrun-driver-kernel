@@ -1,4 +1,7 @@
-use alloc::boxed::Box;
+use alloc::{
+    boxed::Box,
+    format,
+};
 use core::pin::Pin;
 
 use kapi::{
@@ -39,7 +42,10 @@ use winapi::{
 
 use crate::{
     imports::GLOBAL_IMPORTS,
-    metrics::REPORT_TYPE_DRIVER_STATUS,
+    metrics::{
+        REPORT_TYPE_DRIVER_IRP_STATUS,
+        REPORT_TYPE_DRIVER_STATUS,
+    },
     process_protection,
     METRICS_CLIENT,
     REQUEST_HANDLER,
@@ -97,13 +103,21 @@ impl Drop for ValthrunDevice {
 }
 
 fn irp_create(_device: &mut ValthrunDeviceHandle, irp: &mut IRP) -> NTSTATUS {
-    log::debug!("{}", obfstr!("Valthrun IRP create callback"));
+    log::trace!("{}", obfstr!("Valthrun IRP create callback"));
+
+    let current_process = Process::current();
+    if let Some(metrics) = unsafe { &*METRICS_CLIENT.get() } {
+        metrics.add_record(
+            REPORT_TYPE_DRIVER_IRP_STATUS,
+            format!("open: {}", current_process.get_id()),
+        );
+    }
 
     irp.complete_request(STATUS_SUCCESS)
 }
 
 fn irp_close(_device: &mut ValthrunDeviceHandle, irp: &mut IRP) -> NTSTATUS {
-    log::debug!("{}", obfstr!("Valthrun IRP close callback"));
+    log::trace!("{}", obfstr!("Valthrun IRP close callback"));
 
     /*
      * Disable process protection for the process which is closing this driver.
@@ -112,6 +126,13 @@ fn irp_close(_device: &mut ValthrunDeviceHandle, irp: &mut IRP) -> NTSTATUS {
      */
     let current_process = Process::current();
     process_protection::toggle_protection(current_process.get_id(), false);
+
+    if let Some(metrics) = unsafe { &*METRICS_CLIENT.get() } {
+        metrics.add_record(
+            REPORT_TYPE_DRIVER_IRP_STATUS,
+            format!("close: {}", current_process.get_id()),
+        );
+    }
 
     irp.complete_request(STATUS_SUCCESS)
 }
