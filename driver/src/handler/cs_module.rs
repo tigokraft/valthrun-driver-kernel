@@ -55,7 +55,7 @@ pub fn handler_get_modules(
         attached_process.get_modules()
     };
 
-    if modules.len() < module_buffer.len() {
+    if modules.len() > module_buffer.len() {
         *res = ResponseCsModule::BufferTooSmall {
             expected: modules.len(),
         };

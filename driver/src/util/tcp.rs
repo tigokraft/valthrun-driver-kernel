@@ -7,7 +7,6 @@ use embedded_io::{
 
 use crate::wsk::{
     sys::{
-        AF_INET,
         IPPROTO_IPPROTO_TCP,
         PSOCKADDR,
         SOCKADDR_INET,
