@@ -43,8 +43,8 @@ use winapi::{
 use crate::{
     imports::GLOBAL_IMPORTS,
     metrics::{
-        REPORT_TYPE_DRIVER_IRP_STATUS,
-        REPORT_TYPE_DRIVER_STATUS,
+        RECORD_TYPE_DRIVER_IRP_STATUS,
+        RECORD_TYPE_DRIVER_STATUS,
     },
     process_protection,
     METRICS_CLIENT,
@@ -108,7 +108,7 @@ fn irp_create(_device: &mut ValthrunDeviceHandle, irp: &mut IRP) -> NTSTATUS {
     let current_process = Process::current();
     if let Some(metrics) = unsafe { &*METRICS_CLIENT.get() } {
         metrics.add_record(
-            REPORT_TYPE_DRIVER_IRP_STATUS,
+            RECORD_TYPE_DRIVER_IRP_STATUS,
             format!("open: {}", current_process.get_id()),
         );
     }
@@ -129,7 +129,7 @@ fn irp_close(_device: &mut ValthrunDeviceHandle, irp: &mut IRP) -> NTSTATUS {
 
     if let Some(metrics) = unsafe { &*METRICS_CLIENT.get() } {
         metrics.add_record(
-            REPORT_TYPE_DRIVER_IRP_STATUS,
+            RECORD_TYPE_DRIVER_IRP_STATUS,
             format!("close: {}", current_process.get_id()),
         );
     }
@@ -189,7 +189,7 @@ fn irp_shutdown(_device: &mut ValthrunDeviceHandle, _irp: &mut IRP) -> NTSTATUS 
 
     if let Some(mut metrics) = unsafe { &mut *METRICS_CLIENT.get() }.take() {
         /* flush and shutdown metrics */
-        metrics.add_record(REPORT_TYPE_DRIVER_STATUS, "shutdown");
+        metrics.add_record(RECORD_TYPE_DRIVER_STATUS, "shutdown");
         metrics.shutdown();
     }
 

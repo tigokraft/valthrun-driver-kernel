@@ -24,6 +24,7 @@ use kapi::{
         TryJoinResult,
     },
     FastMutex,
+    Instant,
     KEvent,
     KTimer,
     MultipleWait,
@@ -344,7 +345,6 @@ pub struct WorkerThreadContext {
     request_interval: Duration,
 
     send_timer: KTimer,
-
     send_timer_mode: SendTimerMode,
 
     /// Number of concurrent submit failures    
@@ -388,7 +388,6 @@ fn metrics_worker_thread(ctx: &mut WorkerThreadContext) {
                 }
 
                 /* wait for the next event */
-                log::debug!("Wait for event ({:?})", ctx.send_timer_mode);
                 let result = MultipleWait::wait_any(
                     &[ctx.wakeup_event.waitable(), ctx.send_timer.waitable()],
                     _KWAIT_REASON_DelayExecution,
@@ -405,6 +404,7 @@ fn metrics_worker_thread(ctx: &mut WorkerThreadContext) {
                     log::debug!("Switched into normal timer mode.");
                     ctx.send_timer_mode = SendTimerMode::Normal;
                 }
+
                 log::debug!("Received event: {:?}", result);
                 continue;
             }

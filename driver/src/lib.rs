@@ -14,7 +14,10 @@ use alloc::{
     boxed::Box,
     format,
 };
-use core::cell::SyncUnsafeCell;
+use core::{
+    cell::SyncUnsafeCell,
+    time::Duration,
+};
 
 use device::ValthrunDevice;
 use handler::HandlerRegistry;
@@ -26,7 +29,10 @@ use kapi::{
 };
 use kb::KeyboardInput;
 use kdef::DPFLTR_LEVEL;
-use metrics::MetricsClient;
+use metrics::{
+    MetricsClient,
+    MetricsHeartbeat,
+};
 use mouse::MouseInput;
 use obfstr::obfstr;
 use panic_hook::DEBUG_IMPORTS;
@@ -58,7 +64,7 @@ use crate::{
     },
     imports::GLOBAL_IMPORTS,
     logger::APP_LOGGER,
-    metrics::REPORT_TYPE_DRIVER_STATUS,
+    metrics::RECORD_TYPE_DRIVER_STATUS,
     offsets::initialize_nt_offsets,
     winver::{
         initialize_os_info,
@@ -101,6 +107,7 @@ pub static KEYBOARD_INPUT: SyncUnsafeCell<Option<KeyboardInput>> =
 pub static MOUSE_INPUT: SyncUnsafeCell<Option<MouseInput>> = SyncUnsafeCell::new(Option::None);
 pub static METRICS_CLIENT: SyncUnsafeCell<Option<MetricsClient>> =
     SyncUnsafeCell::new(Option::None);
+pub static METRICS_HEARTBEAT: SyncUnsafeCell<Option<MetricsHeartbeat>> = SyncUnsafeCell::new(None);
 
 extern "system" fn driver_unload(_driver: &mut DRIVER_OBJECT) {
     real_driver_unload();
@@ -111,7 +118,7 @@ fn real_driver_unload() {
 
     if let Some(metrics) = unsafe { &mut *METRICS_CLIENT.get() } {
         /* notify the metrics server about the unload */
-        metrics.add_record(REPORT_TYPE_DRIVER_STATUS, "unload");
+        metrics.add_record(RECORD_TYPE_DRIVER_STATUS, "unload");
     }
 
     /* Remove the device */
@@ -130,6 +137,11 @@ fn real_driver_unload() {
 
     let mouse_input = unsafe { &mut *MOUSE_INPUT.get() };
     let _ = mouse_input.take();
+
+    let metrcis_heartbeat = unsafe { &mut *METRICS_HEARTBEAT.get() };
+    if let Some(heartbeat) = metrcis_heartbeat.take() {
+        heartbeat.shutdown();
+    }
 
     let metrics = unsafe { &mut *METRICS_CLIENT.get() };
     if let Some(mut metrics) = metrics.take() {
@@ -238,7 +250,7 @@ pub extern "system" fn driver_entry(
     if let Some(metrics) = unsafe { &*METRICS_CLIENT.get() } {
         /* report the load result if metrics could be already initialized */
         metrics.add_record(
-            REPORT_TYPE_DRIVER_STATUS,
+            RECORD_TYPE_DRIVER_STATUS,
             format!(
                 "load:{:X}, version:{}, manual:{:X}",
                 status,
@@ -332,6 +344,8 @@ extern "C" fn internal_driver_entry(
             unsafe { *METRICS_CLIENT.get() = Some(client) };
         }
     }
+
+    unsafe { *METRICS_HEARTBEAT.get() = Some(MetricsHeartbeat::new(Duration::from_secs(60 * 60))) };
 
     if let Err(err) = wsk_dummy() {
         log::error!("{}: {:#}", obfstr!("WSK dummy error"), err);
