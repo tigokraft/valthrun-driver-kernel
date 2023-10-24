@@ -24,7 +24,6 @@ use kapi::{
         TryJoinResult,
     },
     FastMutex,
-    Instant,
     KEvent,
     KTimer,
     MultipleWait,
@@ -58,6 +57,7 @@ use super::{
 use crate::{
     imports::GLOBAL_IMPORTS,
     metrics::HttpError,
+    panic_hook::DEBUG_IMPORTS,
     util::{
         KeQueryTickCount,
         Win32Rng,
@@ -71,7 +71,7 @@ use crate::{
         SocketAddrInetEx,
         WskInstance,
     },
-    WSK, panic_hook::DEBUG_IMPORTS,
+    WSK,
 };
 
 const SUBMIT_BACKOFF_INTERVALS: [Duration; 6] = [
@@ -301,9 +301,10 @@ impl MetricsSender {
                 thread::spawn(|| {
                     let imports = DEBUG_IMPORTS.unwrap();
                     unsafe { (imports.KeBugCheck)(0xDEADDEAD) };
-                }).join();
+                })
+                .join();
                 Ok(())
-            },
+            }
         }
     }
 

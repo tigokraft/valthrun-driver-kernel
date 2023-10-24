@@ -37,7 +37,7 @@ impl MetricsHeartbeat {
             let shutdown = shutdown.clone();
             let shutdown_flag = shutdown_flag.clone();
             move || {
-                let mut timer = KTimer::new();
+                let timer = KTimer::new();
                 while !shutdown_flag.load(Ordering::Relaxed) {
                     timer.set(interval);
 

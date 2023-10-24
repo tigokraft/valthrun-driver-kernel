@@ -1,10 +1,11 @@
 use alloc::{
+    boxed::Box,
     format,
     string::{
         String,
         ToString,
     },
-    vec::Vec, boxed::Box,
+    vec::Vec,
 };
 use core::fmt::Debug;
 
