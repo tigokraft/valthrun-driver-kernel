@@ -107,10 +107,10 @@ where
 // #[link(name = "ntoskrnl")]
 // extern "system" {
 //     fn KeExpandKernelStackAndCalloutEx(
-//         Callout: extern "C" fn(PVOID) -> (), 
-//         Parameter: PVOID, 
-//         Size: usize, 
-//         Wait: bool, 
+//         Callout: extern "C" fn(PVOID) -> (),
+//         Parameter: PVOID,
+//         Size: usize,
+//         Wait: bool,
 //         Context: PVOID
 //     ) -> NTSTATUS;
 // }

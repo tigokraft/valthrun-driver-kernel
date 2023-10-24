@@ -218,7 +218,10 @@ pub extern "system" fn driver_entry(
             let driver_name =
                 UNICODE_STRING::from_bytes(obfstr::wide!("\\Driver\\valthrun-driver"));
             let result = unsafe {
-                (ll_imports.IoCreateDriver)(&driver_name, internal_driver_entry as usize as *const _)
+                (ll_imports.IoCreateDriver)(
+                    &driver_name,
+                    internal_driver_entry as usize as *const _,
+                )
             };
             if let Err(code) = result.ok() {
                 if code == STATUS_OBJECT_NAME_COLLISION {

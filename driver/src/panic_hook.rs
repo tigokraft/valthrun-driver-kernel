@@ -1,7 +1,8 @@
 use alloc::format;
 use core::{
+    arch::asm,
     cell::SyncUnsafeCell,
-    panic::PanicInfo, arch::asm,
+    panic::PanicInfo,
 };
 
 use kdef::DPFLTR_LEVEL;
@@ -87,11 +88,9 @@ pub unsafe extern "C" fn __chkstk() {
         "lea     r11, [rsp+18h]",
         "and     r11w, 0F000h",
         "jmp     short 3f",
-
         "2:",
         "lea     r11, [r11-1000h]",
         "test    [r11], r11b",
-
         "3:",
         "cmp     r10, r11",
         "jb      short 2b",

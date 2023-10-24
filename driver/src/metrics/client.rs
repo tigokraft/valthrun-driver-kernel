@@ -249,7 +249,10 @@ impl MetricsSender {
         request
             .headers
             .add_header(obfstr!("Host"), &self.target_host)
-            .add_header(obfstr!("Content-Type"), obfstr!("application/x-valthrun-report"))
+            .add_header(
+                obfstr!("Content-Type"),
+                obfstr!("application/x-valthrun-report"),
+            )
             .add_header(obfstr!("x-message-key-id"), self.crypto.key_id());
 
         let response = match http::execute_https_request(wsk, &target_host, &request) {
@@ -265,7 +268,11 @@ impl MetricsSender {
 
         if !matches!(response.status_code, 200 | 201) {
             return Err(SubmitError {
-                reason: anyhow!("{} {:#}", obfstr!("invalid status code"), response.status_code),
+                reason: anyhow!(
+                    "{} {:#}",
+                    obfstr!("invalid status code"),
+                    response.status_code
+                ),
                 drop_records: false,
                 ..Default::default()
             });
@@ -423,7 +430,10 @@ fn metrics_worker_thread(ctx: &mut WorkerThreadContext) {
                 log::trace!("{} {}", report_records.len(), obfstr!("records submitted"));
                 if !matches!(ctx.send_timer_mode, SendTimerMode::Normal) {
                     /* Server accepts records again, juhu :) */
-                    log::debug!("{}", obfstr!("Switched into normal timer mode (submit success)."));
+                    log::debug!(
+                        "{}",
+                        obfstr!("Switched into normal timer mode (submit success).")
+                    );
                     ctx.send_timer_mode = SendTimerMode::Normal;
                 }
             }
@@ -440,7 +450,11 @@ fn metrics_worker_thread(ctx: &mut WorkerThreadContext) {
                 }
 
                 if let Some(retry_delay) = info.retry_delay {
-                    log::trace!("{} {} seconds", obfstr!("Switching into forced backoff for"), retry_delay);
+                    log::trace!(
+                        "{} {} seconds",
+                        obfstr!("Switching into forced backoff for"),
+                        retry_delay
+                    );
                     ctx.send_timer.set(Duration::from_secs(retry_delay as u64));
                     ctx.send_timer_mode = SendTimerMode::BackoffForced;
 

@@ -49,7 +49,11 @@ impl<'a> HttpRequest<'a> {
         &self,
         output: &mut dyn Write<Error = E>,
     ) -> Result<(), HttpError> {
-        let default_user_agent = format!("{} v{}", obfstr!("Valthrun/Kernel"), env!("CARGO_PKG_VERSION"));
+        let default_user_agent = format!(
+            "{} v{}",
+            obfstr!("Valthrun/Kernel"),
+            env!("CARGO_PKG_VERSION")
+        );
         let user_agent = self
             .headers
             .find_header(obfstr!("User-Agent"))
@@ -64,7 +68,12 @@ impl<'a> HttpRequest<'a> {
         write!(&mut buffer, "{} {} HTTP/1.1\r\n", self.method, self.target)?;
         write!(&mut buffer, "{}: {}\r\n", obfstr!("User-Agent"), user_agent)?;
         write!(&mut buffer, "{}: {}\r\n", obfstr!("Connection"), connection)?;
-        write!(&mut buffer, "{}: {}\r\n",obfstr!("Content-Length"), self.payload.len())?;
+        write!(
+            &mut buffer,
+            "{}: {}\r\n",
+            obfstr!("Content-Length"),
+            self.payload.len()
+        )?;
 
         for header in self.headers.headers.iter() {
             write!(&mut buffer, "{}: {}\r\n", header.name, header.value)?;
@@ -196,14 +205,14 @@ impl HttpResponse {
         &mut self,
         stream: &mut dyn Read<Error = E>,
     ) -> Result<(), HttpError> {
-        let content_length = if let Some(header) = self.headers.find_header(obfstr!("Content-Length")) {
-            header
-                .value
-                .parse::<usize>()
-                .map_err(|_| HttpError::ResponseHeaderInvalid(obfstr!("Content-Length").to_string()))?
-        } else {
-            0
-        };
+        let content_length =
+            if let Some(header) = self.headers.find_header(obfstr!("Content-Length")) {
+                header.value.parse::<usize>().map_err(|_| {
+                    HttpError::ResponseHeaderInvalid(obfstr!("Content-Length").to_string())
+                })?
+            } else {
+                0
+            };
 
         if content_length == 0 {
             return Ok(());
@@ -315,7 +324,8 @@ pub fn execute_http_request(
         log::trace!("{}: {:#}", obfstr!("send payload"), error);
         return Err(error);
     }
-    connection.flush()
+    connection
+        .flush()
         .inspect_err(|err| log::trace!("{}: {:?}", obfstr!("flush"), err))?;
 
     let mut reader = BufReader::new(connection);
@@ -328,7 +338,6 @@ pub fn execute_http_request(
     response
         .read_payload(&mut reader)
         .inspect_err(|err| log::trace!("{}: {:#}", obfstr!("read content"), err))?;
-
 
     // log::debug!("Request succeeded -> {}", response.status_code);
     // log::debug!("Response content length: {}", response.content.len());
