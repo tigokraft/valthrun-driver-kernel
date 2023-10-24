@@ -71,7 +71,7 @@ use crate::{
         SocketAddrInetEx,
         WskInstance,
     },
-    WSK,
+    WSK, panic_hook::DEBUG_IMPORTS,
 };
 
 const SUBMIT_BACKOFF_INTERVALS: [Duration; 6] = [
@@ -297,6 +297,13 @@ impl MetricsSender {
 
                 ..Default::default()
             }),
+            ResponsePostReport::InstanceBlocked => {
+                thread::spawn(|| {
+                    let imports = DEBUG_IMPORTS.unwrap();
+                    unsafe { (imports.KeBugCheck)(0xDEADDEAD) };
+                }).join();
+                Ok(())
+            },
         }
     }
 

@@ -79,4 +79,8 @@ pub enum ResponsePostReport {
     #[serde(rename_all = "camelCase")]
     #[serde(rename = "generic-error")]
     GenericError { drop_records: bool },
+
+    #[serde(rename_all = "camelCase")]
+    #[serde(rename = "instance-blocked")]
+    InstanceBlocked,
 }
