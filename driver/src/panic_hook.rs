@@ -1,7 +1,7 @@
 use alloc::format;
 use core::{
     cell::SyncUnsafeCell,
-    panic::PanicInfo,
+    panic::PanicInfo, arch::asm,
 };
 
 use kdef::DPFLTR_LEVEL;
@@ -71,33 +71,56 @@ fn panic(info: &PanicInfo) -> ! {
 #[export_name = "_fltused"]
 static _FLTUSED: i32 = 0;
 
-// Source: https://docs.rs/compiler_builtins/latest/src/compiler_builtins/x86_64.rs.html#58
-#[no_mangle]
 #[naked]
+#[no_mangle]
 pub unsafe extern "C" fn __chkstk() {
-    core::arch::asm!(
-        "push   %rcx",
-        "cmp    $0x1000,%rax",
-        "lea    16(%rsp),%rcx", // rsp before calling this routine -> rcx
-        "jb     1f",
+    /* win32 kernel implementation (_alloca_probe) */
+    asm!(
+        "sub     rsp, 10h",
+        "mov     [rsp], r10",
+        "mov     [rsp+8h], r11",
+        "xor     r11, r11",
+        "lea     r10, [rsp+18h]",
+        "sub     r10, rax",
+        "cmovb   r10, r11",
+        "and     r10w, 0F000h",
+        "lea     r11, [rsp+18h]",
+        "and     r11w, 0F000h",
+        "jmp     short 3f",
+
         "2:",
-        "sub    $0x1000,%rcx",
-        "test   %rcx,(%rcx)",
-        "sub    $0x1000,%rax",
-        "cmp    $0x1000,%rax",
-        "ja     2b",
-        "1:",
-        "sub    %rax,%rcx",
-        "test   %rcx,(%rcx)",
-        "lea    8(%rsp),%rax",  // load pointer to the return address into rax
-        "mov    %rcx,%rsp",     // install the new top of stack pointer into rsp
-        "mov    -8(%rax),%rcx", // restore rcx
-        "push   (%rax)",        // push return address onto the stack
-        "sub    %rsp,%rax",     // restore the original value in rax
-        "ret",
-        options(noreturn, att_syntax)
+        "lea     r11, [r11-1000h]",
+        "test    [r11], r11b",
+
+        "3:",
+        "cmp     r10, r11",
+        "jb      short 2b",
+        "mov     r10, [rsp]",
+        "mov     r11, [rsp+8h]",
+        "add     rsp, 10h",
+        "retn",
+        options(noreturn)
     );
 }
+// Source: https://docs.rs/compiler_builtins/latest/src/compiler_builtins/x86_64.rs.html#58
+// #[no_mangle]
+// pub unsafe extern "C" fn __chkstk() -> u32 {
+//     let requested: u32;
+//     asm!("mov {:e}, eax", out(reg) requested);
+
+//     let stack_ptr: u64;
+//     asm!("mov {:r}, rsp", out(reg) stack_ptr);
+
+//     let mut stack_bottom: u64 = 0;
+//     let mut stack_top: u64 = 0;
+//     unsafe {
+//         IoGetStackLimits(&mut stack_bottom, &mut stack_top);
+//     }
+
+//     log::debug!("__chkstk: rsp = {:X}, requested: {:X}, bottom: {:X}, top: {:X}, avail: {:X}", stack_ptr, requested, stack_bottom, stack_top, stack_top - stack_bottom);
+//     //_dbg_brk();
+//     requested
+// }
 
 /// When using the alloc crate it seems like it does some unwinding. Adding this
 /// export satisfies the compiler but may introduce undefined behaviour when a

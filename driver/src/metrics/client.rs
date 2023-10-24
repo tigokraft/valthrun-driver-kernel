@@ -210,7 +210,7 @@ impl MetricsSender {
 
     pub fn submit_records(&mut self, records: &[MetricsRecord]) -> Result<(), SubmitError> {
         let wsk = unsafe { &*WSK.get() }.as_ref().ok_or_else(|| SubmitError {
-            reason: anyhow!("wsk not initialized"),
+            reason: anyhow!("{}", obfstr!("wsk not initialized")),
             drop_records: false,
             ..Default::default()
         })?;
@@ -241,16 +241,16 @@ impl MetricsSender {
         })?;
 
         let mut request = HttpRequest {
-            method: "POST",
-            target: "/api/v1/report",
+            method: obfstr!("POST").to_string(),
+            target: obfstr!("/api/v1/report").to_string(),
             payload: &report,
             headers: HttpHeaders::new(),
         };
         request
             .headers
-            .add_header("Host", &self.target_host)
-            .add_header("Content-Type", "application/x-valthrun-report")
-            .add_header("x-message-key-id", self.crypto.key_id());
+            .add_header(obfstr!("Host"), &self.target_host)
+            .add_header(obfstr!("Content-Type"), obfstr!("application/x-valthrun-report"))
+            .add_header(obfstr!("x-message-key-id"), self.crypto.key_id());
 
         let response = match http::execute_https_request(wsk, &target_host, &request) {
             Ok(response) => response,
@@ -265,7 +265,7 @@ impl MetricsSender {
 
         if !matches!(response.status_code, 200 | 201) {
             return Err(SubmitError {
-                reason: anyhow!("invalid status code {:#}", response.status_code),
+                reason: anyhow!("{} {:#}", obfstr!("invalid status code"), response.status_code),
                 drop_records: false,
                 ..Default::default()
             });
@@ -274,7 +274,7 @@ impl MetricsSender {
         let response: ResponsePostReport = serde_json::from_slice(&response.content)
             /* When we can not parse the response, assume the server accepted our reports. */
             .map_err(|err| SubmitError {
-                reason: anyhow!("response error: {:#}", err),
+                reason: anyhow!("{}: {:#}", obfstr!("response error"), err),
                 drop_records: true,
                 ..Default::default()
             })?;
@@ -285,14 +285,14 @@ impl MetricsSender {
                 retry_delay,
                 records_submitted,
             } => Err(SubmitError {
-                reason: anyhow!("rate limited"),
+                reason: anyhow!("{}", obfstr!("rate limited")),
                 drop_records: false,
 
                 records_submitted,
                 retry_delay: Some(retry_delay),
             }),
             ResponsePostReport::GenericError { drop_records } => Err(SubmitError {
-                reason: anyhow!("generic server error"),
+                reason: anyhow!("{}", obfstr!("generic server error")),
                 drop_records,
 
                 ..Default::default()
@@ -367,7 +367,7 @@ fn metrics_worker_thread(ctx: &mut WorkerThreadContext) {
     ctx.send_timer.set(ctx.request_interval);
     ctx.send_timer_mode = SendTimerMode::Normal;
 
-    log::debug!("Metrics send worker started");
+    log::trace!("{}", obfstr!("Metrics send worker started"));
     loop {
         let shutdown_mode = ctx.shutdown_mode.load(Ordering::Relaxed);
         if shutdown_mode == SHUTDOWN_MODE_NOW {
@@ -396,7 +396,7 @@ fn metrics_worker_thread(ctx: &mut WorkerThreadContext) {
                 }
 
                 /* wait for the next event */
-                let result = MultipleWait::wait_any(
+                MultipleWait::wait_any(
                     &[ctx.wakeup_event.waitable(), ctx.send_timer.waitable()],
                     _KWAIT_REASON_DelayExecution,
                     KPROCESSOR_MODE::KernelMode,
@@ -409,11 +409,10 @@ fn metrics_worker_thread(ctx: &mut WorkerThreadContext) {
                      * Timer fired and backoff expired or the wakeup event has been signalled.
                      * In this case we reset the timer mode regardless of the previous mode to poll the queue again.
                      */
-                    log::debug!("Switched into normal timer mode.");
+                    log::trace!("{}", obfstr!("Switched into normal timer mode."));
                     ctx.send_timer_mode = SendTimerMode::Normal;
                 }
 
-                log::debug!("Received event: {:?}", result);
                 continue;
             }
         };
@@ -421,10 +420,10 @@ fn metrics_worker_thread(ctx: &mut WorkerThreadContext) {
 
         match ctx.sender.submit_records(report_records_slice) {
             Ok(_) => {
-                log::trace!("{} records submitted", report_records.len());
+                log::trace!("{} {}", report_records.len(), obfstr!("records submitted"));
                 if !matches!(ctx.send_timer_mode, SendTimerMode::Normal) {
                     /* Server accepts records again, juhu :) */
-                    log::debug!("Switched into normal timer mode (submit success).");
+                    log::debug!("{}", obfstr!("Switched into normal timer mode (submit success)."));
                     ctx.send_timer_mode = SendTimerMode::Normal;
                 }
             }
@@ -441,7 +440,7 @@ fn metrics_worker_thread(ctx: &mut WorkerThreadContext) {
                 }
 
                 if let Some(retry_delay) = info.retry_delay {
-                    log::trace!("Switching into forced backoff for {} seconds", retry_delay);
+                    log::trace!("{} {} seconds", obfstr!("Switching into forced backoff for"), retry_delay);
                     ctx.send_timer.set(Duration::from_secs(retry_delay as u64));
                     ctx.send_timer_mode = SendTimerMode::BackoffForced;
 
@@ -451,7 +450,8 @@ fn metrics_worker_thread(ctx: &mut WorkerThreadContext) {
                     let backoff = SUBMIT_BACKOFF_INTERVALS
                         [ctx.backoff_level % SUBMIT_BACKOFF_INTERVALS.len()];
                     log::trace!(
-                        "Switching into backoff with level {} ({:#?})",
+                        "{} {} ({:#?})",
+                        obfstr!("Switching into backoff with level"),
                         ctx.backoff_level,
                         backoff
                     );
@@ -463,7 +463,7 @@ fn metrics_worker_thread(ctx: &mut WorkerThreadContext) {
             }
         }
     }
-    log::debug!("Metrics send worker exited");
+    log::debug!("{}", obfstr!("Metrics send worker exited"));
 }
 
 pub struct MetricsClient {

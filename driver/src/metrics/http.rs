@@ -38,8 +38,8 @@ use crate::{
 };
 
 pub struct HttpRequest<'a> {
-    pub method: &'a str,
-    pub target: &'a str,
+    pub method: String,
+    pub target: String,
     pub headers: HttpHeaders,
     pub payload: &'a [u8],
 }
@@ -49,22 +49,22 @@ impl<'a> HttpRequest<'a> {
         &self,
         output: &mut dyn Write<Error = E>,
     ) -> Result<(), HttpError> {
-        let default_user_agent = format!("Valthrun/Kernel v{}", env!("CARGO_PKG_VERSION"));
+        let default_user_agent = format!("{} v{}", obfstr!("Valthrun/Kernel"), env!("CARGO_PKG_VERSION"));
         let user_agent = self
             .headers
-            .find_header("User-Agent")
+            .find_header(obfstr!("User-Agent"))
             .map_or(&default_user_agent, |header| &header.value);
 
         let connection = self
             .headers
-            .find_header("Connection")
+            .find_header(obfstr!("Connection"))
             .map_or("Close", |header| &header.value);
 
         let mut buffer = Vec::with_capacity(500);
         write!(&mut buffer, "{} {} HTTP/1.1\r\n", self.method, self.target)?;
-        write!(&mut buffer, "User-Agent: {}\r\n", user_agent)?;
-        write!(&mut buffer, "Connection: {}\r\n", connection)?;
-        write!(&mut buffer, "Content-Length: {}\r\n", self.payload.len())?;
+        write!(&mut buffer, "{}: {}\r\n", obfstr!("User-Agent"), user_agent)?;
+        write!(&mut buffer, "{}: {}\r\n", obfstr!("Connection"), connection)?;
+        write!(&mut buffer, "{}: {}\r\n",obfstr!("Content-Length"), self.payload.len())?;
 
         for header in self.headers.headers.iter() {
             write!(&mut buffer, "{}: {}\r\n", header.name, header.value)?;
@@ -170,8 +170,8 @@ impl HttpResponse {
 
         // log::debug!("Response headers: {}", String::from_utf8_lossy(&response_header_buffer));
 
-        let mut headers = [httparse::EMPTY_HEADER; 64];
-        let mut header = httparse::Response::new(&mut headers);
+        let mut headers = Box::new([httparse::EMPTY_HEADER; 64]);
+        let mut header = httparse::Response::new(&mut *headers);
         let _header_count = match header.parse(&buffer) {
             Ok(Status::Complete(count)) => count,
             Ok(Status::Partial) => return Err(HttpError::ResponseHeadersUncomplete),
@@ -196,11 +196,11 @@ impl HttpResponse {
         &mut self,
         stream: &mut dyn Read<Error = E>,
     ) -> Result<(), HttpError> {
-        let content_length = if let Some(header) = self.headers.find_header("Content-Length") {
+        let content_length = if let Some(header) = self.headers.find_header(obfstr!("Content-Length")) {
             header
                 .value
                 .parse::<usize>()
-                .map_err(|_| HttpError::ResponseHeaderInvalid("Content-Length".to_string()))?
+                .map_err(|_| HttpError::ResponseHeaderInvalid(obfstr!("Content-Length").to_string()))?
         } else {
             0
         };
@@ -212,7 +212,7 @@ impl HttpResponse {
         if content_length > 5 * 1024 * 1024 {
             /* too much data :) */
             return Err(HttpError::ResponseHeaderInvalid(
-                "Content-Length".to_string(),
+                obfstr!("Content-Length").to_string(),
             ));
         }
 
@@ -229,6 +229,7 @@ impl HttpResponse {
     }
 }
 
+#[inline(never)]
 pub fn execute_https_request(
     wsk: &WskInstance,
     server_address: &SOCKADDR_INET,
@@ -249,20 +250,20 @@ pub fn execute_https_request(
     let mut write_record_buffer = Vec::new();
     write_record_buffer.resize(16000, 0u8);
 
-    let server_name = &request
+    let server_name = request
         .headers
-        .find_header("Host")
+        .find_header(obfstr!("Host"))
         .ok_or(HttpError::MissingHostHeader)?
-        .value;
+        .value
+        .clone();
 
-    let config = TlsConfig::new().with_server_name(server_name);
+    let config = TlsConfig::new().with_server_name(&server_name);
 
     let mut tls = Box::new(TlsConnection::<'_, TcpConnection, Aes256GcmSha384>::new(
         connection,
         &mut read_record_buffer,
         &mut write_record_buffer,
     ));
-
     tls.open::<_, NoVerify>(TlsContext::new(&config, &mut Win32Rng::new()))?;
 
     if let Err(error) = request.emit_headers(&mut tls) {
@@ -274,18 +275,18 @@ pub fn execute_https_request(
         return Err(error);
     }
     tls.flush()
-        .inspect_err(|err| log::trace!("flush: {:?}", err))?;
+        .inspect_err(|err| log::trace!("{}: {:?}", obfstr!("flush"), err))?;
 
     let mut reader = BufReader::new(tls);
     let mut response = HttpResponse::default();
 
     response
         .read_headers(&mut reader)
-        .inspect_err(|err| log::trace!("read headers: {:#}", err))?;
+        .inspect_err(|err| log::trace!("{}: {:#}", obfstr!("read headers"), err))?;
 
     response
         .read_payload(&mut reader)
-        .inspect_err(|err| log::trace!("read content: {:#}", err))?;
+        .inspect_err(|err| log::trace!("{}: {:#}", obfstr!("read content"), err))?;
 
     // log::debug!("Request succeeded -> {}", response.status_code);
     // log::debug!("Response content length: {}", response.content.len());
@@ -314,13 +315,20 @@ pub fn execute_http_request(
         log::trace!("{}: {:#}", obfstr!("send payload"), error);
         return Err(error);
     }
-    connection.flush()?;
+    connection.flush()
+        .inspect_err(|err| log::trace!("{}: {:?}", obfstr!("flush"), err))?;
 
     let mut reader = BufReader::new(connection);
     let mut response = HttpResponse::default();
 
-    response.read_headers(&mut reader)?;
-    response.read_payload(&mut reader)?;
+    response
+        .read_headers(&mut reader)
+        .inspect_err(|err| log::trace!("{}: {:#}", obfstr!("read headers"), err))?;
+
+    response
+        .read_payload(&mut reader)
+        .inspect_err(|err| log::trace!("{}: {:#}", obfstr!("read content"), err))?;
+
 
     // log::debug!("Request succeeded -> {}", response.status_code);
     // log::debug!("Response content length: {}", response.content.len());

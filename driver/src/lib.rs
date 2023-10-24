@@ -203,14 +203,13 @@ pub extern "system" fn driver_entry(
     let status = match unsafe { driver.as_mut() } {
         Some(driver) => internal_driver_entry(driver, registry_path),
         None => {
-            let target_driver_entry = internal_driver_entry as usize;
             log::info!("{}", obfstr!("Manually mapped driver."));
             log::debug!(
-                "  System range start is {:X}, driver entry mapped at {:X}.",
+                "  {} {:X}.",
+                obfstr!("System range start is"),
                 ll_imports.MmSystemRangeStart as u64,
-                target_driver_entry
             );
-            log::debug!("  IRQL level at {:X}", unsafe {
+            log::debug!("  {} {:X}", obfstr!("IRQL level at"), unsafe {
                 (ll_imports.KeGetCurrentIrql)()
             });
 
@@ -219,7 +218,7 @@ pub extern "system" fn driver_entry(
             let driver_name =
                 UNICODE_STRING::from_bytes(obfstr::wide!("\\Driver\\valthrun-driver"));
             let result = unsafe {
-                (ll_imports.IoCreateDriver)(&driver_name, target_driver_entry as *const _)
+                (ll_imports.IoCreateDriver)(&driver_name, internal_driver_entry as usize as *const _)
             };
             if let Err(code) = result.ok() {
                 if code == STATUS_OBJECT_NAME_COLLISION {

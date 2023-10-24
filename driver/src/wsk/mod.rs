@@ -465,6 +465,8 @@ pub struct WskBasicSocket {
     inner: PWSK_SOCKET,
 }
 
+unsafe impl Send for WskBasicSocket {}
+
 impl WskBasicSocket {
     pub fn wsk_socket(&self) -> PWSK_SOCKET {
         self.inner

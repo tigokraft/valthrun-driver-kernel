@@ -93,7 +93,7 @@ impl<T> JoinHandle<T> {
     }
 }
 
-extern "C" fn rust_thread_start<F, T>(context: PVOID)
+extern "C" fn rust_thread_user_callback<F, T>(context: PVOID)
 where
     F: FnOnce() -> T + Send + 'static,
     T: Send + 'static,
@@ -103,6 +103,27 @@ where
 
     *result = Some((context.callback)());
 }
+
+// #[link(name = "ntoskrnl")]
+// extern "system" {
+//     fn KeExpandKernelStackAndCalloutEx(
+//         Callout: extern "C" fn(PVOID) -> (), 
+//         Parameter: PVOID, 
+//         Size: usize, 
+//         Wait: bool, 
+//         Context: PVOID
+//     ) -> NTSTATUS;
+// }
+// extern "C" fn rust_thread_start<F, T>(context: PVOID)
+// where
+//     F: FnOnce() -> T + Send + 'static,
+//     T: Send + 'static,
+// {
+//     unsafe {
+//         /* Set the stack size to 8 pages. */
+//         KeExpandKernelStackAndCalloutEx(rust_thread_user_callback::<F, T>, context, 0x8000, true, core::ptr::null_mut());
+//     }
+// }
 
 pub fn spawn<F, T>(f: F) -> JoinHandle<T>
 where
@@ -125,7 +146,7 @@ where
             core::ptr::null_mut(),
             core::ptr::null_mut(),
             core::ptr::null_mut(),
-            rust_thread_start::<F, T>,
+            rust_thread_user_callback::<F, T>,
             Box::into_raw(context) as PVOID,
         )
         .ok()
