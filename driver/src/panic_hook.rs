@@ -71,8 +71,33 @@ fn panic(info: &PanicInfo) -> ! {
 #[export_name = "_fltused"]
 static _FLTUSED: i32 = 0;
 
-// #[no_mangle]
-// pub extern "C" fn __chkstk() {}
+// Source: https://docs.rs/compiler_builtins/latest/src/compiler_builtins/x86_64.rs.html#58
+#[no_mangle]
+#[naked]
+pub unsafe extern "C" fn __chkstk() {
+    core::arch::asm!(
+        "push   %rcx",
+        "cmp    $0x1000,%rax",
+        "lea    16(%rsp),%rcx", // rsp before calling this routine -> rcx
+        "jb     1f",
+        "2:",
+        "sub    $0x1000,%rcx",
+        "test   %rcx,(%rcx)",
+        "sub    $0x1000,%rax",
+        "cmp    $0x1000,%rax",
+        "ja     2b",
+        "1:",
+        "sub    %rax,%rcx",
+        "test   %rcx,(%rcx)",
+        "lea    8(%rsp),%rax",  // load pointer to the return address into rax
+        "mov    %rcx,%rsp",     // install the new top of stack pointer into rsp
+        "mov    -8(%rax),%rcx", // restore rcx
+        "push   (%rax)",        // push return address onto the stack
+        "sub    %rsp,%rax",     // restore the original value in rax
+        "ret",
+        options(noreturn, att_syntax)
+    );
+}
 
 /// When using the alloc crate it seems like it does some unwinding. Adding this
 /// export satisfies the compiler but may introduce undefined behaviour when a

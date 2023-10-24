@@ -8,6 +8,7 @@
 #![feature(const_transmute_copy)]
 #![feature(linkage)]
 #![feature(result_option_inspect)]
+#![feature(naked_functions)]
 #![allow(dead_code)]
 
 use alloc::{
