@@ -39,7 +39,7 @@ if RvaExceptionDirectory > 0 then
 
     AddToReport("Deleted exception directory section (" .. EDSectionIndex .. ")")
     WriteDword(DriverHandle, OffsetDataDirectories + 0x8 * 0x03, 0x00) -- clear ed rva
-    WriteDword(DriverHandle, OffsetDataDirectories + 0x8 * 0x03 + 0x04) -- set ed length to zero
+    WriteDword(DriverHandle, OffsetDataDirectories + 0x8 * 0x03 + 0x04, 0x00) -- set ed length to zero
 end 
 SaveFileAs(DriverHandle, argv[2])
 AddToReport("-- success --")
