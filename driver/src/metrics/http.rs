@@ -4,7 +4,7 @@ use alloc::{
         String,
         ToString,
     },
-    vec::Vec,
+    vec::Vec, boxed::Box,
 };
 use core::fmt::Debug;
 
@@ -256,11 +256,11 @@ pub fn execute_https_request(
 
     let config = TlsConfig::new().with_server_name(server_name);
 
-    let mut tls: TlsConnection<'_, TcpConnection, Aes256GcmSha384> = TlsConnection::new(
+    let mut tls = Box::new(TlsConnection::<'_, TcpConnection, Aes256GcmSha384>::new(
         connection,
         &mut read_record_buffer,
         &mut write_record_buffer,
-    );
+    ));
 
     tls.open::<_, NoVerify>(TlsContext::new(&config, &mut Win32Rng::new()))?;
 

@@ -71,8 +71,8 @@ fn panic(info: &PanicInfo) -> ! {
 #[export_name = "_fltused"]
 static _FLTUSED: i32 = 0;
 
-#[no_mangle]
-pub extern "C" fn __chkstk() {}
+// #[no_mangle]
+// pub extern "C" fn __chkstk() {}
 
 /// When using the alloc crate it seems like it does some unwinding. Adding this
 /// export satisfies the compiler but may introduce undefined behaviour when a
