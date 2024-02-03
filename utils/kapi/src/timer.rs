@@ -5,6 +5,7 @@ use core::{
     time::Duration,
 };
 
+use kdef::_KTIMER;
 use utils_imports::{
     dynamic_import_table,
     provider::SystemExport,
@@ -31,17 +32,6 @@ dynamic_import_table! {
         pub KeCancelTimer: KeCancelTimer = SystemExport::new(obfstr!("KeCancelTimer")),
         pub KeSetTimerEx: KeSetTimerEx = SystemExport::new(obfstr!("KeSetTimerEx")),
     }
-}
-
-#[allow(non_snake_case)]
-pub struct _KTIMER {
-    Header: DISPATCHER_HEADER,
-    DueTime: ULARGE_INTEGER,
-    TimerListEntry: LIST_ENTRY,
-    Dpc: *mut (), /* _KDPC */
-    Processor: u16,
-    TimerType: u16,
-    Period: u32,
 }
 
 pub struct KTimer {

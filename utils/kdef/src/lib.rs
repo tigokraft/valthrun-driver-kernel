@@ -23,6 +23,9 @@ pub use ob::*;
 mod irp;
 pub use irp::*;
 
+mod timer;
+pub use timer::*;
+
 mod kbdclass;
 pub use kbdclass::*;
 
