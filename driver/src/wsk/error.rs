@@ -3,7 +3,7 @@ use embedded_io::{
     ErrorKind,
 };
 use thiserror::Error;
-use utils_imports::ImportError;
+use utils_imports::DynamicImportError;
 use winapi::shared::ntdef::NTSTATUS;
 
 pub type WskResult<T> = core::result::Result<T, WskError>;
@@ -11,7 +11,7 @@ pub type WskResult<T> = core::result::Result<T, WskError>;
 #[derive(Error, Debug)]
 pub enum WskError {
     #[error("failed to resolve imports: {0:#}")]
-    ImportError(ImportError),
+    ImportError(DynamicImportError),
 
     #[error("failed to register: {0:X}")]
     Register(NTSTATUS),

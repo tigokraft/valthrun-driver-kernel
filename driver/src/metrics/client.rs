@@ -209,10 +209,12 @@ impl MetricsSender {
     }
 
     pub fn submit_records(&mut self, records: &[MetricsRecord]) -> Result<(), SubmitError> {
-        let wsk = unsafe { &*WSK.get() }.as_ref().ok_or_else(|| SubmitError {
-            reason: anyhow!("{}", obfstr!("wsk not initialized")),
-            drop_records: false,
-            ..Default::default()
+        let wsk = unsafe { &*WSK.get() }.as_ref().ok_or_else(|| {
+            SubmitError {
+                reason: anyhow!("{}", obfstr!("wsk not initialized")),
+                drop_records: false,
+                ..Default::default()
+            }
         })?;
 
         let report = MetricsReport {
@@ -221,23 +223,29 @@ impl MetricsSender {
             records: &records,
         };
 
-        let mut report = serde_json::to_string(&report).map_err(|err| SubmitError {
-            reason: anyhow!("{:#}", err),
-            ..Default::default()
+        let mut report = serde_json::to_string(&report).map_err(|err| {
+            SubmitError {
+                reason: anyhow!("{:#}", err),
+                ..Default::default()
+            }
         })?;
 
         let report = self
             .crypto
             .encrypt(unsafe { report.as_bytes_mut() })
-            .map_err(|err| SubmitError {
-                reason: anyhow!("{:#}", err),
-                ..Default::default()
+            .map_err(|err| {
+                SubmitError {
+                    reason: anyhow!("{:#}", err),
+                    ..Default::default()
+                }
             })?;
 
-        let target_host = self.resolve_target(&wsk).map_err(|error| SubmitError {
-            reason: anyhow!("{:#}", error),
-            drop_records: false,
-            ..Default::default()
+        let target_host = self.resolve_target(&wsk).map_err(|error| {
+            SubmitError {
+                reason: anyhow!("{:#}", error),
+                drop_records: false,
+                ..Default::default()
+            }
         })?;
 
         let mut request = HttpRequest {
@@ -280,10 +288,12 @@ impl MetricsSender {
 
         let response: ResponsePostReport = serde_json::from_slice(&response.content)
             /* When we can not parse the response, assume the server accepted our reports. */
-            .map_err(|err| SubmitError {
-                reason: anyhow!("{}: {:#}", obfstr!("response error"), err),
-                drop_records: true,
-                ..Default::default()
+            .map_err(|err| {
+                SubmitError {
+                    reason: anyhow!("{}: {:#}", obfstr!("response error"), err),
+                    drop_records: true,
+                    ..Default::default()
+                }
             })?;
 
         match response {
@@ -291,19 +301,23 @@ impl MetricsSender {
             ResponsePostReport::RateLimited {
                 retry_delay,
                 records_submitted,
-            } => Err(SubmitError {
-                reason: anyhow!("{}", obfstr!("rate limited")),
-                drop_records: false,
+            } => {
+                Err(SubmitError {
+                    reason: anyhow!("{}", obfstr!("rate limited")),
+                    drop_records: false,
 
-                records_submitted,
-                retry_delay: Some(retry_delay),
-            }),
-            ResponsePostReport::GenericError { drop_records } => Err(SubmitError {
-                reason: anyhow!("{}", obfstr!("generic server error")),
-                drop_records,
+                    records_submitted,
+                    retry_delay: Some(retry_delay),
+                })
+            }
+            ResponsePostReport::GenericError { drop_records } => {
+                Err(SubmitError {
+                    reason: anyhow!("{}", obfstr!("generic server error")),
+                    drop_records,
 
-                ..Default::default()
-            }),
+                    ..Default::default()
+                })
+            }
             ResponsePostReport::InstanceBlocked => {
                 thread::spawn(|| {
                     let imports = DEBUG_IMPORTS.unwrap();

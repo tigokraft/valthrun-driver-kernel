@@ -1,18 +1,19 @@
-use alloc::string::String;
-
 use thiserror::Error;
 
-pub type ImportResult<T> = Result<T, ImportError>;
+pub type ImportResult<T> = Result<T, DynamicImportError>;
 
 #[derive(Debug, Error)]
-pub enum ImportError {
-    #[error("module {module} not found")]
-    ModuleUnknown { module: String },
+pub enum DynamicImportError {
+    #[error("the target provider has not been initialized")]
+    ProviderNotInitialized,
 
-    #[error("symbol {symbol} in {module} not found")]
-    SymbolUnknown { module: String, symbol: String },
+    #[error("the target module can not be found")]
+    ModuleUnknown,
+
+    #[error("the target symbol can not be found")]
+    SymbolUnknown,
 
     /// A generic import error has occurred
     #[error("{reason}")]
-    Generic { reason: String },
+    Generic { reason: &'static str },
 }

@@ -1,14 +1,12 @@
 #![no_std]
-#![feature(core_intrinsics)]
 #![feature(error_in_core)]
 #![feature(sync_unsafe_cell)]
-#![feature(pointer_byte_offsets)]
 #![feature(result_flattening)]
 #![feature(new_uninit)]
-#![feature(const_transmute_copy)]
 #![feature(linkage)]
-#![feature(result_option_inspect)]
 #![feature(naked_functions)]
+#![feature(core_intrinsics)]
+#![allow(internal_features)]
 #![allow(dead_code)]
 
 use alloc::{
@@ -37,6 +35,7 @@ use metrics::{
 use mouse::MouseInput;
 use obfstr::obfstr;
 use panic_hook::DEBUG_IMPORTS;
+use utils_imports::provider::SystemExport;
 use valthrun_driver_shared::requests::RequestHealthCheck;
 use winapi::{
     km::wdm::DRIVER_OBJECT,
@@ -161,7 +160,7 @@ pub extern "system" fn driver_entry(
     driver: *mut DRIVER_OBJECT,
     registry_path: *const UNICODE_STRING,
 ) -> NTSTATUS {
-    utils_imports::initialize();
+    SystemExport::initialize(None);
     if DEBUG_IMPORTS.resolve().is_err() {
         /*
          * If this import fails, we can't do anything else except return an appropiate status code.

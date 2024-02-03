@@ -1,12 +1,7 @@
-use alloc::{
-    format,
-    string::ToString,
-};
-
 use utils_imports::{
-    ll,
+    utils,
     DynamicImport,
-    ImportError,
+    DynamicImportError,
     ImportResult,
 };
 
@@ -27,18 +22,15 @@ impl ModuleExport {
 impl<T> DynamicImport<T> for ModuleExport {
     fn resolve(self) -> ImportResult<T> {
         let net_module = KModule::find_by_name(self.module)
-            .map_err(|err| ImportError::Generic {
-                reason: format!("{:#}", err),
+            .map_err(|_err| {
+                DynamicImportError::Generic {
+                    reason: "failed to iterate modules ",
+                }
             })?
-            .ok_or_else(|| ImportError::ModuleUnknown {
-                module: self.module.to_string(),
-            })?;
+            .ok_or_else(|| DynamicImportError::ModuleUnknown)?;
 
-        ll::lookup_export(net_module.base_address as u64, self.symbol)
+        utils::resolve_symbol_from_pimage(net_module.base_address as u64, self.symbol)
             .map(|value| unsafe { core::mem::transmute_copy(&value) })
-            .ok_or_else(|| ImportError::SymbolUnknown {
-                module: self.module.to_string(),
-                symbol: self.symbol.to_string(),
-            })
+            .ok_or_else(|| DynamicImportError::SymbolUnknown)
     }
 }

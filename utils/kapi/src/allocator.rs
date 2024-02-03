@@ -1,6 +1,9 @@
 use core::alloc::GlobalAlloc;
 
-use utils_imports::provider::LLSystemExport;
+use utils_imports::{
+    dynamic_import_table,
+    provider::SystemExport,
+};
 use winapi::{
     km::wdm::POOL_TYPE,
     shared::ntdef::PVOID,
@@ -12,25 +15,24 @@ type ExAllocatePoolWithTag =
     unsafe extern "system" fn(PoolType: POOL_TYPE, NumberOfBytes: usize, Tag: u32) -> PVOID;
 type ExFreePoolWithTag = unsafe extern "system" fn(P: PVOID, Tag: u32);
 
-#[allow(non_upper_case_globals)]
-static IMPORT_ExAllocatePoolWithTag: LLSystemExport<ExAllocatePoolWithTag> =
-    LLSystemExport::new("ExAllocatePoolWithTag");
-
-#[allow(non_upper_case_globals)]
-static IMPORT_ExFreePoolWithTag: LLSystemExport<ExFreePoolWithTag> =
-    LLSystemExport::new("ExFreePoolWithTag");
+dynamic_import_table! {
+    imports IMPORTS_ALLOCATOR {
+        pub ExAllocatePoolWithTag: ExAllocatePoolWithTag = SystemExport::new("ExAllocatePoolWithTag"),
+        pub ExFreePoolWithTag: ExFreePoolWithTag = SystemExport::new("ExFreePoolWithTag"),
+    }
+}
 
 struct NonPagedAllocator;
 unsafe impl GlobalAlloc for NonPagedAllocator {
     unsafe fn alloc(&self, layout: core::alloc::Layout) -> *mut u8 {
         #[allow(non_snake_case)]
-        let ExAllocatePoolWithTag = match IMPORT_ExAllocatePoolWithTag.resolve() {
-            Some(func) => func,
+        let ExAllocatePoolWithTag = match IMPORTS_ALLOCATOR.resolve() {
+            Ok(table) => table.ExAllocatePoolWithTag,
             /*
              * Failed to find target import.
              * Alloc failed.
              */
-            None => return core::ptr::null_mut(),
+            Err(_) => return core::ptr::null_mut(),
         };
 
         (ExAllocatePoolWithTag)(POOL_TYPE::NonPagedPool, layout.size(), POOL_TAG) as *mut u8
@@ -42,7 +44,7 @@ unsafe impl GlobalAlloc for NonPagedAllocator {
          * to avoid unwanted side effects.
          */
         #[allow(non_snake_case)]
-        let ExFreePoolWithTag = IMPORT_ExFreePoolWithTag.resolve().unwrap();
+        let ExFreePoolWithTag = IMPORTS_ALLOCATOR.unwrap().ExFreePoolWithTag;
         (ExFreePoolWithTag)(ptr as PVOID, POOL_TAG);
     }
 }

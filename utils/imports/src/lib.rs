@@ -1,25 +1,16 @@
 #![no_std]
-#![feature(sync_unsafe_cell)]
 #![feature(error_in_core)]
-#![feature(pointer_byte_offsets)]
+#![feature(sync_unsafe_cell)]
 
-extern crate alloc;
-
-pub mod ll;
-pub use obfstr::obfstr;
-pub use paste::paste;
-
+mod r#macro;
 pub mod provider;
+pub mod utils;
 
 mod error;
 pub use error::*;
 
 mod table;
+/* re-exports for the dynamic_import_table macro */
+pub use obfstr::obfstr;
+pub use paste::paste;
 pub use table::*;
-
-mod r#macro;
-// pub use r#macro::dynamic_import_table;
-
-pub fn initialize() {
-    ll::init();
-}

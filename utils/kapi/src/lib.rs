@@ -1,7 +1,6 @@
 #![no_std]
 #![allow(dead_code)]
 #![feature(sync_unsafe_cell)]
-#![feature(pointer_byte_offsets)]
 #![feature(new_uninit)]
 
 extern crate alloc;

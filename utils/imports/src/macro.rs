@@ -27,9 +27,11 @@ macro_rules! dynamic_import_table {
                 }
             }
 
+            /* All resolved imports must be Send & Sync (else they would not be exported) */
+            unsafe impl Sync for [<_ $name>] {}
+            unsafe impl Send for [<_ $name>] {}
+
             $visibility static $name: $crate::DynamicImportTable<[<_ $name>]> = $crate::DynamicImportTable::new(&[<_ $name>]::resolve);
         }
     };
 }
-
-pub use dynamic_import_table;
