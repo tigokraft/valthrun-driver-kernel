@@ -1,0 +1,23 @@
+[package]
+name = "driver"
+version = "0.2.1"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+path = "src/lib.rs"
+crate-type = ["cdylib"]
+
+[build-dependencies]
+anyhow = "1.0.72"
+bindgen = "0.68.1"
+cc = "1.0.79"
+winreg = "0.50.0"
+
+[dependencies]
+log = "0.4.19"
+obfstr = "0.4.3"
+kapi = { version = "0.1.0", path = "../utils/kapi" }
+kapi-kmodule = { version = "0.1.0", path = "../utils/kapi-kmodule" }
+kdef = { version = "0.1.0", path = "../utils/kdef" }

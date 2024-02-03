@@ -1,7 +1,10 @@
 use winapi::{
     km::{
         ndis::PMDL,
-        wdm::PIRP,
+        wdm::{
+            KPROCESSOR_MODE,
+            PIRP,
+        },
     },
     shared::ntdef::PVOID,
 };
@@ -9,12 +12,12 @@ use winapi::{
 use crate::imports::GLOBAL_IMPORTS;
 
 pub struct Mdl {
-    inner: PMDL,
+    handle: PMDL,
 }
 
 impl Mdl {
     pub fn from_raw(mdl: PMDL) -> Self {
-        Self { inner: mdl }
+        Self { handle: mdl }
     }
 
     pub fn allocate(
@@ -38,28 +41,32 @@ impl Mdl {
             return None;
         }
 
-        Some(Self { inner: mdl })
+        Some(Self { handle: mdl })
     }
 
-    pub fn mdl(&self) -> PMDL {
-        self.inner
+    pub fn raw_mdl(&self) -> PMDL {
+        self.handle
     }
 
     pub fn into_raw(mut self) -> PMDL {
-        let value = self.inner;
-        self.inner = core::ptr::null_mut();
+        let value = self.handle;
+        self.handle = core::ptr::null_mut();
         value
+    }
+
+    pub fn lock(self, access_mode: KPROCESSOR_MODE, operation: u32) -> Result<LockedMDL, Mdl> {
+        LockedMDL::try_lock(self, access_mode, operation)
     }
 }
 
 impl Drop for Mdl {
     fn drop(&mut self) {
-        if self.inner.is_null() {
+        if self.handle.is_null() {
             return;
         }
 
         let imports = GLOBAL_IMPORTS.unwrap();
-        unsafe { (imports.IoFreeMdl)(self.inner) };
+        unsafe { (imports.IoFreeMdl)(self.handle) };
     }
 }
 
@@ -75,6 +82,42 @@ pub const MCT_NOT_MAPPED: u32 = 0x07;
 pub const IO_READ_ACCESS: u32 = 0x00;
 pub const IO_WRITE_ACCESS: u32 = 0x01;
 pub const IO_MODIFY_ACCESS: u32 = 0x02;
+
+pub struct LockedMDL {
+    handle: Option<Mdl>,
+}
+
+impl LockedMDL {
+    fn try_lock(mdl: Mdl, access_mode: KPROCESSOR_MODE, operation: u32) -> Result<Self, Mdl> {
+        if !seh::probe_and_lock_pages(mdl.raw_mdl(), access_mode, operation) {
+            Err(mdl)
+        } else {
+            Ok(Self { handle: Some(mdl) })
+        }
+    }
+
+    pub fn raw_mdl(&self) -> PMDL {
+        self.handle.as_ref().unwrap().raw_mdl()
+    }
+
+    pub fn unlock(mut self) -> Mdl {
+        self.do_unlock();
+        self.handle.take().unwrap()
+    }
+
+    fn do_unlock(&mut self) {
+        let imports = GLOBAL_IMPORTS.unwrap();
+        unsafe { (imports.MmUnlockPages)(self.raw_mdl()) };
+    }
+}
+
+impl Drop for LockedMDL {
+    fn drop(&mut self) {
+        if self.handle.is_some() {
+            self.do_unlock();
+        }
+    }
+}
 
 // pub struct LockedVirtMem {
 //     mdl: PMDL,

@@ -4,8 +4,7 @@ use embedded_io::{
     Read,
     Write,
 };
-
-use crate::wsk::{
+use vtk_wsk::{
     sys::{
         IPPROTO_IPPROTO_TCP,
         PSOCKADDR,

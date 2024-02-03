@@ -37,6 +37,7 @@ use obfstr::obfstr;
 use panic_hook::DEBUG_IMPORTS;
 use utils_imports::provider::SystemExport;
 use valthrun_driver_shared::requests::RequestHealthCheck;
+use vtk_wsk::WskInstance;
 use winapi::{
     km::wdm::DRIVER_OBJECT,
     shared::{
@@ -70,7 +71,6 @@ use crate::{
         initialize_os_info,
         os_info,
     },
-    wsk::WskInstance,
 };
 
 extern crate compiler_builtins;
@@ -89,7 +89,6 @@ mod pmem;
 mod process_protection;
 mod util;
 mod winver;
-mod wsk;
 
 mod status;
 use status::*;

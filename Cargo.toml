@@ -8,8 +8,11 @@ members = [
     "utils/kapi-kmodule",
     "utils/kapi",
     "utils/imports",
+    "utils/wsk",
 
     "driver",
+    # "driver/metrics",
+    # "hypervisor",
 ]
 
 [profile.dev]

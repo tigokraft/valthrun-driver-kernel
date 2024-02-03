@@ -17,7 +17,6 @@ macro_rules! dynamic_import_table {
                 pub fn resolve() -> $crate::ImportResult<Self> {
                     use $crate::DynamicImport;
                     use $crate::obfstr;
-                    use anyhow::Context;
 
                     Ok(Self {
                         $(

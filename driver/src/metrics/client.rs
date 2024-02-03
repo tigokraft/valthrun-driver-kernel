@@ -32,6 +32,13 @@ use kapi::{
 };
 use obfstr::obfstr;
 use rand_core::RngCore;
+use vtk_wsk::{
+    SocketAddrInetEx,
+    WskInstance,
+    AF_INET,
+    AF_INET6,
+    SOCKADDR_INET,
+};
 use winapi::{
     km::wdm::{
         NotificationEvent,
@@ -61,15 +68,6 @@ use crate::{
     util::{
         KeQueryTickCount,
         Win32Rng,
-    },
-    wsk::{
-        sys::{
-            AF_INET,
-            AF_INET6,
-            SOCKADDR_INET,
-        },
-        SocketAddrInetEx,
-        WskInstance,
     },
     WSK,
 };

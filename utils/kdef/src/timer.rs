@@ -1,10 +1,18 @@
+use winapi::{
+    km::wdm::DISPATCHER_HEADER,
+    shared::ntdef::{
+        LIST_ENTRY,
+        ULARGE_INTEGER,
+    },
+};
+
 #[allow(non_snake_case)]
 pub struct _KTIMER {
-    Header: DISPATCHER_HEADER,
-    DueTime: ULARGE_INTEGER,
-    TimerListEntry: LIST_ENTRY,
-    Dpc: *mut (), /* _KDPC */
-    Processor: u16,
-    TimerType: u16,
-    Period: u32,
+    pub Header: DISPATCHER_HEADER,
+    pub DueTime: ULARGE_INTEGER,
+    pub TimerListEntry: LIST_ENTRY,
+    pub Dpc: *mut (), /* _KDPC */
+    pub Processor: u16,
+    pub TimerType: u16,
+    pub Period: u32,
 }

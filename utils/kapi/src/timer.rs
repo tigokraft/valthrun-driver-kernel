@@ -10,14 +10,7 @@ use utils_imports::{
     dynamic_import_table,
     provider::SystemExport,
 };
-use winapi::{
-    km::wdm::DISPATCHER_HEADER,
-    shared::ntdef::{
-        LIST_ENTRY,
-        PVOID,
-        ULARGE_INTEGER,
-    },
-};
+use winapi::shared::ntdef::PVOID;
 
 use crate::Waitable;
 

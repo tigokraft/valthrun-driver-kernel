@@ -23,6 +23,10 @@ use embedded_tls::blocking::{
 };
 use httparse::Status;
 use obfstr::obfstr;
+use vtk_wsk::{
+    WskInstance,
+    SOCKADDR_INET,
+};
 
 use crate::{
     io::BufReader,
@@ -30,10 +34,6 @@ use crate::{
     util::{
         TcpConnection,
         Win32Rng,
-    },
-    wsk::{
-        sys::SOCKADDR_INET,
-        WskInstance,
     },
 };
 

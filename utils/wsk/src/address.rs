@@ -5,14 +5,19 @@ use alloc::string::{
 
 use kapi::NTStatusEx;
 use obfstr::obfstr;
-
-use super::sys::{
+use vtk_wsk_sys::{
+    addrinfoexW,
     sockaddr,
     AF_INET,
     AF_INET6,
+    PADDRINFOEXW,
     SOCKADDR_INET,
 };
-use crate::imports::GLOBAL_IMPORTS;
+
+use crate::{
+    WskInstance,
+    WSK_IMPORTS,
+};
 
 pub trait SocketAddrInetEx {
     fn si_family(&self) -> u16;
@@ -54,7 +59,7 @@ impl SocketAddrInetEx for SOCKADDR_INET {
         let mut buffer = [0u8; 128];
         let mut buffer_length = buffer.len() as u32;
 
-        let imports = if let Ok(imports) = GLOBAL_IMPORTS.resolve() {
+        let imports = if let Ok(imports) = WSK_IMPORTS.resolve() {
             imports
         } else {
             panic!("{}", obfstr!("global imports should have been resolved"))
@@ -95,5 +100,42 @@ impl SocketAddrInetEx for SOCKADDR_INET {
 
     fn as_sockaddr_mut(&mut self) -> &mut sockaddr {
         unsafe { core::mem::transmute_copy(&self) }
+    }
+}
+
+pub struct WskAddressInfo<'a> {
+    pub(crate) instance: &'a WskInstance,
+    pub(crate) inner: PADDRINFOEXW,
+}
+
+impl<'a> WskAddressInfo<'a> {
+    pub fn iterate_results(&self) -> impl Iterator<Item = &'a addrinfoexW> {
+        let mut current_info = self.inner;
+        core::iter::from_fn(move || {
+            if current_info.is_null() {
+                return None;
+            }
+
+            let result = unsafe { &*current_info };
+            current_info = result.ai_next;
+            return Some(result);
+        })
+    }
+}
+
+impl<'a> Drop for WskAddressInfo<'a> {
+    fn drop(&mut self) {
+        if self.inner.is_null() {
+            /* nothing to do. */
+            return;
+        }
+
+        unsafe {
+            (self
+                .instance
+                .provider_dispatch()
+                .WskFreeAddressInfo
+                .unwrap())(self.instance.provider_client(), self.inner);
+        }
     }
 }

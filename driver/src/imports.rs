@@ -12,16 +12,19 @@ use utils_imports::{
     provider::SystemExport,
 };
 use winapi::{
-    km::wdm::{
-        DEVICE_OBJECT,
-        DEVICE_TYPE,
-        DRIVER_OBJECT,
-        IO_PRIORITY::KPRIORITY_BOOST,
-        KPROCESSOR_MODE,
-        PDEVICE_OBJECT,
-        PEPROCESS,
-        PETHREAD,
-        PIRP,
+    km::{
+        ndis::PMDL,
+        wdm::{
+            DEVICE_OBJECT,
+            DEVICE_TYPE,
+            DRIVER_OBJECT,
+            IO_PRIORITY::KPRIORITY_BOOST,
+            KPROCESSOR_MODE,
+            PDEVICE_OBJECT,
+            PEPROCESS,
+            PETHREAD,
+            PIRP,
+        },
     },
     shared::{
         guiddef::LPCGUID,
@@ -45,12 +48,6 @@ use winapi::{
     },
 };
 
-use crate::wsk::sys::{
-    IN6_ADDR,
-    IN_ADDR,
-    PMDL,
-};
-
 pub const BCRYPT_RNG_USE_ENTROPY_IN_BUFFER: u32 = 0x00000001;
 pub const BCRYPT_USE_SYSTEM_PREFERRED_RNG: u32 = 0x00000002;
 
@@ -61,20 +58,6 @@ type BCryptGenRandom = unsafe extern "C" fn(
     dwFlags: u32,
 ) -> NTSTATUS;
 
-type RtlIpv4AddressToStringExA = unsafe extern "C" fn(
-    Address: &IN_ADDR,
-    Port: u16,
-    Buffer: *mut u8,
-    BufferLength: &mut u32,
-) -> NTSTATUS;
-
-type RtlIpv6AddressToStringExA = unsafe extern "C" fn(
-    Address: &IN6_ADDR,
-    ScopeId: u32,
-    Port: u16,
-    Buffer: *mut u8,
-    BufferLength: &mut u32,
-) -> NTSTATUS;
 type RtlImageNtHeader = unsafe extern "C" fn(ModuleAddress: PVOID) -> PIMAGE_NT_HEADERS;
 
 type RtlRandomEx = unsafe extern "C" fn(Seed: *mut u32) -> u32;
@@ -133,14 +116,6 @@ type IoAllocateIrp = unsafe extern "system" fn(StackSize: CCHAR, ChargeQuota: bo
 type IoCancelIrp = unsafe extern "system" fn(Irp: PIRP);
 type IoCompleteRequest = unsafe extern "system" fn(Irp: PIRP, PriorityBoost: KPRIORITY_BOOST);
 type IoDeleteDevice = unsafe extern "system" fn(DeviceObject: *mut DEVICE_OBJECT) -> NTSTATUS;
-type IoAllocateMdl = unsafe extern "system" fn(
-    VirtualAddress: PVOID,
-    Length: u32,
-    SecondaryBuffer: bool,
-    ChargeQuota: bool,
-    Irp: PIRP,
-) -> PMDL;
-type IoFreeMdl = unsafe extern "system" fn(MemoryDescriptorList: PMDL);
 type IoFreeIrp = unsafe extern "system" fn(Irp: PIRP);
 type IoRegisterShutdownNotification =
     unsafe extern "system" fn(DeviceObject: PDEVICE_OBJECT) -> NTSTATUS;
@@ -208,8 +183,6 @@ type ExGetSystemFirmwareTable = unsafe extern "system" fn(
 
 dynamic_import_table! {
     pub imports GLOBAL_IMPORTS {
-        pub RtlIpv4AddressToStringExA: RtlIpv4AddressToStringExA = SystemExport::new(obfstr!("RtlIpv4AddressToStringExA")),
-        pub RtlIpv6AddressToStringExA: RtlIpv6AddressToStringExA = SystemExport::new(obfstr!("RtlIpv6AddressToStringExA")),
         pub RtlImageNtHeader: RtlImageNtHeader = SystemExport::new(obfstr!("RtlImageNtHeader")),
 
         pub KeQuerySystemTimePrecise: KeQuerySystemTimePrecise = SystemExport::new(obfstr!("KeQuerySystemTimePrecise")),
@@ -233,12 +206,10 @@ dynamic_import_table! {
 
         pub IoCreateDeviceSecure: IoCreateDeviceSecure = SystemExport::new(obfstr!("IoCreateDeviceSecure")),
         pub IoDeleteDevice: IoDeleteDevice = SystemExport::new(obfstr!("IoDeleteDevice")),
-        pub IoAllocateIrp: IoAllocateIrp = SystemExport::new(obfstr!("IoAllocateIrp")),
-        pub IoCompleteRequest: IoCompleteRequest = SystemExport::new(obfstr!("IoCompleteRequest")),
-        pub IoCancelIrp: IoCancelIrp = SystemExport::new(obfstr!("IoCancelIrp")),
-        pub IoFreeIrp: IoFreeIrp = SystemExport::new(obfstr!("IoFreeIrp")),
-        pub IoAllocateMdl: IoAllocateMdl = SystemExport::new(obfstr!("IoAllocateMdl")),
-        pub IoFreeMdl: IoFreeMdl = SystemExport::new(obfstr!("IoFreeMdl")),
+        //pub IoAllocateIrp: IoAllocateIrp = SystemExport::new(obfstr!("IoAllocateIrp")),
+        //pub IoCompleteRequest: IoCompleteRequest = SystemExport::new(obfstr!("IoCompleteRequest")),
+        //pub IoCancelIrp: IoCancelIrp = SystemExport::new(obfstr!("IoCancelIrp")),
+        //pub IoFreeIrp: IoFreeIrp = SystemExport::new(obfstr!("IoFreeIrp")),
         pub IoRegisterShutdownNotification: IoRegisterShutdownNotification = SystemExport::new(obfstr!("IoRegisterShutdownNotification")),
         pub IoUnregisterShutdownNotification: IoUnregisterShutdownNotification = SystemExport::new(obfstr!("IoUnregisterShutdownNotification")),
 

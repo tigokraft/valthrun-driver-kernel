@@ -1,13 +1,32 @@
 use alloc::boxed::Box;
-use core::time::Duration;
+use core::{
+    mem,
+    time::Duration,
+};
 
 use kapi::{
+    IrpEx,
     KEvent,
     NTStatusEx,
     Waitable,
 };
 use kdef::IoSetCompletionRoutine;
 use obfstr::obfstr;
+use vtk_wsk_sys::{
+    ADDRESS_FAMILY,
+    PADDRINFOEXW,
+    PSOCKADDR,
+    PWSK_BUF,
+    PWSK_PROVIDER_BASIC_DISPATCH,
+    PWSK_PROVIDER_CONNECTION_DISPATCH,
+    PWSK_SOCKET,
+    WSK_FLAG_CONNECTION_SOCKET,
+    WSK_NO_WAIT,
+    _WSK_PROVIDER_BASIC_DISPATCH,
+    _WSK_PROVIDER_CONNECTION_DISPATCH,
+    _WSK_PROVIDER_DISPATCH,
+    _WSK_PROVIDER_NPI,
+};
 use winapi::{
     km::wdm::{
         _KWAIT_REASON_DelayExecution,
@@ -28,132 +47,14 @@ use winapi::{
     },
 };
 
-use self::sys::{
-    addrinfoexW,
-    ADDRESS_FAMILY,
-    PADDRINFOEXW,
-    PSOCKADDR,
-    PWSK_BUF,
-    PWSK_CLIENT_DISPATCH,
-    PWSK_PROVIDER_BASIC_DISPATCH,
-    PWSK_PROVIDER_CONNECTION_DISPATCH,
-    PWSK_REGISTRATION,
-    PWSK_SOCKET,
-    WSK_FLAG_CONNECTION_SOCKET,
-    WSK_NO_WAIT,
-    _WSK_CLIENT_DISPATCH,
-    _WSK_CLIENT_NPI,
-    _WSK_PROVIDER_BASIC_DISPATCH,
-    _WSK_PROVIDER_CONNECTION_DISPATCH,
-    _WSK_PROVIDER_DISPATCH,
-    _WSK_PROVIDER_NPI,
-    _WSK_REGISTRATION,
+use crate::{
+    WskAddressInfo,
+    WskBuffer,
+    WskError,
+    WskRegistration,
+    WskResult,
+    WSK_IMPORTS,
 };
-use crate::imports::GLOBAL_IMPORTS;
-
-pub mod sys;
-
-mod imports;
-pub use imports::*;
-
-mod error;
-pub use error::*;
-
-mod buffer;
-pub use buffer::*;
-
-mod address;
-pub use address::*;
-
-struct WskRegistrationInner {
-    dispatch: _WSK_CLIENT_DISPATCH,
-    registration: _WSK_REGISTRATION,
-}
-
-pub struct WskRegistration {
-    inner: core::pin::Pin<Box<WskRegistrationInner>>,
-}
-
-impl WskRegistration {
-    pub fn new(version: u16) -> WskResult<Self> {
-        let wsk_imports = WSK_IMPORTS.resolve().map_err(WskError::ImportError)?;
-
-        /* The registration needs to be pinned, as the ptr to the registration must not change! */
-        let mut inner = Box::pin(WskRegistrationInner {
-            dispatch: unsafe { core::mem::zeroed() },
-            registration: unsafe { core::mem::zeroed() },
-        });
-        inner.dispatch.Version = version;
-
-        let mut client: _WSK_CLIENT_NPI = unsafe { core::mem::zeroed() };
-        client.ClientContext = core::ptr::null_mut();
-        client.Dispatch = &inner.dispatch;
-
-        unsafe {
-            (wsk_imports.WskRegister)(&mut client, &mut inner.registration)
-                .ok()
-                .map_err(WskError::Register)?;
-        }
-
-        Ok(Self { inner })
-    }
-
-    pub fn wsk_registration(&self) -> PWSK_REGISTRATION {
-        &self.inner.registration as *const _ as PWSK_REGISTRATION
-    }
-
-    #[allow(unused)]
-    pub fn wsk_client_dispatch(&self) -> PWSK_CLIENT_DISPATCH {
-        &self.inner.dispatch as *const _ as PWSK_CLIENT_DISPATCH
-    }
-}
-
-impl Drop for WskRegistration {
-    fn drop(&mut self) {
-        if let Ok(wsk_imports) = WSK_IMPORTS.resolve() {
-            unsafe {
-                (wsk_imports.WskDeregister)(self.wsk_registration());
-            }
-        }
-    }
-}
-
-pub struct WskAddressInfo<'a> {
-    instance: &'a WskInstance,
-    inner: PADDRINFOEXW,
-}
-
-impl<'a> WskAddressInfo<'a> {
-    pub fn iterate_results(&self) -> impl Iterator<Item = &'a addrinfoexW> {
-        let mut current_info = self.inner;
-        core::iter::from_fn(move || {
-            if current_info.is_null() {
-                return None;
-            }
-
-            let result = unsafe { &*current_info };
-            current_info = result.ai_next;
-            return Some(result);
-        })
-    }
-}
-
-impl<'a> Drop for WskAddressInfo<'a> {
-    fn drop(&mut self) {
-        if self.inner.is_null() {
-            /* nothing to do. */
-            return;
-        }
-
-        unsafe {
-            (self.instance.dispatch().WskFreeAddressInfo.unwrap())(
-                self.instance.provider.Client,
-                self.inner,
-            );
-        }
-    }
-}
-
 pub struct WskInstance {
     registration: WskRegistration,
     provider: core::pin::Pin<Box<_WSK_PROVIDER_NPI>>,
@@ -185,8 +86,12 @@ impl WskInstance {
         })
     }
 
-    fn dispatch(&self) -> &_WSK_PROVIDER_DISPATCH {
+    pub(crate) fn provider_dispatch(&self) -> &_WSK_PROVIDER_DISPATCH {
         unsafe { &*self.provider.Dispatch }
+    }
+
+    pub(crate) fn provider_client(&self) -> vtk_wsk_sys::PWSK_CLIENT {
+        self.provider.Client
     }
 
     pub fn create_connection_socket(
@@ -212,23 +117,23 @@ impl WskInstance {
         family: ADDRESS_FAMILY,
         socket_type: u16,
         protocol: u32,
-        socket_context: sys::PVOID,
-        dispatch: sys::PVOID,
+        socket_context: PVOID,
+        dispatch: PVOID,
         flags: u32,
     ) -> WskResult<WskBasicSocket> {
         let context = SyncWskContext::allocate()?;
         let mut status = unsafe {
-            (self.dispatch().WskSocket.unwrap())(
+            (self.provider_dispatch().WskSocket.unwrap())(
                 self.provider.Client,
                 family,
                 socket_type,
                 protocol,
                 flags,
-                socket_context,        /* PVOID SocketContext */
-                dispatch,              /* const VOID *Dispatch, */
-                core::ptr::null_mut(), /* PEPROCESS OwningProcess, */
-                core::ptr::null_mut(), /* PETHREAD OwningThread, */
-                core::ptr::null_mut(), /* PSECURITY_DESCRIPTOR SecurityDescriptor, */
+                socket_context as vtk_wsk_sys::PVOID, /* PVOID SocketContext */
+                dispatch as vtk_wsk_sys::PVOID,       /* const VOID *Dispatch, */
+                core::ptr::null_mut(),                /* PEPROCESS OwningProcess, */
+                core::ptr::null_mut(),                /* PETHREAD OwningThread, */
+                core::ptr::null_mut(),                /* PSECURITY_DESCRIPTOR SecurityDescriptor, */
                 context.irp,
             )
         };
@@ -255,7 +160,7 @@ impl WskInstance {
         let mut query_result: PADDRINFOEXW = unsafe { core::mem::zeroed() };
 
         let status = unsafe {
-            (self.dispatch().WskGetAddressInfo.unwrap())(
+            (self.provider_dispatch().WskGetAddressInfo.unwrap())(
                 self.provider.Client,
                 node_name.map_or(core::ptr::null_mut(), |value: &UNICODE_STRING| {
                     value as *const _ as *mut _
@@ -275,10 +180,7 @@ impl WskInstance {
 
         if status == STATUS_PENDING {
             if !context.await_event(None) {
-                let imports = GLOBAL_IMPORTS.unwrap();
-
-                /* timeout hit */
-                unsafe { (imports.IoCancelIrp)(context.irp) };
+                unsafe { (*context.irp).cancel_request() };
                 context.await_event(None);
                 return Err(WskError::Timeout);
             }
@@ -324,13 +226,9 @@ extern "system" fn wsk_irp_sync_completion_routine(
 impl SyncWskContext {
     /// Use the event to wait for the context
     pub fn allocate() -> WskResult<Self> {
-        let imports = GLOBAL_IMPORTS.unwrap();
         let mut event = Box::new(KEvent::new(NotificationEvent));
 
-        let irp = unsafe { (imports.IoAllocateIrp)(1, false) };
-        if irp.is_null() {
-            return Err(WskError::OutOfMemory("allocate irp"));
-        }
+        let irp = IRP::allocate(1, false).ok_or(WskError::OutOfMemory("allocate irp"))?;
 
         unsafe {
             IoSetCompletionRoutine(
@@ -366,9 +264,9 @@ impl SyncWskContext {
 
 impl Drop for SyncWskContext {
     fn drop(&mut self) {
-        let imports = GLOBAL_IMPORTS.unwrap();
         unsafe {
-            (imports.IoFreeIrp)(self.irp);
+            let irp = mem::replace(&mut self.irp, core::ptr::null_mut());
+            (*irp).free();
         }
     }
 }

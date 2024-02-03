@@ -1,0 +1,15 @@
+[package]
+name = "vtk-wsk-sys"
+version = "0.1.0"
+edition = "2021"
+
+[build-dependencies]
+anyhow = "1.0.72"
+bindgen = "0.68.1"
+cc = "1.0.79"
+winreg = "0.50.0"
+
+[dependencies.winapi]
+git = "https://github.com/Trantect/winapi-rs.git"
+branch = "feature/km"
+features = ["wdm", "ntstatus", "impl-default"]

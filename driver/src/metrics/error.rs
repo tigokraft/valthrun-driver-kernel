@@ -3,8 +3,7 @@ use core::convert::Infallible;
 
 use embedded_io::WriteFmtError;
 use thiserror::Error;
-
-use crate::wsk::WskError;
+use vtk_wsk::WskError;
 
 #[derive(Error, Debug)]
 pub enum HttpError {

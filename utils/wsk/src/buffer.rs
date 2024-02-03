@@ -1,30 +1,28 @@
 use core::marker::PhantomData;
 
 use kapi::{
+    LockedMDL,
     Mdl,
     IO_READ_ACCESS,
     IO_WRITE_ACCESS,
 };
+use vtk_wsk_sys::{
+    PMDL,
+    _WSK_BUF,
+};
 use winapi::{
-    km::{
-        ndis::PMDL,
-        wdm::KPROCESSOR_MODE,
-    },
+    km::wdm::KPROCESSOR_MODE,
     shared::ntdef::PVOID,
 };
 
 use super::{
-    sys::{
-        self,
-        _WSK_BUF,
-    },
     WskError,
     WskResult,
 };
-use crate::imports::GLOBAL_IMPORTS;
 
 pub struct WskBuffer<'a> {
     pub buffer: _WSK_BUF,
+    locked_mdl: LockedMDL,
     _dummy: PhantomData<&'a ()>,
 }
 
@@ -47,16 +45,18 @@ impl<'a> WskBuffer<'a> {
         } else {
             IO_WRITE_ACCESS
         };
-        if !seh::probe_and_lock_pages(mdl.mdl(), KPROCESSOR_MODE::KernelMode, access_mode) {
-            return Err(WskError::InvalidBuffer);
-        }
+
+        let locked_mdl = mdl
+            .lock(KPROCESSOR_MODE::KernelMode, access_mode)
+            .map_err(|_| WskError::InvalidBuffer)?;
 
         Ok(Self {
             buffer: _WSK_BUF {
-                Mdl: mdl.into_raw() as sys::PMDL,
+                Mdl: locked_mdl.raw_mdl() as PMDL,
                 Offset: 0,
                 Length: length as u64,
             },
+            locked_mdl,
             _dummy: Default::default(),
         })
     }
@@ -65,18 +65,11 @@ impl<'a> WskBuffer<'a> {
         self.buffer.Length as usize
     }
 
-    pub fn into_static(self) -> WskBuffer<'static> {
+    pub unsafe fn into_static(self) -> WskBuffer<'static> {
         WskBuffer {
             buffer: self.buffer,
+            locked_mdl: self.locked_mdl,
             _dummy: Default::default(),
         }
-    }
-}
-
-impl<'a> Drop for WskBuffer<'a> {
-    fn drop(&mut self) {
-        let imports = GLOBAL_IMPORTS.unwrap();
-        unsafe { (imports.MmUnlockPages)(self.buffer.Mdl) };
-        Mdl::from_raw(self.buffer.Mdl as PMDL);
     }
 }
