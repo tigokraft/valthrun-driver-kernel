@@ -22,7 +22,6 @@ use device::ValthrunDevice;
 use handler::HandlerRegistry;
 use imports::LL_GLOBAL_IMPORTS;
 use kapi::{
-    device_general_irp_handler,
     NTStatusEx,
     UnicodeStringEx,
 };
@@ -78,7 +77,6 @@ extern crate compiler_builtins;
 mod device;
 mod handler;
 mod imports;
-mod io;
 mod kb;
 mod logger;
 mod metrics;
@@ -321,7 +319,7 @@ extern "C" fn internal_driver_entry(
         return CSTATUS_DRIVER_INIT_FAILED;
     }
 
-    if let Err(error) = seh::init() {
+    if let Err(error) = kapi::initialize(Some(driver)) {
         log::error!("{}: {:#}", obfstr!("Failed to initialize SEH"), error);
         return CSTATUS_DRIVER_INIT_FAILED;
     }
@@ -360,10 +358,6 @@ extern "C" fn internal_driver_entry(
             error
         );
         return CSTATUS_DRIVER_INIT_FAILED;
-    }
-
-    for function in driver.MajorFunction.iter_mut() {
-        *function = Some(device_general_irp_handler);
     }
 
     match kb::create_keyboard_input() {

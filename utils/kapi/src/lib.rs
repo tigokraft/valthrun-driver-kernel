@@ -6,9 +6,13 @@
 extern crate alloc;
 
 mod imports;
+use alloc::string::ToString;
+
+use anyhow::Context;
 pub(crate) use imports::GLOBAL_IMPORTS;
 
 mod process;
+use obfstr::obfstr;
 pub use process::*;
 
 mod mdl;
@@ -51,3 +55,16 @@ pub use timer::*;
 
 mod waitable;
 pub use waitable::*;
+use winapi::km::wdm::DRIVER_OBJECT;
+
+pub fn initialize(driver: Option<&mut DRIVER_OBJECT>) -> anyhow::Result<()> {
+    seh::init().with_context(|| obfstr!("seh").to_string())?;
+
+    if let Some(driver) = driver {
+        for function in driver.MajorFunction.iter_mut() {
+            *function = Some(device_general_irp_handler);
+        }
+    }
+
+    Ok(())
+}

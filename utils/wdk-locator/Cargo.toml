@@ -1,0 +1,9 @@
+[package]
+name = "wdk-locator"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.72"
+bindgen = "0.68.1"
+winreg = "0.50.0"

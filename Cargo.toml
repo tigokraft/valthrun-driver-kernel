@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "shared",
 
+    "utils/wdk-locator",
     "utils/kdef",
     "utils/seh",
     "utils/kapi-kmodule",
@@ -11,8 +12,7 @@ members = [
     "utils/wsk",
 
     "driver",
-    # "driver/metrics",
-    # "hypervisor",
+    "hypervisor",
 ]
 
 [profile.dev]

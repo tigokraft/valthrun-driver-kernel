@@ -1,5 +1,5 @@
 [package]
-name = "driver"
+name = "vtk-hypervisor"
 version = "0.2.1"
 edition = "2021"
 
@@ -10,10 +10,7 @@ path = "src/lib.rs"
 crate-type = ["cdylib"]
 
 [build-dependencies]
-anyhow = "1.0.72"
-bindgen = "0.68.1"
-cc = "1.0.79"
-winreg = "0.50.0"
+wdk-locator = { version = "0.1.0", path = "../utils/wdk-locator" }
 
 [dependencies]
 log = "0.4.19"
@@ -21,3 +18,20 @@ obfstr = "0.4.3"
 kapi = { version = "0.1.0", path = "../utils/kapi" }
 kapi-kmodule = { version = "0.1.0", path = "../utils/kapi-kmodule" }
 kdef = { version = "0.1.0", path = "../utils/kdef" }
+utils-imports = { version = "0.1.0", path = "../utils/imports" }
+seh = { version = "0.1.0", path = "../utils/seh" }
+x86 = "0.52.0"
+bitfield-struct = "0.5.6"
+anyhow = { version = "1.0", default-features = false }
+paste = "1.0.14"
+spin = "0.9.8"
+bitflags = "2.4.2"
+
+[dependencies.compiler_builtins]
+git = "https://github.com/rust-lang/compiler-builtins"
+features = ["mem"]
+
+[dependencies.winapi]
+git = "https://github.com/Trantect/winapi-rs.git"
+branch = "feature/km"
+features = ["wdm", "ntstatus", "impl-default"]

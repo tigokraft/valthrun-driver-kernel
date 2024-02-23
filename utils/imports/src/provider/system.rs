@@ -7,9 +7,9 @@ use core::{
     },
 };
 
-use windows_sys::Win32::System::{
-    Diagnostics::Debug::IMAGE_NT_HEADERS64,
-    SystemServices::IMAGE_DOS_HEADER,
+use winapi::um::winnt::{
+    IMAGE_DOS_HEADER,
+    IMAGE_NT_HEADERS,
 };
 
 use crate::{
@@ -89,7 +89,7 @@ fn find_ntoskrnl_image() -> u64 {
         }
 
         let nt_headers = unsafe {
-            &*((current_ntoskrnl_page + dos_header.e_lfanew as u64) as *const IMAGE_NT_HEADERS64)
+            &*((current_ntoskrnl_page + dos_header.e_lfanew as u64) as *const IMAGE_NT_HEADERS)
         };
         if nt_headers.Signature != 0x00004550 {
             /* NT header does not match */

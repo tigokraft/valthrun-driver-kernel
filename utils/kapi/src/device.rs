@@ -107,7 +107,7 @@ impl<T> Drop for DeviceHandle<T> {
     }
 }
 
-pub extern "system" fn device_general_irp_handler(
+pub(crate) extern "system" fn device_general_irp_handler(
     device: &mut DEVICE_OBJECT,
     irp: &mut IRP,
 ) -> NTSTATUS {

@@ -1,21 +1,17 @@
 use core::ffi::CStr;
 
-use windows_sys::Win32::System::{
-    Diagnostics::Debug::{
-        IMAGE_DIRECTORY_ENTRY_EXPORT,
-        IMAGE_NT_HEADERS64,
-    },
-    SystemServices::{
-        IMAGE_DOS_HEADER,
-        IMAGE_EXPORT_DIRECTORY,
-    },
+use winapi::um::winnt::{
+    IMAGE_DIRECTORY_ENTRY_EXPORT,
+    IMAGE_DOS_HEADER,
+    IMAGE_EXPORT_DIRECTORY,
+    IMAGE_NT_HEADERS,
 };
 
 pub fn resolve_symbol_from_pimage(image_address: u64, symbol_name: &str) -> Option<u64> {
     let dos_header = unsafe { &*(image_address as *const IMAGE_DOS_HEADER) };
 
     let nt_headers =
-        unsafe { &*((image_address + dos_header.e_lfanew as u64) as *const IMAGE_NT_HEADERS64) };
+        unsafe { &*((image_address + dos_header.e_lfanew as u64) as *const IMAGE_NT_HEADERS) };
     let export_table =
         &nt_headers.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT as usize];
 

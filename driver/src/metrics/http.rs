@@ -29,9 +29,9 @@ use vtk_wsk::{
 };
 
 use crate::{
-    io::BufReader,
     metrics::HttpError,
     util::{
+        BufReader,
         TcpConnection,
         Win32Rng,
     },

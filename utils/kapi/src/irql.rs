@@ -18,14 +18,14 @@ pub const HIGH_LEVEL: KIRQL = 15; // Highest interrupt level
 #[allow(non_snake_case)]
 pub fn KeGetCurrentIrql() -> KIRQL {
     let ret: i64;
-    unsafe { asm!("mov {:r}, cr2", out(reg) ret) };
+    unsafe { asm!("mov {:r}, cr8", out(reg) ret) };
     ret as KIRQL
 }
 
 #[allow(non_snake_case)]
 pub fn KeLowerIrql(target: KIRQL) {
     let value = target as i64;
-    unsafe { asm!("mov cr2, {:r}", in(reg) value) };
+    unsafe { asm!("mov cr8, {:r}", in(reg) value) };
 }
 
 #[allow(non_snake_case)]
@@ -33,7 +33,7 @@ pub fn KeRaiseIrql(target: KIRQL) -> KIRQL {
     let current_irql = KeGetCurrentIrql();
 
     let value = target as i64;
-    unsafe { asm!("mov cr2, {:r}", in(reg) value) };
+    unsafe { asm!("mov cr8, {:r}", in(reg) value) };
 
     current_irql
 }
