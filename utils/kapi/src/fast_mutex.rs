@@ -91,10 +91,12 @@ impl<T> FastMutex<T> {
         let status = unsafe { (imports.ExTryToAcquireFastMutex)(self.lock.get()) } != 0;
 
         match status {
-            true => Some(FastMutexGuard {
-                lock: unsafe { &mut *self.lock.get() },
-                data: unsafe { &mut *self.data.get() },
-            }),
+            true => {
+                Some(FastMutexGuard {
+                    lock: unsafe { &mut *self.lock.get() },
+                    data: unsafe { &mut *self.data.get() },
+                })
+            }
             _ => None,
         }
     }
