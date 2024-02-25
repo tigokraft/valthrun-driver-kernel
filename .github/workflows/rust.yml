@@ -26,8 +26,10 @@ jobs:
           cache-all-crates: true
       - name: Check fmt
         run: rustup component add rustfmt && cargo fmt --check
-      - name: Build
-        run: ./.github/workflows/CI-Build.ps1
+      - name: Build Driver
+        run: ./.github/workflows/build-driver.ps1
+      - name: Build UEFI Driver
+        run: ./.github/workflows/build-driver-uefi.ps1
       # Right now there are no tests specified
       # - name: Run tests
       #   run: cargo test --verbose
