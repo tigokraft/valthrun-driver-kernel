@@ -1,0 +1,34 @@
+[package]
+name = "driver-uefi"
+version = "0.2.2"
+edition = "2021"
+
+[lib]
+path = "src/lib.rs"
+crate-type = ["cdylib"]
+
+[build-dependencies]
+anyhow = "1.0.72"
+bindgen = "0.68.1"
+cc = "1.0.79"
+winreg = "0.50.0"
+
+[dependencies]
+log = "0.4.19"
+anyhow = { version = "1.0", default-features = false }
+obfstr = "0.4.3"
+kapi = { version = "0.1.0", path = "../utils/kapi" }
+kapi-kmodule = { version = "0.1.0", path = "../utils/kapi-kmodule" }
+kdef = { version = "0.1.0", path = "../utils/kdef" }
+seh = { version = "0.1.0", path = "../utils/seh" }
+utils-imports = { version = "0.1.0", path = "../utils/imports" }
+x86 = "0.52.0"
+
+[dependencies.compiler_builtins]
+git = "https://github.com/rust-lang/compiler-builtins"
+features = ["mem"]
+
+[dependencies.winapi]
+git = "https://github.com/Trantect/winapi-rs.git"
+branch = "feature/km"
+features = ["wdm", "ntstatus", "impl-default"]

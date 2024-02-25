@@ -1,4 +1,7 @@
+use core::ptr;
+
 use winapi::{
+    ctypes::c_void,
     km::{
         ndis::PMDL,
         wdm::{
@@ -70,6 +73,22 @@ impl Drop for Mdl {
     }
 }
 
+pub enum PagePriority {
+    LOW,
+    NORMAL,
+    HIGH,
+}
+
+impl PagePriority {
+    pub fn ordinal(&self) -> u32 {
+        match self {
+            Self::LOW => 0,
+            Self::NORMAL => 16,
+            Self::HIGH => 32,
+        }
+    }
+}
+
 pub const MCT_NON_CACHED: u32 = 0x00;
 pub const MCT_CACHED: u32 = 0x01;
 pub const MCT_WRITE_COMBINED: u32 = 0x02;
@@ -109,6 +128,37 @@ impl LockedMDL {
         let imports = GLOBAL_IMPORTS.unwrap();
         unsafe { (imports.MmUnlockPages)(self.raw_mdl()) };
     }
+
+    pub fn map(
+        self,
+        access_mode: KPROCESSOR_MODE,
+        cache_type: u32,
+        mut requested_address: Option<usize>,
+        priority: PagePriority,
+    ) -> Result<MappedLockedMDL, LockedMDL> {
+        let imports = GLOBAL_IMPORTS.unwrap();
+        let requested_address = requested_address
+            .as_mut()
+            .map(|r| r as *mut _ as *mut c_void)
+            .unwrap_or_else(ptr::null_mut);
+
+        let address = unsafe {
+            (imports.MmMapLockedPagesSpecifyCache)(
+                self.raw_mdl(),
+                access_mode,
+                cache_type,
+                requested_address,
+                0,
+                priority.ordinal(),
+            )
+        };
+
+        if address.is_null() {
+            Err(self)
+        } else {
+            Ok(MappedLockedMDL { mdl: self, address })
+        }
+    }
 }
 
 impl Drop for LockedMDL {
@@ -116,6 +166,24 @@ impl Drop for LockedMDL {
         if self.handle.is_some() {
             self.do_unlock();
         }
+    }
+}
+
+pub struct MappedLockedMDL {
+    mdl: LockedMDL,
+    address: PVOID,
+}
+
+impl MappedLockedMDL {
+    pub fn address(&self) -> PVOID {
+        self.address
+    }
+}
+
+impl Drop for MappedLockedMDL {
+    fn drop(&mut self) {
+        let imports = GLOBAL_IMPORTS.unwrap();
+        unsafe { (imports.MmUnmapLockedPages)(self.address, self.mdl.raw_mdl()) };
     }
 }
 

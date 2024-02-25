@@ -23,7 +23,7 @@ rustflags = [
     "-C", "link-arg=/MERGE:.btext=.text",
     "-C", "link-arg=/MERGE:.edata=.rdata",
     "-C", "link-arg=/MERGE:.rustc=.data",
-    "-C", "link-arg=/DEF:.cargo/link.def",
+    # "-C", "link-arg=/DEF:.cargo/link.def",
     "-C", "link-arg=/INTEGRITYCHECK",
 
 ]

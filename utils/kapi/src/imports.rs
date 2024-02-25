@@ -174,6 +174,8 @@ type MmMapLockedPagesSpecifyCache = unsafe extern "system" fn(
     BugCheckOnFailure: u32,
     Priority: u32,
 ) -> PVOID;
+type MmUnmapLockedPages =
+    unsafe extern "system" fn(BaseAddress: PVOID, MemoryDescriptorList: PMDL) -> ();
 type MmIsAddressValid = unsafe extern "system" fn(Address: PVOID) -> bool;
 
 dynamic_import_table! {
@@ -222,6 +224,7 @@ dynamic_import_table! {
 
         pub MmUnlockPages: MmUnlockPages = SystemExport::new(obfstr!("MmUnlockPages")),
         pub MmMapLockedPagesSpecifyCache: MmMapLockedPagesSpecifyCache = SystemExport::new(obfstr!("MmMapLockedPagesSpecifyCache")),
+        pub MmUnmapLockedPages: MmUnmapLockedPages = SystemExport::new(obfstr!("MmUnmapLockedPages")),
         pub MmIsAddressValid: MmIsAddressValid = SystemExport::new(obfstr!("MmIsAddressValid")),
     }
 }
