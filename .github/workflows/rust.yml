@@ -2,7 +2,7 @@ name: Rust
 
 on:
   push:
-    branches: [ "master" ]
+    branches: ["master", "uefi"]
 
 env:
   CARGO_TERM_COLOR: always
@@ -12,28 +12,34 @@ jobs:
     runs-on: windows-latest
 
     steps:
-    - name: Install toolchain
-      uses: actions-rs/toolchain@v1
-      with:
+      - name: Install toolchain
+        uses: actions-rs/toolchain@v1
+        with:
           toolchain: nightly
           override: true
-    - uses: actions/checkout@v3
-      with:
-        submodules: recursive
-    - uses: Swatinem/rust-cache@v2
-      with:
-        cache-on-failure: true
-        cache-all-crates: true
-    - name: Check fmt
-      run: rustup component add rustfmt && cargo fmt --check
-    - name: Build
-      run: ./.github/workflows/CI-Build.ps1
-    # Right now there are no tests specified
-    # - name: Run tests
-    #   run: cargo test --verbose
-    - uses: actions/upload-artifact@v3
-      with:
-        name: valthrun-driver
-        path: |
-          target/x86_64-pc-windows-msvc/release/valthrun-driver.sys
-          target/x86_64-pc-windows-msvc/release/driver.pdb
+      - uses: actions/checkout@v3
+        with:
+          submodules: recursive
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+          cache-all-crates: true
+      - name: Check fmt
+        run: rustup component add rustfmt && cargo fmt --check
+      - name: Build
+        run: ./.github/workflows/CI-Build.ps1
+      # Right now there are no tests specified
+      # - name: Run tests
+      #   run: cargo test --verbose
+      - uses: actions/upload-artifact@v3
+        with:
+          name: valthrun-driver
+          path: |
+            target/x86_64-pc-windows-msvc/release/valthrun-driver.sys
+            target/x86_64-pc-windows-msvc/release/driver.pdb
+      - uses: actions/upload-artifact@v4
+        with:
+          name: valthrun-driver-uefi
+          path: |
+            target/x86_64-pc-windows-msvc/release/driver_uefi.dll
+            target/x86_64-pc-windows-msvc/release/driver_uefi.pdb

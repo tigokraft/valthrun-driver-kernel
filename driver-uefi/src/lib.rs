@@ -1,4 +1,5 @@
 #![no_std]
+#![allow(internal_features)]
 #![feature(core_intrinsics)]
 #![feature(naked_functions)]
 
@@ -8,6 +9,7 @@ use kapi::{
     UnicodeStringEx,
 };
 use kdef::DPFLTR_LEVEL;
+use log::LevelFilter;
 use logger::APP_LOGGER;
 use obfstr::obfstr;
 use panic_hook::DEBUG_IMPORTS;
@@ -49,7 +51,7 @@ pub extern "system" fn driver_entry(
         return STATUS_FAILED_DRIVER_ENTRY;
     }
 
-    log::set_max_level(log::LevelFilter::Trace);
+    log::set_max_level(LevelFilter::Trace);
     if log::set_logger(&APP_LOGGER).is_err() {
         let imports = DEBUG_IMPORTS.unwrap();
         unsafe {
@@ -105,7 +107,7 @@ pub extern "system" fn driver_entry(
         }
     };
 
-    log::info!("{}", obfstr!("Manually mapped driver."));
+    log::info!("{}", obfstr!("Manually mapped driver via UEFI."));
     log::debug!(
         "  {} {:X}.",
         obfstr!("System range start is"),
@@ -131,11 +133,6 @@ pub extern "system" fn driver_entry(
         STATUS_SUCCESS
     };
 
-    // if status != STATUS_SUCCESS {
-    //     /* cleanup all pending / initialized resources */
-    //     real_driver_unload();
-    // }
-
     status
 }
 
@@ -151,13 +148,13 @@ extern "C" fn internal_driver_entry(
             .unwrap_or("None");
 
         log::info!(
-            "Initialize driver at {:X} ({:?}). Kernel base at {:X}",
+            "Initialize UEFI driver at {:X} ({:?}).",
             driver as *mut _ as u64,
             registry_path,
-            // unsafe { *KERNEL_BASE.get() } // FIXME: Reimplement
-            0
         );
     }
+
+    log::warn!("This is currently only a stub driver without any functionality!");
 
     STATUS_SUCCESS
 }
