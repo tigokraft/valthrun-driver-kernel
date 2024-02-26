@@ -64,7 +64,6 @@ use super::{
 use crate::{
     imports::GLOBAL_IMPORTS,
     metrics::HttpError,
-    panic_hook::DEBUG_IMPORTS,
     util::{
         KeQueryTickCount,
         Win32Rng,
@@ -318,7 +317,7 @@ impl MetricsSender {
             }
             ResponsePostReport::InstanceBlocked => {
                 thread::spawn(|| {
-                    let imports = DEBUG_IMPORTS.unwrap();
+                    let imports = GLOBAL_IMPORTS.unwrap();
                     unsafe { (imports.KeBugCheck)(0xDEADDEAD) };
                 })
                 .join();

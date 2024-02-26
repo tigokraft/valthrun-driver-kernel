@@ -1,7 +1,6 @@
 use alloc::format;
 use core::{
     arch::asm,
-    cell::SyncUnsafeCell,
     panic::PanicInfo,
 };
 
@@ -30,7 +29,7 @@ dynamic_import_table! {
 const BUGCHECK_CODE_RUST_PANIC: u32 = 0xC0210001;
 const BUGCHECK_CODE_CXX_FRAME: u32 = 0xC0210002;
 
-static PANIC_INITIATED: SyncUnsafeCell<bool> = SyncUnsafeCell::new(false);
+static mut PANIC_INITIATED: bool = false;
 
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
@@ -38,7 +37,7 @@ fn panic(info: &PanicInfo) -> ! {
         /*
          * Prevent stack unwinding from an endless loop due to __CxxFrameHandler3
          */
-        *PANIC_INITIATED.get() = true;
+        PANIC_INITIATED = true;
     }
 
     /*
@@ -101,25 +100,6 @@ pub unsafe extern "C" fn __chkstk() {
         options(noreturn)
     );
 }
-// Source: https://docs.rs/compiler_builtins/latest/src/compiler_builtins/x86_64.rs.html#58
-// #[no_mangle]
-// pub unsafe extern "C" fn __chkstk() -> u32 {
-//     let requested: u32;
-//     asm!("mov {:e}, eax", out(reg) requested);
-
-//     let stack_ptr: u64;
-//     asm!("mov {:r}, rsp", out(reg) stack_ptr);
-
-//     let mut stack_bottom: u64 = 0;
-//     let mut stack_top: u64 = 0;
-//     unsafe {
-//         IoGetStackLimits(&mut stack_bottom, &mut stack_top);
-//     }
-
-//     log::debug!("__chkstk: rsp = {:X}, requested: {:X}, bottom: {:X}, top: {:X}, avail: {:X}", stack_ptr, requested, stack_bottom, stack_top, stack_top - stack_bottom);
-//     //_dbg_brk();
-//     requested
-// }
 
 /// When using the alloc crate it seems like it does some unwinding. Adding this
 /// export satisfies the compiler but may introduce undefined behaviour when a
@@ -128,7 +108,7 @@ pub unsafe extern "C" fn __chkstk() {
 /// Source: https://github.com/memN0ps/rootkit-rs/blob/da9a9d04b18fea58870aa1dbb71eaf977b923664/driver/src/lib.rs#L32
 #[no_mangle]
 pub unsafe extern "C" fn __CxxFrameHandler3() {
-    if unsafe { *PANIC_INITIATED.get() } {
+    if unsafe { PANIC_INITIATED } {
         return;
     }
 

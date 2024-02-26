@@ -17,8 +17,8 @@ type ExFreePoolWithTag = unsafe extern "system" fn(P: PVOID, Tag: u32);
 
 dynamic_import_table! {
     imports IMPORTS_ALLOCATOR {
-        pub ExAllocatePoolWithTag: ExAllocatePoolWithTag = SystemExport::new("ExAllocatePoolWithTag"),
-        pub ExFreePoolWithTag: ExFreePoolWithTag = SystemExport::new("ExFreePoolWithTag"),
+        pub ExAllocatePoolWithTag: ExAllocatePoolWithTag = SystemExport::new(obfstr!("ExAllocatePoolWithTag")),
+        pub ExFreePoolWithTag: ExFreePoolWithTag = SystemExport::new(obfstr!("ExFreePoolWithTag")),
     }
 }
 

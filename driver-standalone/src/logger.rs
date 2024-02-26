@@ -64,7 +64,7 @@ impl log::Log for KernelLogger {
 
         unsafe {
             (imports.DbgPrintEx)(
-                0,
+                77, /* DPFLTR_IHVDRIVER_ID */
                 log_level as u32,
                 obfstr!("[VT]%s\n\0").as_ptr(),
                 payload.as_ptr(),

@@ -1,4 +1,4 @@
-Push-Location "driver"
+Push-Location "driver-standalone"
 cargo b -v -r
 Pop-Location
 if (-not $?) {
@@ -6,7 +6,7 @@ if (-not $?) {
     exit 1
 }
 
-& "./Strip-Driver.ps1" -InputFile ./target/x86_64-pc-windows-msvc/release/driver.dll -OutputFile ./target/x86_64-pc-windows-msvc/release/valthrun-driver.sys
+& "./Strip-Driver.ps1" -InputFile ./target/x86_64-pc-windows-msvc/release/driver_standalone.dll -OutputFile ./target/x86_64-pc-windows-msvc/release/valthrun-driver.sys
 if (-not $?) {
     Write-Host "Failed to strip driver"
     exit 1

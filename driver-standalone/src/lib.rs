@@ -5,8 +5,13 @@
 
 use alloc::format;
 
-use driver::metrics::RECORD_TYPE_DRIVER_STATUS;
-use entry::FnDriverEntry;
+use driver::{
+    metrics::RECORD_TYPE_DRIVER_STATUS,
+    status::{
+        CSTATUS_DRIVER_ALREADY_LOADED,
+        CSTATUS_DRIVER_PREINIT_FAILED,
+    },
+};
 use kapi::{
     NTStatusEx,
     UnicodeStringEx,
@@ -26,25 +31,24 @@ use winapi::{
         },
         ntstatus::{
             STATUS_FAILED_DRIVER_ENTRY,
+            STATUS_OBJECT_NAME_COLLISION,
             STATUS_SUCCESS,
         },
     },
 };
 
-use crate::imports::LL_GLOBAL_IMPORTS;
+use crate::imports::GLOBAL_IMPORTS;
 
 extern crate alloc;
 
-mod entry;
 mod imports;
 mod logger;
 mod panic_hook;
 
 #[no_mangle]
 pub extern "system" fn driver_entry(
-    entry_arg1: *mut DRIVER_OBJECT,
-    entry_arg2: *const UNICODE_STRING,
-    entry_point: FnDriverEntry,
+    driver: *mut DRIVER_OBJECT,
+    registry_path: *const UNICODE_STRING,
 ) -> NTSTATUS {
     SystemExport::initialize(None);
     if DEBUG_IMPORTS.resolve().is_err() {
@@ -73,60 +77,45 @@ pub extern "system" fn driver_entry(
         return STATUS_FAILED_DRIVER_ENTRY;
     }
 
-    if entry::has_custom_entry() {
-        log::debug!(
-            "{}",
-            obfstr!("Restoring original entry & calling original entry")
-        );
-        if let Err(err) = entry::restore_original_entry(entry_point) {
-            log::error!("{}: {:?}", obfstr!("Failed to restore entry point"), err);
-            return STATUS_FAILED_DRIVER_ENTRY;
-        }
-
-        {
-            let status = entry_point(entry_arg1, entry_arg2);
-            if !status.is_ok() {
-                log::debug!(
-                    "{}: {}",
-                    obfstr!("Original driver returned non zero status code"),
-                    status
-                );
-                return status;
-            }
-        }
-    } else {
-        log::debug!("{}", obfstr!("No custom entry. Do not patch entry point."));
-    }
-
-    let ll_imports = match LL_GLOBAL_IMPORTS.resolve() {
+    let ll_imports = match GLOBAL_IMPORTS.resolve() {
         Ok(imports) => imports,
         Err(error) => {
-            log::error!(
-                "{}: {:#}",
-                obfstr!("Failed to initialize ll imports"),
-                error
-            );
-            return STATUS_FAILED_DRIVER_ENTRY;
+            log::error!("{}: {:#}", obfstr!("Failed to initialize imports"), error);
+            return CSTATUS_DRIVER_PREINIT_FAILED;
         }
     };
 
-    log::info!("{}", obfstr!("Manually mapped driver via UEFI."));
+    let status = match unsafe { driver.as_mut() } {
+        Some(driver) => internal_driver_entry(driver, registry_path),
+        None => {
+            log::info!("{}", obfstr!("Manually mapped driver."));
 
-    let driver_name = UNICODE_STRING::from_bytes(obfstr::wide!("\\Driver\\valthrun-driver"));
-    let result = unsafe {
-        (ll_imports.IoCreateDriver)(&driver_name, internal_driver_entry as usize as *const _)
-    };
-    let status = if let Err(code) = result.ok() {
-        log::error!(
-            "{} {:X}",
-            obfstr!("Failed to create new driver for UEFI driver:"),
-            code
-        );
-
-        /* This will cause Windows to reboot :) */
-        STATUS_FAILED_DRIVER_ENTRY
-    } else {
-        STATUS_SUCCESS
+            // TODO(low): May improve hiding via:
+            // https://research.checkpoint.com/2021/a-deep-dive-into-doublefeature-equation-groups-post-exploitation-dashboard/
+            let driver_name =
+                UNICODE_STRING::from_bytes(obfstr::wide!("\\Driver\\valthrun-driver"));
+            let result = unsafe {
+                (ll_imports.IoCreateDriver)(
+                    &driver_name,
+                    internal_driver_entry as usize as *const _,
+                )
+            };
+            if let Err(code) = result.ok() {
+                if code == STATUS_OBJECT_NAME_COLLISION {
+                    log::error!("{}", obfstr!("Failed to create valthrun driver as a driver with this name is already loaded."));
+                    CSTATUS_DRIVER_ALREADY_LOADED
+                } else {
+                    log::error!(
+                        "{} {:X}",
+                        obfstr!("Failed to create new driver for manually mapped driver:"),
+                        code
+                    );
+                    CSTATUS_DRIVER_PREINIT_FAILED
+                }
+            } else {
+                STATUS_SUCCESS
+            }
+        }
     };
 
     if let Some(metrics) = driver::metrics_client() {
@@ -137,18 +126,33 @@ pub extern "system" fn driver_entry(
                 "load:{:X}, version:{}, type:{}",
                 status,
                 env!("CARGO_PKG_VERSION"),
-                "uefi"
+                if driver.is_null() {
+                    "manual-mapped"
+                } else {
+                    "service"
+                }
             ),
         );
     }
 
+    if status != STATUS_SUCCESS {
+        /* cleanup all pending / initialized resources */
+        driver::driver_unload();
+    }
+
     status
+}
+
+pub extern "system" fn driver_unload(_self: &mut DRIVER_OBJECT) {
+    driver::driver_unload();
 }
 
 extern "C" fn internal_driver_entry(
     driver: &mut DRIVER_OBJECT,
     registry_path: *const UNICODE_STRING,
 ) -> NTSTATUS {
+    driver.DriverUnload = Some(driver_unload);
+
     {
         let registry_path = unsafe { registry_path.as_ref() }.map(|path| path.as_string_lossy());
         let registry_path = registry_path
@@ -157,7 +161,7 @@ extern "C" fn internal_driver_entry(
             .unwrap_or("None");
 
         log::info!(
-            "Initialize UEFI driver at {:X} ({:?}). Kernel base: {:X}",
+            "Initialize driver at {:X} ({:?}). Kernel base {:X}",
             driver as *mut _ as u64,
             registry_path,
             SystemExport::kernel_base()

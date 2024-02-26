@@ -13,11 +13,12 @@ jobs:
 
     steps:
       - name: Install toolchain
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: nightly
-          override: true
-      - uses: actions/checkout@v3
+          toolchain: nightly-2023-12-26
+          target: x86_64-unknown-uefi
+          components: rustfmt
+      - uses: actions/checkout@v4
         with:
           submodules: recursive
       - uses: Swatinem/rust-cache@v2
@@ -25,20 +26,19 @@ jobs:
           cache-on-failure: true
           cache-all-crates: true
       - name: Check fmt
-        run: rustup component add rustfmt && cargo fmt --check
+        run: cargo fmt --check
+
       - name: Build Driver
         run: ./.github/workflows/build-driver.ps1
-      - name: Build UEFI Driver
-        run: ./.github/workflows/build-driver-uefi.ps1
-      # Right now there are no tests specified
-      # - name: Run tests
-      #   run: cargo test --verbose
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
-          name: valthrun-driver
+          name: valthrun-driver-standalone
           path: |
             target/x86_64-pc-windows-msvc/release/valthrun-driver.sys
-            target/x86_64-pc-windows-msvc/release/driver.pdb
+            target/x86_64-pc-windows-msvc/release/driver_standalone.pdb
+
+      - name: Build UEFI Driver
+        run: ./.github/workflows/build-driver-uefi.ps1
       - uses: actions/upload-artifact@v4
         with:
           name: valthrun-driver-uefi

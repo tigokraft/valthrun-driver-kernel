@@ -294,9 +294,6 @@ dependencies = [
  "aes-gcm",
  "anyhow",
  "base64",
- "bindgen",
- "cc",
- "compiler_builtins",
  "embedded-io",
  "embedded-tls",
  "hex",
@@ -319,7 +316,25 @@ dependencies = [
  "valthrun-driver-shared",
  "vtk-wsk",
  "winapi",
- "winreg",
+]
+
+[[package]]
+name = "driver-standalone"
+version = "0.2.2"
+dependencies = [
+ "anyhow",
+ "compiler_builtins",
+ "driver",
+ "kapi",
+ "kapi-kmodule",
+ "kdef",
+ "log",
+ "obfstr",
+ "seh",
+ "utils-imports",
+ "wdk-locator",
+ "winapi",
+ "x86",
 ]
 
 [[package]]
@@ -330,6 +345,7 @@ dependencies = [
  "bindgen",
  "cc",
  "compiler_builtins",
+ "driver",
  "kapi",
  "kapi-kmodule",
  "kdef",

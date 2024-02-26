@@ -181,6 +181,8 @@ type ExGetSystemFirmwareTable = unsafe extern "system" fn(
     ReturnLength: *mut u32,
 ) -> NTSTATUS;
 
+type KeBugCheck = unsafe extern "system" fn(code: u32) -> !;
+
 dynamic_import_table! {
     pub imports GLOBAL_IMPORTS {
         pub RtlImageNtHeader: RtlImageNtHeader = SystemExport::new(obfstr!("RtlImageNtHeader")),
@@ -230,6 +232,8 @@ dynamic_import_table! {
         pub MmCopyVirtualMemory: MmCopyVirtualMemory = SystemExport::new(obfstr!("MmCopyVirtualMemory")),
 
         pub ExGetSystemFirmwareTable: ExGetSystemFirmwareTable = SystemExport::new(obfstr!("ExGetSystemFirmwareTable")),
+
+        pub KeBugCheck: KeBugCheck = SystemExport::new(obfstr!("KeBugCheck")),
     }
 }
 

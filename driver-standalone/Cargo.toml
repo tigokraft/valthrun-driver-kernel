@@ -1,5 +1,5 @@
 [package]
-name = "driver-uefi"
+name = "driver-standalone"
 version = "0.2.2"
 edition = "2021"
 
@@ -8,10 +8,7 @@ path = "src/lib.rs"
 crate-type = ["cdylib"]
 
 [build-dependencies]
-anyhow = "1.0.72"
-bindgen = "0.68.1"
-cc = "1.0.79"
-winreg = "0.50.0"
+wdk-locator = { version = "0.1.0", path = "../utils/wdk-locator" }
 
 [dependencies]
 log = "0.4.19"

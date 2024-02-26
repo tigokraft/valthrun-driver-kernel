@@ -100,25 +100,6 @@ pub unsafe extern "C" fn __chkstk() {
         options(noreturn)
     );
 }
-// Source: https://docs.rs/compiler_builtins/latest/src/compiler_builtins/x86_64.rs.html#58
-// #[no_mangle]
-// pub unsafe extern "C" fn __chkstk() -> u32 {
-//     let requested: u32;
-//     asm!("mov {:e}, eax", out(reg) requested);
-
-//     let stack_ptr: u64;
-//     asm!("mov {:r}, rsp", out(reg) stack_ptr);
-
-//     let mut stack_bottom: u64 = 0;
-//     let mut stack_top: u64 = 0;
-//     unsafe {
-//         IoGetStackLimits(&mut stack_bottom, &mut stack_top);
-//     }
-
-//     log::debug!("__chkstk: rsp = {:X}, requested: {:X}, bottom: {:X}, top: {:X}, avail: {:X}", stack_ptr, requested, stack_bottom, stack_top, stack_top - stack_bottom);
-//     //_dbg_brk();
-//     requested
-// }
 
 /// When using the alloc crate it seems like it does some unwinding. Adding this
 /// export satisfies the compiler but may introduce undefined behaviour when a

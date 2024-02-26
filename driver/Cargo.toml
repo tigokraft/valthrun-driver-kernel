@@ -3,18 +3,6 @@ name = "driver"
 version = "0.2.1"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
-[lib]
-path = "src/lib.rs"
-crate-type = ["cdylib"]
-
-[build-dependencies]
-anyhow = "1.0.72"
-bindgen = "0.68.1"
-cc = "1.0.79"
-winreg = "0.50.0"
-
 [dependencies]
 log = "0.4.19"
 anyhow = { version = "1.0", default-features = false }
@@ -53,10 +41,6 @@ serde_json = { version = "1.0.107", default-features = false, features = [
 aes-gcm = "0.10.3"
 hex = { version = "0.4.3", default-features = false, features = ["alloc"] }
 vtk-wsk = { version = "0.1.0", path = "../utils/wsk" }
-
-[dependencies.compiler_builtins]
-git = "https://github.com/rust-lang/compiler-builtins"
-features = ["mem"]
 
 [dependencies.winapi]
 git = "https://github.com/Trantect/winapi-rs.git"

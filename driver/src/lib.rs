@@ -9,10 +9,7 @@
 #![allow(internal_features)]
 #![allow(dead_code)]
 
-use alloc::{
-    boxed::Box,
-    format,
-};
+use alloc::boxed::Box;
 use core::{
     cell::SyncUnsafeCell,
     time::Duration,
@@ -20,34 +17,20 @@ use core::{
 
 use device::ValthrunDevice;
 use handler::HandlerRegistry;
-use imports::LL_GLOBAL_IMPORTS;
-use kapi::{
-    NTStatusEx,
-    UnicodeStringEx,
-};
 use kb::KeyboardInput;
-use kdef::DPFLTR_LEVEL;
 use metrics::{
     MetricsClient,
     MetricsHeartbeat,
 };
 use mouse::MouseInput;
 use obfstr::obfstr;
-use panic_hook::DEBUG_IMPORTS;
-use utils_imports::provider::SystemExport;
 use valthrun_driver_shared::requests::RequestHealthCheck;
 use vtk_wsk::WskInstance;
 use winapi::{
     km::wdm::DRIVER_OBJECT,
     shared::{
-        ntdef::{
-            NTSTATUS,
-            UNICODE_STRING,
-        },
-        ntstatus::{
-            STATUS_OBJECT_NAME_COLLISION,
-            STATUS_SUCCESS,
-        },
+        ntdef::NTSTATUS,
+        ntstatus::STATUS_SUCCESS,
     },
 };
 
@@ -63,33 +46,31 @@ use crate::{
         handler_write,
     },
     imports::GLOBAL_IMPORTS,
-    logger::APP_LOGGER,
     metrics::RECORD_TYPE_DRIVER_STATUS,
     offsets::initialize_nt_offsets,
+    status::{
+        CSTATUS_DRIVER_INIT_FAILED,
+        CSTATUS_DRIVER_PREINIT_FAILED,
+    },
     winver::{
         initialize_os_info,
         os_info,
     },
 };
 
-extern crate compiler_builtins;
-
 mod device;
 mod handler;
 mod imports;
 mod kb;
-mod logger;
-mod metrics;
+pub mod metrics;
 mod mouse;
 mod offsets;
-mod panic_hook;
 mod pmem;
 mod process_protection;
 mod util;
 mod winver;
 
-mod status;
-use status::*;
+pub mod status;
 
 extern crate alloc;
 
@@ -106,11 +87,9 @@ pub static METRICS_CLIENT: SyncUnsafeCell<Option<MetricsClient>> =
     SyncUnsafeCell::new(Option::None);
 pub static METRICS_HEARTBEAT: SyncUnsafeCell<Option<MetricsHeartbeat>> = SyncUnsafeCell::new(None);
 
-extern "system" fn driver_unload(_driver: &mut DRIVER_OBJECT) {
-    real_driver_unload();
-}
-
-fn real_driver_unload() {
+/// Call this function to unload the driver.
+/// Note: Also call when initialization failed.
+pub extern "system" fn driver_unload() {
     log::info!("Unloading...");
 
     if let Some(metrics) = unsafe { &mut *METRICS_CLIENT.get() } {
@@ -152,121 +131,6 @@ fn real_driver_unload() {
     log::info!("Driver Unloaded");
 }
 
-#[no_mangle]
-pub extern "system" fn driver_entry(
-    driver: *mut DRIVER_OBJECT,
-    registry_path: *const UNICODE_STRING,
-) -> NTSTATUS {
-    SystemExport::initialize(None);
-    if DEBUG_IMPORTS.resolve().is_err() {
-        /*
-         * If this import fails, we can't do anything else except return an appropiate status code.
-         */
-        return CSTATUS_DRIVER_BOOTSTRAP_FAILED;
-    }
-
-    log::set_max_level(log::LevelFilter::Trace);
-    if log::set_logger(&APP_LOGGER).is_err() {
-        let imports = DEBUG_IMPORTS.unwrap();
-        unsafe {
-            (imports.DbgPrintEx)(
-                0,
-                DPFLTR_LEVEL::ERROR as u32,
-                obfstr!("[VT] Failed to initialize app logger!\n\0").as_ptr(),
-            );
-        }
-
-        return CSTATUS_LOG_INIT_FAILED;
-    }
-
-    let ll_imports = match LL_GLOBAL_IMPORTS.resolve() {
-        Ok(imports) => imports,
-        Err(error) => {
-            log::error!(
-                "{}: {:#}",
-                obfstr!("Failed to initialize ll imports"),
-                error
-            );
-            return CSTATUS_DRIVER_PREINIT_FAILED;
-        }
-    };
-
-    if let Err(error) = initialize_os_info() {
-        log::error!("{}: {}", obfstr!("Failed to load OS version info"), error);
-        return CSTATUS_DRIVER_PREINIT_FAILED;
-    }
-
-    let status = match unsafe { driver.as_mut() } {
-        Some(driver) => internal_driver_entry(driver, registry_path),
-        None => {
-            log::info!("{}", obfstr!("Manually mapped driver."));
-            log::debug!(
-                "  {} {:X}.",
-                obfstr!("System range start is"),
-                ll_imports.MmSystemRangeStart as u64,
-            );
-            log::debug!("  {} {:X}", obfstr!("IRQL level at"), unsafe {
-                (ll_imports.KeGetCurrentIrql)()
-            });
-
-            // TODO(low): May improve hiding via:
-            // https://research.checkpoint.com/2021/a-deep-dive-into-doublefeature-equation-groups-post-exploitation-dashboard/
-            let driver_name =
-                UNICODE_STRING::from_bytes(obfstr::wide!("\\Driver\\valthrun-driver"));
-            let result = unsafe {
-                (ll_imports.IoCreateDriver)(
-                    &driver_name,
-                    internal_driver_entry as usize as *const _,
-                )
-            };
-            if let Err(code) = result.ok() {
-                if code == STATUS_OBJECT_NAME_COLLISION {
-                    log::error!("{}", obfstr!("Failed to create valthrun driver as a driver with this name is already loaded."));
-                    CSTATUS_DRIVER_ALREADY_LOADED
-                } else {
-                    log::error!(
-                        "{} {:X}",
-                        obfstr!("Failed to create new driver for manually mapped driver:"),
-                        code
-                    );
-                    CSTATUS_DRIVER_PREINIT_FAILED
-                }
-            } else {
-                STATUS_SUCCESS
-            }
-
-            // To unload (Unload is not called):
-            // if(gDriverObject->DriverUnload) {
-            // gDriverObject->DriverUnload(gDriverObject);
-            // }
-
-            // ObMakeTemporaryObject (gDriverObject);
-            // IoDeleteDriver (gDriverObject);
-            // gDriverObject = NULL;
-        }
-    };
-
-    if let Some(metrics) = unsafe { &*METRICS_CLIENT.get() } {
-        /* report the load result if metrics could be already initialized */
-        metrics.add_record(
-            RECORD_TYPE_DRIVER_STATUS,
-            format!(
-                "load:{:X}, version:{}, manual:{:X}",
-                status,
-                env!("CARGO_PKG_VERSION"),
-                driver.is_null() as u8
-            ),
-        );
-    }
-
-    if status != STATUS_SUCCESS {
-        /* cleanup all pending / initialized resources */
-        real_driver_unload();
-    }
-
-    status
-}
-
 fn wsk_dummy() -> anyhow::Result<()> {
     // if let Some(metrics) = unsafe { &*METRICS_CLIENT.get() } {
     //     for i in 0..1_000 {
@@ -288,28 +152,13 @@ fn wsk_dummy() -> anyhow::Result<()> {
     Ok(())
 }
 
-extern "C" fn internal_driver_entry(
-    driver: &mut DRIVER_OBJECT,
-    registry_path: *const UNICODE_STRING,
-) -> NTSTATUS {
-    let registry_path = unsafe { registry_path.as_ref() }.map(|path| path.as_string_lossy());
-    {
-        let registry_path = registry_path
-            .as_ref()
-            .map(|path| path.as_str())
-            .unwrap_or("None");
-
-        log::info!(
-            "Initialize driver at {:X} ({:?}). WinVer {}. Kernel base at {:X}",
-            driver as *mut _ as u64,
-            registry_path,
-            os_info().dwBuildNumber,
-            // unsafe { *KERNEL_BASE.get() } // FIXME: Reimplement
-            0
-        );
+pub fn internal_driver_entry(driver: &mut DRIVER_OBJECT) -> NTSTATUS {
+    if let Err(error) = initialize_os_info() {
+        log::error!("{}: {}", obfstr!("Failed to load OS version info"), error);
+        return CSTATUS_DRIVER_PREINIT_FAILED;
     }
 
-    driver.DriverUnload = Some(driver_unload);
+    log::info!("WinVer {}", os_info().dwBuildNumber);
     if let Err(error) = GLOBAL_IMPORTS.resolve() {
         log::error!(
             "{}: {:#}",
@@ -431,4 +280,9 @@ extern "C" fn internal_driver_entry(
 
     log::info!("Driver Initialized");
     STATUS_SUCCESS
+}
+
+pub fn metrics_client() -> Option<&'static MetricsClient> {
+    let client = unsafe { &*METRICS_CLIENT.get() };
+    client.as_ref()
 }

@@ -42,6 +42,10 @@ impl<'a> SystemExport<'a> {
         let ntoskrnl_base = ntoskrnl_base.unwrap_or_else(find_ntoskrnl_image);
         WINDOWS_KERNEL_BASE.store(ntoskrnl_base, Ordering::Relaxed);
     }
+
+    pub fn kernel_base() -> u64 {
+        WINDOWS_KERNEL_BASE.load(Ordering::Relaxed)
+    }
 }
 
 impl<'a, T> DynamicImport<T> for SystemExport<'a> {

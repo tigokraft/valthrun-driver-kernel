@@ -13,7 +13,9 @@ members = [
 
     "driver",
     "hypervisor",
+
     "driver-uefi",
+    "driver-standalone",
 ]
 
 [profile.dev]
