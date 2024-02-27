@@ -8,6 +8,8 @@ use alloc::format;
 use driver::metrics::RECORD_TYPE_DRIVER_STATUS;
 use entry::FnDriverEntry;
 use kapi::{
+    thread,
+    Instant,
     NTStatusEx,
     UnicodeStringEx,
 };
@@ -31,7 +33,7 @@ use winapi::{
     },
 };
 
-use crate::imports::LL_GLOBAL_IMPORTS;
+use crate::imports::GLOBAL_IMPORTS;
 
 extern crate alloc;
 
@@ -98,7 +100,7 @@ pub extern "system" fn driver_entry(
         log::debug!("{}", obfstr!("No custom entry. Do not patch entry point."));
     }
 
-    let ll_imports = match LL_GLOBAL_IMPORTS.resolve() {
+    let imports = match GLOBAL_IMPORTS.resolve() {
         Ok(imports) => imports,
         Err(error) => {
             log::error!(
@@ -112,37 +114,41 @@ pub extern "system" fn driver_entry(
 
     log::info!("{}", obfstr!("Manually mapped driver via UEFI."));
 
-    let driver_name = UNICODE_STRING::from_bytes(obfstr::wide!("\\Driver\\valthrun-driver"));
-    let result = unsafe {
-        (ll_imports.IoCreateDriver)(&driver_name, internal_driver_entry as usize as *const _)
-    };
-    let status = if let Err(code) = result.ok() {
-        log::error!(
-            "{} {:X}",
-            obfstr!("Failed to create new driver for UEFI driver:"),
-            code
-        );
+    thread::spawn(|| {
+        log::debug!("Waiting for the system to boot up before initializing");
 
-        /* This will cause Windows to reboot :) */
-        STATUS_FAILED_DRIVER_ENTRY
-    } else {
-        STATUS_SUCCESS
-    };
+        let now = Instant::now();
+        /* Lets wait a little bit until WSK is ready, else the driver init will fail :( */
+        thread::sleep_ms(25_000);
+        log::debug!("Elapsed: {:#?}", now.elapsed());
 
-    if let Some(metrics) = driver::metrics_client() {
-        /* report the load result if metrics could be already initialized */
-        metrics.add_record(
-            RECORD_TYPE_DRIVER_STATUS,
-            format!(
-                "load:{:X}, version:{}, type:{}",
-                status,
-                env!("CARGO_PKG_VERSION"),
-                "uefi"
-            ),
-        );
-    }
+        let driver_name = UNICODE_STRING::from_bytes(obfstr::wide!("\\Driver\\valthrun-driver"));
+        let result = unsafe {
+            (imports.IoCreateDriver)(&driver_name, internal_driver_entry as usize as *const _)
+        };
+        if let Err(code) = result.ok() {
+            log::error!(
+                "{} {:X}",
+                obfstr!("Failed to create new driver for UEFI driver:"),
+                code
+            );
+        };
 
-    status
+        if let Some(metrics) = driver::metrics_client() {
+            /* report the load result if metrics could be already initialized */
+            metrics.add_record(
+                RECORD_TYPE_DRIVER_STATUS,
+                format!(
+                    "load:{:X}, version:{}, type:{}",
+                    result,
+                    env!("CARGO_PKG_VERSION"),
+                    "uefi"
+                ),
+            );
+        }
+    });
+
+    STATUS_SUCCESS
 }
 
 extern "C" fn internal_driver_entry(
@@ -163,6 +169,5 @@ extern "C" fn internal_driver_entry(
             SystemExport::kernel_base()
         );
     }
-
-    driver::internal_driver_entry(driver)
+    driver::internal_driver_entry(unsafe { &mut *(driver as *mut DRIVER_OBJECT) })
 }

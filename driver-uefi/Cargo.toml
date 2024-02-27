@@ -9,7 +9,7 @@ crate-type = ["cdylib"]
 
 [build-dependencies]
 anyhow = "1.0.72"
-bindgen = "0.68.1"
+bindgen = "0.69"
 cc = "1.0.79"
 winreg = "0.50.0"
 

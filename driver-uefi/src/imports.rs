@@ -10,7 +10,7 @@ use winapi::shared::ntdef::{
 type IoCreateDriver =
     unsafe extern "system" fn(name: *const UNICODE_STRING, entry: *const ()) -> NTSTATUS;
 dynamic_import_table! {
-    pub imports LL_GLOBAL_IMPORTS {
+    pub imports GLOBAL_IMPORTS {
         pub IoCreateDriver: IoCreateDriver = SystemExport::new(obfstr!("IoCreateDriver")),
     }
 }

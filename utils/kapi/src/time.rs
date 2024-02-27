@@ -9,12 +9,10 @@ use utils_imports::{
 };
 
 type KeQueryPerformanceCounter = unsafe extern "C" fn(PerformanceFrequency: *mut u64) -> u64;
-type KeQueryTimeIncrement = unsafe extern "C" fn() -> u32;
 
 dynamic_import_table! {
     pub imports TIME_IMPORTS {
         pub KeQueryPerformanceCounter: KeQueryPerformanceCounter = SystemExport::new(obfstr!("KeQueryPerformanceCounter")),
-        pub KeQueryTimeIncrement: KeQueryTimeIncrement = SystemExport::new(obfstr!("KeQueryTimeIncrement")),
     }
 }
 
@@ -26,14 +24,19 @@ pub struct Instant {
 }
 
 impl Instant {
-    pub fn new() -> Self {
+    pub fn now() -> Self {
         let imports = TIME_IMPORTS.unwrap();
-        let performance_counter =
-            unsafe { (imports.KeQueryPerformanceCounter)(core::ptr::null_mut()) } as u64;
-        let time_increment = unsafe { (imports.KeQueryTimeIncrement)() } as u64 * 100;
+
+        let mut frequency = 0;
+        let counter = unsafe { (imports.KeQueryPerformanceCounter)(&mut frequency) };
+
         Self {
-            value: performance_counter * time_increment,
+            value: (counter * 1_000_000_000) / frequency,
         }
+    }
+
+    pub fn elapsed(&self) -> Duration {
+        Instant::now() - *self
     }
 }
 

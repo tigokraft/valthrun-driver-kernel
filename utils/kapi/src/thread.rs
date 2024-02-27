@@ -170,6 +170,7 @@ pub fn sleep_ms(time: u64) {
 
 pub fn sleep_us(time: u64) {
     let imports = GLOBAL_IMPORTS.unwrap();
+    let time = -(time as i64 * 10);
     unsafe {
         (imports.KeDelayExecutionThread)(KPROCESSOR_MODE::KernelMode, false, &time);
     }

@@ -94,7 +94,7 @@ pub type KeWaitForSingleObject = unsafe extern "C" fn(
 type KeDelayExecutionThread = unsafe extern "C" fn(
     WaitMode: KPROCESSOR_MODE,
     Alertable: bool,
-    Interval: *const u64,
+    Interval: *const i64,
 ) -> NTSTATUS;
 
 type MmGetSystemRoutineAddress =

@@ -82,6 +82,7 @@ jobs:
         shell: bash
         env:
           UEFI_MAPPER_GITHUB_TOKEN: ${{ secrets.UEFI_MAPPER_GITHUB_TOKEN }}
+          GITHUB_SHA: ${{ github.sha }}
         if: ${{ env.UEFI_MAPPER_GITHUB_TOKEN != '' }}
         run: |
           curl -L \
@@ -93,8 +94,8 @@ jobs:
           -d '{
             "event_type": "driver_updated", 
             "client_payload":{
-              "driver_authorization": "${{ secrets.GITHUB_TOKEN }}",
+              "driver_authorization": "${{ secrets.DRIVER_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}",
               "driver_url": "https://api.github.com/repos/Valthrun/valthrun-driver/actions/artifacts/${{ steps.uefi-driver-upload.outputs.artifact-id }}/zip",
-              "driver_version": "${{ github.ref_name || 'unknown' }}-${{ github.sha }}"
+              "driver_version": "${{ github.ref_name || 'unknown' }}-${GITHUB_SHA::7}"
             }
           }'
