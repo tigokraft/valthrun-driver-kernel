@@ -7,6 +7,7 @@ use alloc::format;
 
 use driver::metrics::RECORD_TYPE_DRIVER_STATUS;
 use entry::FnDriverEntry;
+use kalloc::NonPagedAllocator;
 use kapi::{
     thread,
     Instant,
@@ -41,6 +42,9 @@ mod entry;
 mod imports;
 mod logger;
 mod panic_hook;
+
+#[global_allocator]
+static GLOBAL_ALLOC: NonPagedAllocator = NonPagedAllocator::new(0x123333);
 
 #[no_mangle]
 pub extern "system" fn driver_entry(

@@ -348,6 +348,7 @@ dependencies = [
  "anyhow",
  "compiler_builtins",
  "driver",
+ "kalloc",
  "kapi",
  "kapi-kmodule",
  "kdef",
@@ -369,6 +370,7 @@ dependencies = [
  "cc",
  "compiler_builtins",
  "driver",
+ "kalloc",
  "kapi",
  "kapi-kmodule",
  "kdef",
@@ -626,6 +628,15 @@ name = "itoa"
 version = "1.0.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b1a46d1a171d865aa5f83f92695765caa047a9b4cbae2cbf37dbd613a793fd4c"
+
+[[package]]
+name = "kalloc"
+version = "0.1.0"
+dependencies = [
+ "obfstr",
+ "utils-imports",
+ "winapi",
+]
 
 [[package]]
 name = "kapi"
@@ -1316,6 +1327,7 @@ dependencies = [
  "bitfield-struct",
  "bitflags 2.4.2",
  "compiler_builtins",
+ "kalloc",
  "kapi",
  "kapi-kmodule",
  "kdef",

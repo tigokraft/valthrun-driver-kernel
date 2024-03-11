@@ -2,7 +2,7 @@ use alloc::boxed::Box;
 
 use anyhow::Result;
 use bitfield_struct::bitfield;
-use kapi::ContiguousMemoryAllocator;
+use kalloc::ContiguousMemoryAllocator;
 use x86::msr::{
     rdmsr,
     IA32_MTRRCAP,
@@ -391,8 +391,8 @@ impl VmPagingTable {
             for (pde_index, entry) in result.pml2e[pdpte_index].entries.iter_mut().enumerate() {
                 let page_frame_number = (pdpte_index * TABLE_ENTRIES) + pde_index;
 
-                let memory_type = if page_frame_number == 0
-                    && mtrr.capability.fixed_range_supported()
+                let memory_type = if page_frame_number == 0 &&
+                    mtrr.capability.fixed_range_supported()
                 {
                     /*
                      * To be safe, we will map the first page as UC as to not bring up any kind of undefined behavior from the

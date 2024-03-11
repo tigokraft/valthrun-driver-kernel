@@ -76,8 +76,8 @@ extern "system" fn process_protection_callback(
     let target_process_id = unsafe { (imports.PsGetProcessId)(info.Object) };
     if log::log_enabled!(target: "ProcessAttachments", Level::Trace) && false {
         let current_process_name = current_process.get_image_file_name().unwrap_or_default();
-        if current_process_name != obfstr!("svchost.exe")
-            && current_process_name != obfstr!("WmiPrvSE.exe")
+        if current_process_name != obfstr!("svchost.exe") &&
+            current_process_name != obfstr!("WmiPrvSE.exe")
         {
             log::trace!("process_protection_callback. Caller: {:X} ({:?}), Target: {:X} ({:?}) Flags: {:X}, Operation: {:X}", 
                 current_process.get_id(), current_process_name,

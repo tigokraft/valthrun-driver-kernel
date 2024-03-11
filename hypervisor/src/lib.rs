@@ -8,12 +8,10 @@
 #![feature(asm_const)]
 #![feature(allocator_api)]
 
-use core::arch::asm;
-
+use kalloc::NonPagedAllocator;
 use kapi::{
     KeLowerIrql,
     KeRaiseIrql,
-    NonPagedAllocator,
     DISPATCH_LEVEL,
 };
 use logger::create_app_logger;
@@ -53,7 +51,7 @@ mod panic_hook;
 
 #[global_allocator]
 #[cfg(not(test))]
-static GLOBAL_ALLOC: NonPagedAllocator = NonPagedAllocator;
+static GLOBAL_ALLOC: NonPagedAllocator = NonPagedAllocator::new(0x123333);
 
 extern "system" fn driver_unload(_driver: &mut DRIVER_OBJECT) {
     log::info!("Unloading...");

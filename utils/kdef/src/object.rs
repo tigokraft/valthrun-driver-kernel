@@ -8,8 +8,3 @@ pub type POBJECT_TYPE = *const _OBJECT_TYPE;
 pub struct OBJECT_NAME_INFORMATION {
     pub Name: UNICODE_STRING,
 }
-
-#[allow(unused)]
-extern "system" {
-    pub fn ObGetFilterVersion() -> u16;
-}

@@ -165,8 +165,8 @@ pub fn read_process_memory(
 
     for (chunk_index, chunk_buffer) in remainding_buffer.chunks_mut(PAGE_SIZE as usize).enumerate()
     {
-        let chunk_virtual_address = (virtual_address & !(PAGE_SIZE - 1))
-            + (chunk_index as u64 + remainding_chunk_offset) * PAGE_SIZE;
+        let chunk_virtual_address = (virtual_address & !(PAGE_SIZE - 1)) +
+            (chunk_index as u64 + remainding_chunk_offset) * PAGE_SIZE;
         let chunk_physical_address =
             match translate_linear_address(directory_table_base, chunk_virtual_address) {
                 Some(address) => address,

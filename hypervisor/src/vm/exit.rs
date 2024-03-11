@@ -18,10 +18,6 @@ use x86::{
         ro::VM_INSTRUCTION_ERROR,
     },
 };
-use x86_64::instructions::{
-    self,
-    tlb::InvPicdCommand,
-};
 
 use super::exit_handler;
 use crate::{

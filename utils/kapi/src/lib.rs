@@ -40,9 +40,6 @@ pub use irql::*;
 mod object;
 pub use object::*;
 
-mod allocator;
-pub use allocator::*;
-
 pub mod thread;
 
 mod event;

@@ -8,34 +8,12 @@ use core::{
     ptr::NonNull,
 };
 
-use utils_imports::{
-    dynamic_import_table,
-    provider::SystemExport,
-};
 use winapi::{
     km::wdm::POOL_TYPE,
     shared::ntdef::PVOID,
 };
 
-pub const POOL_TAG: u32 = 0x123333;
-
-type ExAllocatePoolWithTag =
-    unsafe extern "system" fn(PoolType: POOL_TYPE, NumberOfBytes: usize, Tag: u32) -> PVOID;
-type ExFreePoolWithTag = unsafe extern "system" fn(P: PVOID, Tag: u32);
-
-type MmAllocateContiguousMemory =
-    unsafe extern "system" fn(NumberOfBytes: usize, HighestAcceptableAddress: usize) -> PVOID;
-type MmFreeContiguousMemory = unsafe extern "system" fn(P: PVOID);
-
-dynamic_import_table! {
-    imports IMPORTS_ALLOCATOR {
-        pub ExAllocatePoolWithTag: ExAllocatePoolWithTag = SystemExport::new(obfstr!("ExAllocatePoolWithTag")),
-        pub ExFreePoolWithTag: ExFreePoolWithTag = SystemExport::new(obfstr!("ExFreePoolWithTag")),
-
-        pub MmAllocateContiguousMemory: MmAllocateContiguousMemory = SystemExport::new(obfstr!("MmAllocateContiguousMemory")),
-        pub MmFreeContiguousMemory: MmFreeContiguousMemory = SystemExport::new(obfstr!("MmFreeContiguousMemory")),
-    }
-}
+use crate::imports::IMPORTS_ALLOCATOR;
 
 #[derive(Debug, Clone, Copy)]
 pub struct ContiguousMemoryAllocator {
@@ -81,7 +59,16 @@ unsafe impl Allocator for ContiguousMemoryAllocator {
     }
 }
 
-pub struct NonPagedAllocator;
+pub struct NonPagedAllocator {
+    pool_tag: u32,
+}
+
+impl NonPagedAllocator {
+    pub const fn new(pool_tag: u32) -> Self {
+        Self { pool_tag }
+    }
+}
+
 unsafe impl GlobalAlloc for NonPagedAllocator {
     unsafe fn alloc(&self, layout: core::alloc::Layout) -> *mut u8 {
         #[allow(non_snake_case)]
@@ -94,7 +81,7 @@ unsafe impl GlobalAlloc for NonPagedAllocator {
             Err(_) => return core::ptr::null_mut(),
         };
 
-        (ExAllocatePoolWithTag)(POOL_TYPE::NonPagedPool, layout.size(), POOL_TAG) as *mut u8
+        (ExAllocatePoolWithTag)(POOL_TYPE::NonPagedPool, layout.size(), self.pool_tag) as *mut u8
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, _layout: core::alloc::Layout) {
@@ -104,6 +91,6 @@ unsafe impl GlobalAlloc for NonPagedAllocator {
          */
         #[allow(non_snake_case)]
         let ExFreePoolWithTag = IMPORTS_ALLOCATOR.unwrap().ExFreePoolWithTag;
-        (ExFreePoolWithTag)(ptr as PVOID, POOL_TAG);
+        (ExFreePoolWithTag)(ptr as PVOID, self.pool_tag);
     }
 }

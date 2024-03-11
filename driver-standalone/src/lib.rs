@@ -12,6 +12,7 @@ use driver::{
         CSTATUS_DRIVER_PREINIT_FAILED,
     },
 };
+use kalloc::NonPagedAllocator;
 use kapi::{
     NTStatusEx,
     UnicodeStringEx,
@@ -44,6 +45,9 @@ extern crate alloc;
 mod imports;
 mod logger;
 mod panic_hook;
+
+#[global_allocator]
+static GLOBAL_ALLOC: NonPagedAllocator = NonPagedAllocator::new(0x123333);
 
 #[no_mangle]
 pub extern "system" fn driver_entry(

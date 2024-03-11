@@ -4,6 +4,7 @@ members = [
     "shared",
 
     "utils/wdk-locator",
+    "utils/kalloc",
     "utils/kdef",
     "utils/seh",
     "utils/kapi-kmodule",
