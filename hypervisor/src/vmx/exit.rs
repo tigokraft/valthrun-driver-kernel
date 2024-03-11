@@ -1,3 +1,4 @@
+use bitfield_struct::bitfield;
 use bitflags::bitflags;
 
 bitflags! {
@@ -8,6 +9,102 @@ bitflags! {
         const EXIT_FROM_ROOT =      1 << 29;
         const VM_ENTRY_FAIL =       1 << 31;
     }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[repr(u8)]
+pub enum ControlRegister {
+    Cr0,
+    Cr3,
+    Cr4,
+}
+
+impl ControlRegister {
+    pub const fn into_bits(self) -> u64 {
+        self as _
+    }
+
+    pub const fn from_bits(value: u64) -> Self {
+        match value {
+            0 => Self::Cr0,
+            3 => Self::Cr3,
+            4 => Self::Cr4,
+            _ => unreachable!(),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[repr(u8)]
+pub enum GeneralPurposeRegister {
+    RAX,
+    RCX,
+    RDX,
+    RBX,
+    RSP,
+    RBP,
+    RSI,
+    RDI,
+    R8,
+    R9,
+    R10,
+    R11,
+    R12,
+    R13,
+    R14,
+    R15,
+}
+
+impl GeneralPurposeRegister {
+    pub const fn into_bits(self) -> u64 {
+        self as _
+    }
+
+    pub const fn from_bits(value: u64) -> Self {
+        match value {
+            0 => Self::RAX,
+            1 => Self::RCX,
+            2 => Self::RDX,
+            3 => Self::RBX,
+            4 => Self::RSP,
+            5 => Self::RBP,
+            6 => Self::RSI,
+            7 => Self::RDI,
+            8 => Self::R8,
+            9 => Self::R9,
+            10 => Self::R10,
+            11 => Self::R11,
+            12 => Self::R12,
+            13 => Self::R13,
+            14 => Self::R14,
+            15 => Self::R15,
+            _ => unreachable!(),
+        }
+    }
+}
+
+#[bitfield(u64)]
+pub struct MovCrQualification {
+    #[bits(4)]
+    pub control_register: ControlRegister,
+
+    #[bits(2)]
+    pub access_type: u8,
+    pub lmsw_operand_type: bool,
+
+    _reserved1: bool,
+
+    #[bits(4)]
+    pub register: GeneralPurposeRegister,
+
+    #[bits(4)]
+    _reserved2: u8,
+
+    #[bits(16)]
+    pub lmsw_source_data: u16,
+
+    #[bits(32)]
+    _reserved3b: u32,
 }
 
 // See Table C-1 in Appendix C

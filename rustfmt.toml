@@ -3,3 +3,4 @@ imports_layout = "Vertical"
 imports_granularity = "Crate"
 reorder_imports = true
 force_multiline_blocks = true
+binop_separator = "Back"

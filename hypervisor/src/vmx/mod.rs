@@ -1,7 +1,4 @@
-use core::{
-    arch::asm,
-    ops::BitAnd,
-};
+use core::ops::BitAnd;
 
 use kapi::{
     KeGetCurrentIrql,
@@ -9,10 +6,8 @@ use kapi::{
 };
 use obfstr::obfstr;
 use x86::{
-    self,
     controlregs::{
         self,
-        Cr0,
         Cr4,
     },
     cpuid::cpuid,
@@ -26,11 +21,8 @@ use x86::{
 };
 
 use crate::{
-    cpu_states,
-    mem::{
-        MemoryAddress,
-        MemoryAddressEx,
-    },
+    cpu_state,
+    mem::MemoryAddressEx,
     msr::Ia32FeatureControlMsr,
 };
 
@@ -42,9 +34,6 @@ pub use exit::*;
 
 mod guest_config;
 pub use guest_config::*;
-
-pub mod constants;
-
 /* reexport vmx intrinsics */
 pub use x86::current::vmx::*;
 
@@ -134,8 +123,56 @@ impl CpuRegisters {
         unsafe { vmx::vmread(vmcs::guest::RSP).unwrap_or(0) }
     }
 
+    pub fn set_rsp(&mut self, value: u64) {
+        unsafe {
+            let _ = vmx::vmwrite(vmcs::guest::RSP, value);
+        }
+    }
+
     pub fn cr3(&self) -> u64 {
         unsafe { vmx::vmread(vmcs::guest::CR3).unwrap_or(0) }
+    }
+
+    pub fn read_gp_register(&self, register: GeneralPurposeRegister) -> u64 {
+        match register {
+            GeneralPurposeRegister::RAX => self.rax,
+            GeneralPurposeRegister::RCX => self.rcx,
+            GeneralPurposeRegister::RDX => self.rdx,
+            GeneralPurposeRegister::RBX => self.rbx,
+            GeneralPurposeRegister::RSP => self.rsp(),
+            GeneralPurposeRegister::RBP => self.rbp,
+            GeneralPurposeRegister::RSI => self.rsi,
+            GeneralPurposeRegister::RDI => self.rdi,
+            GeneralPurposeRegister::R8 => self.r8,
+            GeneralPurposeRegister::R9 => self.r9,
+            GeneralPurposeRegister::R10 => self.r10,
+            GeneralPurposeRegister::R11 => self.r11,
+            GeneralPurposeRegister::R12 => self.r12,
+            GeneralPurposeRegister::R13 => self.r13,
+            GeneralPurposeRegister::R14 => self.r14,
+            GeneralPurposeRegister::R15 => self.r15,
+        }
+    }
+
+    pub fn write_gp_register(&mut self, register: GeneralPurposeRegister, value: u64) {
+        match register {
+            GeneralPurposeRegister::RAX => self.rax = value,
+            GeneralPurposeRegister::RCX => self.rcx = value,
+            GeneralPurposeRegister::RDX => self.rdx = value,
+            GeneralPurposeRegister::RBX => self.rbx = value,
+            GeneralPurposeRegister::RSP => self.set_rsp(value),
+            GeneralPurposeRegister::RBP => self.rbp = value,
+            GeneralPurposeRegister::RSI => self.rsi = value,
+            GeneralPurposeRegister::RDI => self.rdi = value,
+            GeneralPurposeRegister::R8 => self.r8 = value,
+            GeneralPurposeRegister::R9 => self.r9 = value,
+            GeneralPurposeRegister::R10 => self.r10 = value,
+            GeneralPurposeRegister::R11 => self.r11 = value,
+            GeneralPurposeRegister::R12 => self.r12 = value,
+            GeneralPurposeRegister::R13 => self.r13 = value,
+            GeneralPurposeRegister::R14 => self.r14 = value,
+            GeneralPurposeRegister::R15 => self.r15 = value,
+        }
     }
 }
 
@@ -171,7 +208,7 @@ pub fn feature_enable() -> anyhow::Result<()> {
 
 pub fn enable_current_cpu() -> anyhow::Result<()> {
     assert!(KeGetCurrentIrql() >= DISPATCH_LEVEL);
-    let state = cpu_states::current();
+    let state = cpu_state::current();
     if state.vmxon_active {
         /* vmx is already acive */
         return Ok(());
@@ -236,7 +273,7 @@ pub fn enable_current_cpu() -> anyhow::Result<()> {
 
 /// Disable VMX for the current CPU
 pub fn disable_current_cpu() {
-    let state = match cpu_states::try_current() {
+    let state = match cpu_state::try_current() {
         Some(state) => state,
         None => return,
     };

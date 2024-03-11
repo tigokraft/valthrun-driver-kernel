@@ -27,6 +27,12 @@ impl<T> MemoryAddressEx for Box<T> {
     }
 }
 
+impl<T> MemoryAddressEx for *const T {
+    fn get_physical_address(&self) -> usize {
+        MemoryAddress::Virtual(*self as *const _ as usize).physical_address()
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 pub enum MemoryAddress {
     Physical(usize),

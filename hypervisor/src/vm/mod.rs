@@ -1,4 +1,5 @@
 use alloc::{
+    boxed::Box,
     format,
     string::ToString,
 };
@@ -13,7 +14,6 @@ use core::{
 use anyhow::Context;
 use kapi::{
     KeGetCurrentIrql,
-    KeRaiseIrql,
     DISPATCH_LEVEL,
 };
 use kapi_kmodule::{
@@ -54,7 +54,14 @@ use x86::{
 };
 
 use crate::{
-    cpu_states,
+    cpu_state,
+    ept::{
+        read_mtrr,
+        MemoryType,
+        VmPagingTable,
+        EPTP,
+        PAGE_SIZE,
+    },
     mem::{
         MemoryAddress,
         MemoryAddressEx,
@@ -119,12 +126,30 @@ pub fn virtualize_current_system() -> anyhow::Result<()> {
     }
 
     let host_cr3 = unsafe { controlregs::cr3() };
-    for state in cpu_states::all() {
+    for state in cpu_state::all() {
         state.host_cr3 = host_cr3;
     }
 
     /* Enable the VMX CPU feature via MSR */
     vmx::feature_enable()?;
+
+    let mtrr = read_mtrr()?;
+    let ept = VmPagingTable::new_identity(&mtrr);
+    log::debug!(
+        "PML4E = {:X}",
+        ept.pml4e.entries.as_ptr().get_physical_address() as u64
+    );
+
+    for state in cpu_state::all() {
+        state.eptp = EPTP::new()
+            .with_memory_type(MemoryType::WriteBack)
+            .with_page_walk_length(3)
+            .with_pml4_address(ept.pml4e.entries.as_ptr().get_physical_address() as u64 / PAGE_SIZE)
+            .with_dirty_and_access(true);
+    }
+
+    // FIXME: Memory leak!
+    Box::leak(ept);
 
     processor::run_on_all(virtualize_current_system_current_cpu);
     Ok(())
@@ -132,7 +157,7 @@ pub fn virtualize_current_system() -> anyhow::Result<()> {
 
 fn virtualize_current_system_current_cpu() {
     assert!(KeGetCurrentIrql() >= DISPATCH_LEVEL);
-    let state = cpu_states::current();
+    let state = cpu_state::current();
 
     if !state.vmxon_active {
         if let Err(err) = vmx::enable_current_cpu() {
@@ -182,6 +207,7 @@ fn virtualize_current_system_current_cpu() {
         .and_then(|_| vmcs_setup_host().with_context(|| obfstr!("vmcs host").to_string()))
         .and_then(|_| vmcs_setup_guest().with_context(|| obfstr!("vmcs guest").to_string()))
         .and_then(|_| vmcs_setup_controls().with_context(|| obfstr!("vmcs controls").to_string()));
+
     if let Err(err) = vmcs_error {
         log::error!(
             "{} {}: {:?}",
@@ -222,8 +248,17 @@ fn virtualize_current_system_current_cpu() {
             vmcs_guest_rip = in(reg) vmcs::guest::RIP as u64,
         );
     }
+
+    /* Invalidate memory contexts */
+    //mem::invvpid(mem::InvVpidMode::AllContext);
+    // unsafe {
+    //     //instructions::tlb::flush_pcid(instructions::tlb::InvPicdCommand::All);
+    // }
+
     if start_result > 0 {
         state.vm_launched = true;
+
+        /* TODO: Test vmcall handler */
         log::info!("{} Core virtualised!", state.processor_index);
         return;
     }
@@ -273,7 +308,7 @@ fn exit_virtualisation_current_cpu() {
 }
 
 fn vmcs_setup_host() -> anyhow::Result<()> {
-    let state = cpu_states::current();
+    let state = cpu_state::current();
 
     let mut gdt = DescriptorTablePointer::<Descriptor>::default();
     let mut idt = DescriptorTablePointer::<Descriptor>::default();
@@ -282,7 +317,7 @@ fn vmcs_setup_host() -> anyhow::Result<()> {
         dtables::sgdt(&mut gdt);
         dtables::sidt(&mut idt);
 
-        const RPL_MASK: u16 = 0xFC;
+        const RPL_MASK: u16 = 0xF8;
         vm_write!(
             vmcs::host::CS_SELECTOR,
             segmentation::cs().bits() & RPL_MASK
@@ -320,6 +355,9 @@ fn vmcs_setup_host() -> anyhow::Result<()> {
         vm_write!(vmcs::host::GDTR_BASE, gdt.base as u64)?;
         vm_write!(vmcs::host::IDTR_BASE, idt.base as u64)?;
 
+        /* FIXME: Do not share the same IDT due to nmi! Create an own host IDT :) */
+        // https://www.unknowncheats.me/forum/c-and-c-/390593-vm-escape-via-nmi.html
+
         vm_write!(vmcs::host::IA32_SYSENTER_CS, msr::rdmsr(IA32_SYSENTER_CS))?;
         vm_write!(vmcs::host::IA32_SYSENTER_EIP, msr::rdmsr(IA32_SYSENTER_EIP))?;
         vm_write!(vmcs::host::IA32_SYSENTER_ESP, msr::rdmsr(IA32_SYSENTER_ESP))?;
@@ -345,6 +383,7 @@ fn vmcs_setup_host() -> anyhow::Result<()> {
 fn vmcs_setup_guest() -> anyhow::Result<()> {
     /* entry rsp & rip will be set when known */
     let guest_config = VmGuestConfiguration::from_current_host(0, 0);
+
     guest_config.apply()
 }
 
@@ -361,7 +400,7 @@ unsafe fn apply_control(control: impl Into<VmxControl>) -> anyhow::Result<()> {
 }
 
 fn vmcs_setup_controls() -> anyhow::Result<()> {
-    let state = cpu_states::current();
+    let state = cpu_state::current();
 
     unsafe {
         vm_write!(vmcs::control::TSC_OFFSET_FULL, 0)?;
@@ -377,26 +416,24 @@ fn vmcs_setup_controls() -> anyhow::Result<()> {
         vm_write!(vmcs::control::VMENTRY_INTERRUPTION_INFO_FIELD, 0)?;
 
         /* TODO: Is this correct or shall we all assign the same VPID? */
-        //vm_write!(vmcs::control::VPID, state.processor_index + 1)?;
+        vm_write!(vmcs::control::VPID, 1)?;
 
-        apply_control(ExitControls::HOST_ADDRESS_SPACE_SIZE)?;
+        apply_control(ExitControls::HOST_ADDRESS_SPACE_SIZE | ExitControls::ACK_INTERRUPT_ON_EXIT)?;
         apply_control(EntryControls::IA32E_MODE_GUEST)?;
         apply_control(PinbasedControls::empty())?;
-        apply_control(PrimaryControls::SECONDARY_CONTROLS)?; // | IA32_VMX_PROCBASED_CTLS_ACTIVATE_MSR_BITMAP,
         apply_control(
-            //  SecondaryControls::ENABLE_VPID -> Causes invalid configuration
-            //SecondaryControls::ENABLE_VPID|
-            SecondaryControls::ENABLE_RDTSCP
-                // | SecondaryControls::ENABLE_INVPCID
-                | SecondaryControls::ENABLE_XSAVES_XRSTORS,
-            // | IA32_VMX_PROCBASED_CTLS2_ENABLE_EPT
+            PrimaryControls::SECONDARY_CONTROLS | PrimaryControls::CR3_LOAD_EXITING, // | PrimaryControls::INVLPG_EXITING,
+        )?; // | IA32_VMX_PROCBASED_CTLS_ACTIVATE_MSR_BITMAP,
+        apply_control(
+            SecondaryControls::ENABLE_VPID |
+                SecondaryControls::ENABLE_INVPCID |
+                SecondaryControls::ENABLE_RDTSCP |
+                SecondaryControls::ENABLE_XSAVES_XRSTORS |
+                SecondaryControls::ENABLE_EPT,
         )?;
 
         vm_write!(vmcs::control::CR0_GUEST_HOST_MASK, 0)?;
-        vm_write!(
-            vmcs::control::CR0_READ_SHADOW,
-            controlregs::cr0().bits() as u64
-        )?;
+        vm_write!(vmcs::control::CR0_READ_SHADOW, 0)?;
 
         vm_write!(vmcs::control::CR3_TARGET_COUNT, 0)?;
         vm_write!(vmcs::control::CR3_TARGET_VALUE0, 0)?;
@@ -405,16 +442,14 @@ fn vmcs_setup_controls() -> anyhow::Result<()> {
         vm_write!(vmcs::control::CR3_TARGET_VALUE3, 0)?;
 
         vm_write!(vmcs::control::CR4_GUEST_HOST_MASK, 0)?;
-        vm_write!(
-            vmcs::control::CR4_READ_SHADOW,
-            controlregs::cr4().bits() as u64
-        )?;
+        vm_write!(vmcs::control::CR4_READ_SHADOW, 0)?;
 
         let msr_bitmap =
             MemoryAddress::Virtual(&*state.msr_bitmap as *const _ as usize).physical_address();
         vm_write!(vmcs::control::MSR_BITMAPS_ADDR_FULL, msr_bitmap as u64)?;
 
-        //vm_write!(vmcs::control::EPTP_FULL, 0x111000)?;
+        let eptp: u64 = state.eptp.into();
+        vm_write!(vmcs::control::EPTP_FULL, eptp)?;
         // // Set up EPT
         // __vmx_vmwrite(EPT_POINTER, EptState->EptPointer.Flags);
     }

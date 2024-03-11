@@ -11,6 +11,7 @@ use x86::msr::{
 };
 
 use crate::{
+    ept::EPTP,
     mem::MemoryAddress,
     msr::Ia32VmxBasicMsr,
     processor,
@@ -43,6 +44,7 @@ pub struct CpuState {
     pub msr_bitmap: Box<MsrBitmap>,
 
     pub host_cr3: u64,
+    pub eptp: EPTP,
 }
 
 static GUEST_STATE: SyncUnsafeCell<Option<Box<[CpuState]>>> = SyncUnsafeCell::new(None);
@@ -131,6 +133,7 @@ pub fn allocate() -> anyhow::Result<()> {
             vmx_root_mode: false,
 
             host_cr3: 0,
+            eptp: EPTP::new(),
         });
     }
     *states = Some(state_memory.into_boxed_slice());

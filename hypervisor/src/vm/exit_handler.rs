@@ -1,6 +1,5 @@
 use core::arch::asm;
 
-use bitfield_struct::bitfield;
 use x86::{
     cpuid::cpuid,
     current::vmx,
@@ -10,7 +9,11 @@ use x86::{
 
 use crate::{
     mem,
-    vmx::CpuRegisters,
+    vmx::{
+        ControlRegister,
+        CpuRegisters,
+        MovCrQualification,
+    },
 };
 
 pub fn handle_cpuid(guest_state: &mut CpuRegisters) {
@@ -51,76 +54,47 @@ pub fn handle_cpuid(guest_state: &mut CpuRegisters) {
     guest_state.rdx |= info.edx as u64;
 }
 
-#[bitfield(u64)]
-pub struct MovCrQualification {
-    #[bits(4)]
-    pub control_register: u8,
-
-    #[bits(2)]
-    pub access_type: u8,
-    pub lmsw_operand_type: bool,
-
-    _reserved1: bool,
-
-    #[bits(4)]
-    pub register: u8,
-
-    #[bits(4)]
-    _reserved2: u8,
-
-    #[bits(16)]
-    pub lmsw_source_data: u16,
-
-    #[bits(32)]
-    _reserved3b: u32,
-}
-
 pub fn handle_cr_access(guest_state: &mut CpuRegisters) {
-    unsafe { asm!("int 3") };
-    /* TODO: HvHandleControlRegisterAccess */
     let qualification =
         unsafe { MovCrQualification::from(vmx::vmread(vmcs::ro::EXIT_QUALIFICATION).unwrap()) };
+    log::debug!("CR: {:?}", qualification);
 
     unsafe {
         let reg_ptr = (&mut guest_state.rax as *mut u64).offset(qualification.register() as isize);
-        if qualification.register() == 4 {
-            /* TODO! */
-            asm!("int 3");
-        }
-
         match qualification.access_type() {
             0 => {
                 /* TYPE_MOV_TO_CR */
+                let value = guest_state.read_gp_register(qualification.register());
                 match qualification.control_register() {
-                    0 => {
-                        let _ = vmx::vmwrite(vmcs::guest::CR0, *reg_ptr);
-                        let _ = vmx::vmwrite(vmcs::control::CR0_READ_SHADOW, *reg_ptr);
+                    ControlRegister::Cr0 => {
+                        let _ = vmx::vmwrite(vmcs::guest::CR0, value);
+                        let _ = vmx::vmwrite(vmcs::control::CR0_READ_SHADOW, value);
                     }
-                    3 => {
-                        let _ = vmx::vmwrite(vmcs::guest::CR3, *reg_ptr);
-                        mem::invvpid(mem::InvVpidMode::SingleContext(0x01));
+                    ControlRegister::Cr3 => {
+                        log::debug!("Updated Cr3 from {:X} to {:X}", guest_state.cr3(), value);
+                        let _ = vmx::vmwrite(vmcs::guest::CR3, value & !(1 << 63));
+                        mem::invvpid(mem::InvVpidMode::AllContext); // Invalid tlb
+                                                                    // x86_64::instructions::tlb::flush_pcid(
+                                                                    //     x86_64::instructions::tlb::InvPicdCommand::All,
+                                                                    // );
+                        x86::tlb::flush_all();
                     }
-                    4 => {
-                        let _ = vmx::vmwrite(vmcs::guest::CR4, *reg_ptr);
-                        let _ = vmx::vmwrite(vmcs::control::CR4_READ_SHADOW, *reg_ptr);
+                    ControlRegister::Cr4 => {
+                        let _ = vmx::vmwrite(vmcs::guest::CR4, value);
+                        let _ = vmx::vmwrite(vmcs::control::CR4_READ_SHADOW, value);
                     }
-                    _ => asm!("int 3"),
                 }
             }
             1 => {
                 /* TYPE_MOV_FROM_CR */
-                match qualification.control_register() {
-                    0 => {
-                        *reg_ptr = vmx::vmread(vmcs::guest::CR0).unwrap_or(0);
-                    }
-                    3 => {
-                        *reg_ptr = vmx::vmread(vmcs::guest::CR3).unwrap_or(0);
-                    }
-                    4 => {
-                        *reg_ptr = vmx::vmread(vmcs::guest::CR4).unwrap_or(0);
-                    }
-                    _ => asm!("int 3"),
-                }
+                let vmcs_field = match qualification.control_register() {
+                    ControlRegister::Cr0 => vmcs::guest::CR0,
+                    ControlRegister::Cr3 => vmcs::guest::CR3,
+                    ControlRegister::Cr4 => vmcs::guest::CR4,
+                };
+
+                let value = vmx::vmread(vmcs_field).unwrap_or(0);
+                guest_state.write_gp_register(qualification.register(), value);
             }
             _ => asm!("int 3"),
         }

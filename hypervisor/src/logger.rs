@@ -7,18 +7,31 @@ use core::ptr;
 use kdef::DPFLTR_LEVEL;
 use obfstr::obfstr;
 use spin::Mutex;
-use winapi::km::wdm::{
-    self,
+use utils_imports::{
+    dynamic_import_table,
+    provider::SystemExport,
+};
+use winapi::{
+    km::wdm,
+    shared::ntdef::NTSTATUS,
 };
 
 use crate::{
-    cpu_states,
+    cpu_state,
     logging::{
         Dpc,
         LogQueue,
     },
-    panic_hook::DEBUG_IMPORTS,
 };
+
+type DbgPrintEx =
+    unsafe extern "C" fn(ComponentId: u32, Level: u32, Format: *const u8, ...) -> NTSTATUS;
+
+dynamic_import_table! {
+    imports LOG_IMPORTS {
+        pub DbgPrintEx: DbgPrintEx = SystemExport::new(obfstr!("DbgPrintEx")),
+    }
+}
 
 struct VmxDPCContext {
     queue: Arc<spin::Mutex<LogQueue>>,
@@ -72,7 +85,7 @@ impl log::Log for KernelLogger {
             log::Level::Error => "E",
         };
 
-        let is_vmx_root_mode = cpu_states::try_current()
+        let is_vmx_root_mode = cpu_state::try_current()
             .map(|state| state.vmx_root_mode)
             .unwrap_or(false);
 
@@ -112,6 +125,8 @@ static APP_LOGGER: spin::Mutex<Option<KernelLogger>> = spin::Mutex::new(None);
 pub fn create_app_logger() -> &'static KernelLogger {
     let mut logger = APP_LOGGER.lock();
     let logger = logger.get_or_insert_with(|| {
+        let _ = LOG_IMPORTS.unwrap();
+
         let vmx_queue = Arc::new(Mutex::new(LogQueue::new(1024 * 128, 1024)));
         let vmx_dpc_context = Box::new(VmxDPCContext::from_queue(vmx_queue.clone()));
 
@@ -163,7 +178,7 @@ extern "system" fn dpc_process_queue(
 }
 
 fn do_log_entry(level: log::Level, message: *const u8) {
-    let imports = match DEBUG_IMPORTS.get() {
+    let imports = match LOG_IMPORTS.get() {
         Some(imports) => imports,
         /*
          * Debug imports have not been initialized.
@@ -172,17 +187,18 @@ fn do_log_entry(level: log::Level, message: *const u8) {
         None => return,
     };
 
-    let log_level = match level {
-        log::Level::Trace => DPFLTR_LEVEL::TRACE,
-        log::Level::Debug => DPFLTR_LEVEL::TRACE,
-        log::Level::Info => DPFLTR_LEVEL::INFO,
-        log::Level::Warn => DPFLTR_LEVEL::WARNING,
-        log::Level::Error => DPFLTR_LEVEL::ERROR,
-    };
+    let log_level = DPFLTR_LEVEL::ERROR;
+    // let log_level = match level {
+    //     log::Level::Trace => DPFLTR_LEVEL::TRACE,
+    //     log::Level::Debug => DPFLTR_LEVEL::TRACE,
+    //     log::Level::Info => DPFLTR_LEVEL::INFO,
+    //     log::Level::Warn => DPFLTR_LEVEL::WARNING,
+    //     log::Level::Error => DPFLTR_LEVEL::ERROR,
+    // };
 
     unsafe {
         (imports.DbgPrintEx)(
-            0,
+            77, /* DPFLTR_IHVDRIVER_ID */
             log_level as u32,
             obfstr!("[VTHV]%s\n\0").as_ptr(),
             message,

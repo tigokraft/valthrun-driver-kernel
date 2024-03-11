@@ -40,6 +40,10 @@ pub fn dbg_break() {
     }
 }
 
+pub fn setup_panic_handler() -> bool {
+    DEBUG_IMPORTS.resolve().is_ok()
+}
+
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
     /*

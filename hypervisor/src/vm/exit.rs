@@ -18,10 +18,15 @@ use x86::{
         ro::VM_INSTRUCTION_ERROR,
     },
 };
+use x86_64::instructions::{
+    self,
+    tlb::InvPicdCommand,
+};
 
 use super::exit_handler;
 use crate::{
-    cpu_states,
+    cpu_state,
+    mem,
     vmx::{
         CpuRegisters,
         ExitInformation,
@@ -126,7 +131,7 @@ pub unsafe extern "system" fn vmexit_handler() {
 }
 
 fn prepare_vm_exit() {
-    let state = cpu_states::current();
+    let state = cpu_state::current();
     if state.vm_exit_scheduled {
         return;
     }
@@ -154,7 +159,7 @@ fn prepare_vm_exit() {
 }
 
 extern "system" fn callback_vmexit(registers: &mut CpuRegisters) -> bool {
-    let state = cpu_states::current();
+    let state = cpu_state::current();
 
     state.vmx_root_incr_rip = true;
     state.vmx_root_mode = true;
@@ -166,12 +171,13 @@ extern "system" fn callback_vmexit(registers: &mut CpuRegisters) -> bool {
 
     if !matches!(
         exit_info.reason,
-        ExitReason::RdMsr | ExitReason::WrMsr | ExitReason::CpuId
+        ExitReason::RdMsr | ExitReason::WrMsr | ExitReason::CpuId | ExitReason::CrAccess
     ) {
         log::trace!(
-            "VM exit {:?} | Guest RIP: {:X} RSP: {:X}, RBP: {:X}",
+            "VM exit {:?} | Guest RIP: {:X} Cr3: {:X} RSP: {:X}, RBP: {:X}",
             exit_info.reason,
             unsafe { vmx::vmread(vmcs::guest::RIP).unwrap_or(0) },
+            unsafe { controlregs::cr3() },
             unsafe { vmx::vmread(vmcs::guest::RSP).unwrap_or(0) },
             registers.rbp
         );
@@ -181,8 +187,12 @@ extern "system" fn callback_vmexit(registers: &mut CpuRegisters) -> bool {
         ExitReason::TripleFault => {
             unsafe {
                 asm!("int 3");
+                unsafe {
+                    //instructions::tlb::flush_pcid(InvPicdCommand::All);
+                    //mem::invvpid(mem::InvVpidMode::SingleContext(1));
+                }
             }
-            state.vmx_root_incr_rip = true;
+            //state.vmx_root_incr_rip = false;
         }
         ExitReason::IoInstruction => {
             unsafe {
@@ -190,15 +200,15 @@ extern "system" fn callback_vmexit(registers: &mut CpuRegisters) -> bool {
             };
         }
 
-        ExitReason::VmClear
-        | ExitReason::VmPtrLd
-        | ExitReason::VmPtrRst
-        | ExitReason::VmRead
-        | ExitReason::VmWrite
-        | ExitReason::VmResume
-        | ExitReason::VmxOff
-        | ExitReason::VmxOn
-        | ExitReason::VmLaunch => {
+        ExitReason::VmClear |
+        ExitReason::VmPtrLd |
+        ExitReason::VmPtrRst |
+        ExitReason::VmRead |
+        ExitReason::VmWrite |
+        ExitReason::VmResume |
+        ExitReason::VmxOff |
+        ExitReason::VmxOn |
+        ExitReason::VmLaunch => {
             log::debug!("VMX instruction {:?} from {:X}", exit_info.reason, unsafe {
                 vmx::vmread(vmcs::guest::RIP).unwrap_or(0)
             });
@@ -241,12 +251,29 @@ extern "system" fn callback_vmexit(registers: &mut CpuRegisters) -> bool {
         ExitReason::Invd => {
             unsafe { asm!("invd") };
         }
+        ExitReason::InvlPg => {
+            let q = unsafe { vmx::vmread(vmcs::ro::EXIT_QUALIFICATION).unwrap() };
+            //mem::invvpid(mem::InvVpidMode::IndividualAddress(1, q));
+            unsafe {
+                asm!("int 3");
+            };
+        }
 
         ExitReason::EptViolation | ExitReason::EptMisconfigure => {
             unsafe { asm!("int 3") };
             unreachable!("EPT not implemented!");
         }
 
+        ExitReason::Invpcid => unsafe {
+            unsafe {
+                //instructions::tlb::flush_pcid(InvPicdCommand::All);
+                asm!("int 3");
+            }
+        },
+        ExitReason::Invvpid => {
+            /* FIXME: Properly read the value... */
+            mem::invvpid(mem::InvVpidMode::AllContext);
+        }
         reason => {
             log::error!("Unknown VMEXIT reason: {:?}", reason);
             unsafe { asm!("int 3") };
@@ -273,7 +300,7 @@ extern "system" fn callback_vmresume_failed() {
 }
 
 extern "system" fn callback_vmoff_execute(guest_registers: &mut CpuRegisters) {
-    let state = cpu_states::current();
+    let state = cpu_state::current();
     state.vmx_root_mode = true;
 
     /*

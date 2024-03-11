@@ -2,6 +2,7 @@
 #![allow(dead_code)]
 #![feature(sync_unsafe_cell)]
 #![feature(new_uninit)]
+#![feature(allocator_api)]
 
 extern crate alloc;
 
@@ -40,7 +41,7 @@ mod object;
 pub use object::*;
 
 mod allocator;
-pub use allocator::POOL_TAG;
+pub use allocator::*;
 
 pub mod thread;
 

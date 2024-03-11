@@ -1,4 +1,4 @@
-#![no_std]
+#![cfg_attr(not(test), no_std)]
 #![feature(core_intrinsics)]
 #![feature(naked_functions)]
 #![allow(internal_features)]
@@ -6,17 +6,18 @@
 #![feature(pointer_is_aligned)]
 #![feature(new_uninit)]
 #![feature(asm_const)]
+#![feature(allocator_api)]
 
 use core::arch::asm;
 
 use kapi::{
     KeLowerIrql,
     KeRaiseIrql,
+    NonPagedAllocator,
     DISPATCH_LEVEL,
 };
 use logger::create_app_logger;
 use obfstr::obfstr;
-use panic_hook::DEBUG_IMPORTS;
 use utils_imports::provider::SystemExport;
 use winapi::{
     km::wdm::DRIVER_OBJECT,
@@ -31,20 +32,28 @@ use winapi::{
         },
     },
 };
+use x86::controlregs;
 
 extern crate alloc;
 
 mod cpu;
-mod cpu_states;
+mod cpu_state;
+mod ept;
 mod logger;
 mod logging;
 mod mem;
 mod msr;
-mod panic_hook;
 mod processor;
 mod utils;
 mod vm;
 mod vmx;
+
+#[cfg(not(test))]
+mod panic_hook;
+
+#[global_allocator]
+#[cfg(not(test))]
+static GLOBAL_ALLOC: NonPagedAllocator = NonPagedAllocator;
 
 extern "system" fn driver_unload(_driver: &mut DRIVER_OBJECT) {
     log::info!("Unloading...");
@@ -65,7 +74,8 @@ pub extern "system" fn driver_entry(
     _registry_path: *const UNICODE_STRING,
 ) -> NTSTATUS {
     SystemExport::initialize(None);
-    if DEBUG_IMPORTS.resolve().is_err() {
+    #[cfg(not(test))]
+    if !panic_hook::setup_panic_handler() {
         return STATUS_DRIVER_INTERNAL_ERROR;
     }
 
@@ -103,8 +113,9 @@ pub extern "system" fn driver_entry(
 
     let irql = KeRaiseIrql(DISPATCH_LEVEL);
     driver.DriverUnload = Some(driver_unload);
+    let status = rust_driver_entry(driver);
     KeLowerIrql(irql);
-    if let Err(error) = rust_driver_entry(driver) {
+    if let Err(error) = status {
         log::error!("{}: {:#}", obfstr!("driver init failed"), error);
         //unsafe { asm!("int 3") };
         driver_unload(driver);
@@ -120,20 +131,34 @@ fn rust_driver_entry(_driver: &mut DRIVER_OBJECT) -> anyhow::Result<()> {
     log::info!("  CPU: {}", cpu::name());
     log::info!("  VMX: {:?}", vmx::feature_support());
 
-    cpu_states::allocate()?;
+    cpu_state::allocate()?;
     log::debug!("{}", obfstr!("CPU states allocated"));
 
     log::debug!("Before states:");
     log::debug!("  Hypervisor ID: {:X?}", cpu::hypervisor_id());
     log::debug!("  Processor ID: {:X?}", processor::current());
+    log::debug!("  CR3: {:X}", unsafe { controlregs::cr3() });
+
+    // let mtrr = ept::read_mtrr()?;
+    // log::debug!("{:?}", mtrr.capability);
+    // for index in 0..mtrr.descriptor_count {
+    //     log::debug!(
+    //         "{}: {:0>16X} - {:0>16X}: {:?}",
+    //         index,
+    //         mtrr.descriptors[index].base_address,
+    //         mtrr.descriptors[index].length,
+    //         mtrr.descriptors[index].memory_type
+    //     );
+    // }
 
     vm::virtualize_current_system()?;
     log::debug!("{}", obfstr!("Current system virtualized"));
 
     log::debug!("After states");
     log::debug!("  Hypervisor ID: {:X?}", cpu::hypervisor_id());
+    log::debug!("  CR3: {:X}", unsafe { controlregs::cr3() });
 
-    unsafe { asm!("int 3") };
+    //unsafe { asm!("int 3") };
     // vm::exit_virtualisation();
     // log::debug!("Cleanup states");
     // log::debug!("  Hypervisor ID: {:X?}", cpu::hypervisor_id());

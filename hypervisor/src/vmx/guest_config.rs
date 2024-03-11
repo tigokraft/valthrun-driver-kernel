@@ -123,14 +123,34 @@ impl VmGuestConfiguration {
             }};
         }
 
+        for (name, selector) in [
+            ("cs", segmentation::cs()),
+            ("ss", segmentation::ss()),
+            ("ds", segmentation::ds()),
+            ("es", segmentation::es()),
+            ("fs", segmentation::fs()),
+            ("gs", segmentation::gs()),
+            ("tr", self.tr.clone()),
+            ("ldtr", self.ldtr.clone()),
+        ] {
+            log::debug!("Selector {}: {}", name, selector);
+            let entry = unsafe { &*self.gdt.base.offset(selector.index() as isize) };
+            log::debug!("  Descriptor: {}", entry);
+            log::debug!("  Base: {:X}", utils::get_segment_base(&self.gdt, selector));
+            log::debug!(
+                "  Limit: {:X}",
+                utils::get_segment_limit(&self.gdt, selector)
+            );
+            log::debug!(
+                "  Rights: {:X}",
+                utils::get_segment_access_right(&self.gdt, selector)
+            );
+        }
+
         unsafe {
             vm_write!(
                 vmcs::guest::IA32_DEBUGCTL_FULL,
-                msr::rdmsr(IA32_DEBUGCTL_FULL) & 0xFFFFFFFF
-            )?;
-            vm_write!(
-                vmcs::guest::IA32_DEBUGCTL_HIGH,
-                msr::rdmsr(IA32_DEBUGCTL_FULL) >> 32
+                msr::rdmsr(IA32_DEBUGCTL_FULL)
             )?;
 
             setup_selector!(CS, &self.gdt, self.cs);

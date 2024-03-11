@@ -26,6 +26,7 @@ anyhow = { version = "1.0", default-features = false }
 paste = "1.0.14"
 spin = "0.9.8"
 bitflags = "2.4.2"
+x86_64 = "0.14.12"
 
 [dependencies.compiler_builtins]
 git = "https://github.com/rust-lang/compiler-builtins"

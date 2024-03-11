@@ -94,7 +94,7 @@ impl VmxControl {
         let vmx_basic = unsafe { msr::rdmsr(x86::msr::IA32_VMX_BASIC) };
         let true_cap_msr_supported = (vmx_basic & IA32_VMX_BASIC_VMX_CONTROLS_FLAG) != 0;
 
-        match (self, true_cap_msr_supported) {
+        match (self, true) {
             (Self::Primary(_), true) => x86::msr::IA32_VMX_TRUE_PROCBASED_CTLS,
             (Self::Primary(_), false) => x86::msr::IA32_VMX_PROCBASED_CTLS,
 
