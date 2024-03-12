@@ -2,17 +2,12 @@ use alloc::{
     format,
     string::ToString,
 };
-use core::{
-    cell::SyncUnsafeCell,
-    ptr,
-};
+use core::cell::SyncUnsafeCell;
 
 use anyhow::Context;
 use kapi::{
-    Mdl,
-    PagePriority,
-    IO_READ_ACCESS,
-    MCT_CACHED,
+    KeGetCurrentIrql,
+    DISPATCH_LEVEL,
 };
 use kapi_kmodule::{
     KModule,
@@ -26,9 +21,11 @@ use valthrun_driver_shared::{
     SignatureType,
 };
 use winapi::{
-    ctypes::c_void,
-    km::wdm::KPROCESSOR_MODE,
     shared::ntdef::PVOID,
+    um::winnt::{
+        IMAGE_SCN_MEM_DISCARDABLE,
+        IMAGE_SCN_MEM_READ,
+    },
 };
 
 /// Undocumented function/struct offsets
@@ -48,20 +45,16 @@ pub fn get_nt_offsets() -> &'static NtOffsets {
 }
 
 fn find_mm_verify_callback_function_flags_old(kernel_base: &KModule) -> anyhow::Result<usize> {
-    let pattern = ByteSequencePattern::parse(obfstr!(
-        "E8 ?? ?? ?? ?? 85 C0 0F 84 ?? ?? ?? ?? 48 8B 4D 00"
-    ))
-    .with_context(|| {
-        obfstr!("Failed to compile MmVerifyCallbackFunctionFlags pattern").to_string()
-    })?;
-
-    NtOffsets::locate_function(
-        &kernel_base,
+    let sig = Signature::relative_address(
         obfstr!("MmVerifyCallbackFunctionFlags"),
-        &pattern,
+        obfstr!("E8 ?? ?? ?? ?? 85 C0 0F 84 ?? ?? ?? ?? 48 8B 4D 00"),
         0x01,
         0x05,
-    )
+    );
+
+    NtOffsets::locate_signature(kernel_base, &sig).with_context(|| {
+        obfstr!("Failed to compile MmVerifyCallbackFunctionFlags pattern").to_string()
+    })
 }
 
 fn find_mm_verify_callback_function_flags_new(kernel_base: &KModule) -> anyhow::Result<usize> {
@@ -96,6 +89,7 @@ fn find_mm_verify_callback_function_flags_new(kernel_base: &KModule) -> anyhow::
 }
 
 pub fn initialize_nt_offsets() -> anyhow::Result<()> {
+    assert!(KeGetCurrentIrql() < DISPATCH_LEVEL);
     let ntoskrnl = KModule::find_by_name(obfstr!("ntoskrnl.exe"))?
         .with_context(|| obfstr!("failed to find kernel base").to_string())?;
 
@@ -186,39 +180,31 @@ impl NtOffsets {
             module.file_name
         );
 
-        let (section, mdl, inst_offset) = module
+        let (section, inst_offset) = module
             .find_code_sections()?
             .into_iter()
             .find_map(|section| {
-                if !section.is_data_valid() {
+                if (section.characteristics & IMAGE_SCN_MEM_DISCARDABLE) != 0 {
+                    /* Section is discardable and most likely has been discarded */
+                    log::debug!(
+                        "  Skipping {} as it's discardable ({:X})",
+                        section.name,
+                        section.characteristics
+                    );
+                    return None;
+                }
+                if (section.characteristics & IMAGE_SCN_MEM_READ) == 0 {
+                    /* Section is not readable */
+                    log::debug!(
+                        "  Skipping {} as it's not readable ({:X})",
+                        section.name,
+                        section.characteristics
+                    );
                     return None;
                 }
 
-                let mdl = Mdl::allocate(
-                    section.raw_data_address() as *mut c_void,
-                    section.size_of_raw_data,
-                    false,
-                    false,
-                    ptr::null_mut(),
-                )?;
-
-                let mdl = mdl
-                    .lock(KPROCESSOR_MODE::KernelMode, IO_READ_ACCESS)
-                    .inspect_err(|_| log::warn!("Failed to lock section {}", section.name))
-                    .ok()?;
-
-                let mdl = mdl
-                    .map(
-                        KPROCESSOR_MODE::KernelMode,
-                        MCT_CACHED,
-                        None,
-                        PagePriority::NORMAL,
-                    )
-                    .inspect_err(|_| log::warn!("Failed to map locked section {}", section.name))
-                    .ok()?;
-
-                if let Some(offset) = signature.pattern.find(mdl.as_slice()) {
-                    Some((section, mdl, offset))
+                if let Some(offset) = signature.pattern.find(section.raw_data_unchecked()) {
+                    Some((section, offset))
                 } else {
                     None
                 }
@@ -233,7 +219,7 @@ impl NtOffsets {
         }
 
         let value = unsafe {
-            (mdl.address() as *const ())
+            (section.raw_data_address() as *const ())
                 .byte_add(inst_offset)
                 .byte_add(signature.offset as usize)
                 .cast::<u32>()
@@ -241,122 +227,20 @@ impl NtOffsets {
         };
         match &signature.value_type {
             SignatureType::Offset => {
+                let value = value as usize;
                 log::trace!("  => {:X} (inst at {:X})", value, inst_offset);
-                Ok(value as usize)
+                Ok(value)
             }
             SignatureType::RelativeAddress { inst_length } => {
                 let value = section
                     .raw_data_address()
                     .wrapping_add(inst_offset)
                     .wrapping_add(*inst_length)
-                    .wrapping_add_signed(value as isize) as usize;
-                log::trace!(
-                    "  => {:X} ({:X})",
-                    value,
-                    value - section.raw_data_address()
-                );
+                    .wrapping_add_signed(value as i32 as isize);
+                log::trace!("  => {:X} ({:X})", value, value - module.base_address,);
                 Ok(value)
             }
             SignatureType::Pattern => unreachable!(),
         }
-    }
-
-    pub fn locate_function<T>(
-        module: &KModule,
-        name: &str,
-        pattern: &dyn SearchPattern,
-        offset_rel_address: isize,
-        instruction_length: usize,
-    ) -> anyhow::Result<T>
-    where
-        T: Sized,
-    {
-        let pattern_match = module
-            .find_code_sections()?
-            .into_iter()
-            .find_map(|section| {
-                // if let Some(memory) = LockedVirtMem::create(section.raw_data_address() as u64, section.size_of_raw_data, winapi::km::wdm::KPROCESSOR_MODE::UserMode, IO_READ_ACCESS, MCT_CACHED) {
-                //     if let Some(offset) = pattern.find(memory.memory()) {
-                //         Some(offset + section.raw_data_address())
-                //     } else {
-                //         None
-                //     }
-                // } else {
-                //     log::warn!(
-                //         "Skipping {}::{} as section data could not be locked",
-                //         module.file_name,
-                //         section.name
-                //     );
-                //     None
-                // }
-                if let Some(data) = section.raw_data() {
-                    if let Some(offset) = pattern.find(data) {
-                        Some(offset + section.raw_data_address())
-                    } else {
-                        None
-                    }
-                } else {
-                    log::warn!(
-                        "Skipping {}::{} as section data is not valid / paged out",
-                        module.file_name,
-                        section.name
-                    );
-                    None
-                }
-            })
-            .with_context(|| format!("failed to find {} pattern", name))?;
-
-        let offset = unsafe {
-            (pattern_match as *const ())
-                .byte_offset(offset_rel_address)
-                .cast::<i32>()
-                .read_unaligned()
-        };
-
-        let target = pattern_match
-            .wrapping_add_signed(offset as isize)
-            .wrapping_add(instruction_length);
-
-        log::debug!(
-            "{}::{} located at {:X} ({:X})",
-            module.file_name,
-            name,
-            target - module.base_address,
-            target
-        );
-        unsafe { Ok(core::mem::transmute_copy::<_, T>(&target)) }
-    }
-
-    pub fn locate_offset(
-        module: &KModule,
-        name: &str,
-        pattern: &dyn SearchPattern,
-        inst_offset: isize,
-    ) -> anyhow::Result<usize> {
-        let pattern_match = module
-            .find_code_sections()?
-            .into_iter()
-            .find_map(|section| {
-                if let Some(data) = section.raw_data() {
-                    if let Some(offset) = pattern.find(data) {
-                        Some(offset + section.raw_data_address())
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                }
-            })
-            .with_context(|| format!("failed to find {} pattern", name))?;
-
-        let offset = unsafe {
-            (pattern_match as *const ())
-                .byte_offset(inst_offset)
-                .cast::<u32>()
-                .read_unaligned()
-        };
-
-        log::debug!("{}::{} resolved to {:X}", module.file_name, name, offset);
-        Ok(offset as usize)
     }
 }

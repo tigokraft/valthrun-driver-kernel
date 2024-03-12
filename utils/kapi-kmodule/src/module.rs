@@ -69,6 +69,7 @@ pub struct KModuleSection {
     pub module_base: usize,
     pub virtual_address: usize,
     pub size_of_raw_data: usize,
+    pub characteristics: u32,
 }
 
 impl KModuleSection {
@@ -82,6 +83,7 @@ impl KModuleSection {
             module_base: module.base_address,
             virtual_address: header.VirtualAddress as usize,
             size_of_raw_data: header.SizeOfRawData as usize,
+            characteristics: header.Characteristics,
         }
     }
 
@@ -90,19 +92,21 @@ impl KModuleSection {
         unsafe { (imports.MmIsAddressValid)(self.raw_data_address() as *const () as PVOID) }
     }
 
+    pub fn raw_data_unchecked(&self) -> &[u8] {
+        unsafe {
+            core::slice::from_raw_parts(
+                self.raw_data_address() as *const u8,
+                self.size_of_raw_data as usize,
+            )
+        }
+    }
+
     pub fn raw_data(&self) -> Option<&[u8]> {
         if !self.is_data_valid() {
             return None;
         }
 
-        let buffer = unsafe {
-            core::slice::from_raw_parts(
-                self.raw_data_address() as *const u8,
-                self.size_of_raw_data as usize,
-            )
-        };
-
-        Some(buffer)
+        Some(self.raw_data_unchecked())
     }
 
     pub fn raw_data_address(&self) -> usize {

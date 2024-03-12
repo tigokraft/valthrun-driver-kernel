@@ -34,8 +34,8 @@ use kdef::{
 };
 use obfstr::obfstr;
 use valthrun_driver_shared::{
-    ByteSequencePattern,
     MouseState,
+    Signature,
 };
 use winapi::{
     km::wdm::DRIVER_OBJECT,
@@ -124,18 +124,16 @@ fn find_mouse_service_callback() -> anyhow::Result<MouseClassServiceCallbackFn> 
     let module_kdbclass = KModule::find_by_name(obfstr!("mouclass.sys"))?
         .with_context(|| anyhow!("failed to locate {} module", obfstr!("mouclass.sys")))?;
 
-    let pattern =
-        ByteSequencePattern::parse(obfstr!("48 8D 05 ? ? ? ? 48 89 44")).with_context(|| {
-            obfstr!("Failed to compile MouseClassServiceCallback pattern").to_string()
-        })?;
-
-    NtOffsets::locate_function(
-        &module_kdbclass,
+    [/* Windows 11 */ Signature::relative_address(
         obfstr!("MouseClassServiceCallback"),
-        &pattern,
+        obfstr!("48 8D 05 ? ? ? ? 48 89 44"),
         0x03,
         0x07,
-    )
+    )]
+    .iter()
+    .find_map(|sig| NtOffsets::locate_signature(&module_kdbclass, sig).ok())
+    .map(|v| unsafe { core::mem::transmute_copy(&v) })
+    .with_context(|| obfstr!("Failed to find MouseClassServiceCallback").to_string())
 }
 
 #[allow(unused)]
