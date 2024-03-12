@@ -4,6 +4,7 @@ use kdef::{
     OBJECT_NAME_INFORMATION,
     POBJECT_TYPE,
     _KAPC_STATE,
+    _MDL,
     _OB_CALLBACK_REGISTRATION,
     _PEB,
 };
@@ -129,8 +130,8 @@ type IoAllocateMdl = unsafe extern "system" fn(
     SecondaryBuffer: bool,
     ChargeQuota: bool,
     Irp: PIRP,
-) -> PMDL;
-type IoFreeMdl = unsafe extern "system" fn(MemoryDescriptorList: PMDL);
+) -> *mut _MDL;
+type IoFreeMdl = unsafe extern "system" fn(MemoryDescriptorList: *mut _MDL);
 type IoFreeIrp = unsafe extern "system" fn(Irp: PIRP);
 
 type ObfDereferenceObject = unsafe extern "system" fn(object: PVOID);
@@ -165,9 +166,9 @@ type ObRegisterCallbacks = unsafe extern "system" fn(
 ) -> NTSTATUS;
 type ObUnRegisterCallbacks = unsafe extern "system" fn(RegistrationHandle: PVOID);
 
-type MmUnlockPages = unsafe extern "system" fn(MemoryDescriptorList: PMDL);
+type MmUnlockPages = unsafe extern "system" fn(MemoryDescriptorList: *mut _MDL);
 type MmMapLockedPagesSpecifyCache = unsafe extern "system" fn(
-    MemoryDescriptorList: PMDL,
+    MemoryDescriptorList: *mut _MDL,
     AccessMode: KPROCESSOR_MODE,
     CacheType: u32,
     RequestedAddress: PVOID,
@@ -175,7 +176,7 @@ type MmMapLockedPagesSpecifyCache = unsafe extern "system" fn(
     Priority: u32,
 ) -> PVOID;
 type MmUnmapLockedPages =
-    unsafe extern "system" fn(BaseAddress: PVOID, MemoryDescriptorList: PMDL) -> ();
+    unsafe extern "system" fn(BaseAddress: PVOID, MemoryDescriptorList: *mut _MDL) -> ();
 type MmIsAddressValid = unsafe extern "system" fn(Address: PVOID) -> bool;
 
 dynamic_import_table! {

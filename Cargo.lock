@@ -1301,6 +1301,7 @@ dependencies = [
  "paste",
  "thiserror-core",
  "winapi",
+ "x86",
 ]
 
 [[package]]

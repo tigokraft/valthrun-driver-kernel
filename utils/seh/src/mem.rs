@@ -4,10 +4,7 @@ use utils_imports::{
     provider::SystemExport,
     ImportResult,
 };
-use winapi::km::{
-    ndis::PMDL,
-    wdm::KPROCESSOR_MODE,
-};
+use winapi::km::wdm::KPROCESSOR_MODE;
 
 use crate::wrapper;
 
@@ -36,7 +33,7 @@ pub fn probe_write(target: u64, length: usize, align: usize) -> bool {
     unsafe { wrapper::seh_invoke(target_fn, target, length as u64, align as u64, 0) }
 }
 
-pub fn probe_and_lock_pages(mdl: PMDL, access_mode: KPROCESSOR_MODE, operation: u32) -> bool {
+pub fn probe_and_lock_pages(mdl: *const (), access_mode: KPROCESSOR_MODE, operation: u32) -> bool {
     /*
      * We must use MmProbeAndLockProcessPages instead of MmProbeAndLockPages as
      * MmProbeAndLockPages writes to the shaddow stack, which we do not support.

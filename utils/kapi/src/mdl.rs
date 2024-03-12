@@ -1,5 +1,9 @@
-use core::ptr;
+use core::{
+    ptr,
+    slice,
+};
 
+use kdef::_MDL;
 use winapi::{
     ctypes::c_void,
     km::{
@@ -15,11 +19,11 @@ use winapi::{
 use crate::imports::GLOBAL_IMPORTS;
 
 pub struct Mdl {
-    handle: PMDL,
+    handle: *mut _MDL,
 }
 
 impl Mdl {
-    pub fn from_raw(mdl: PMDL) -> Self {
+    pub fn from_raw(mdl: *mut _MDL) -> Self {
         Self { handle: mdl }
     }
 
@@ -47,11 +51,11 @@ impl Mdl {
         Some(Self { handle: mdl })
     }
 
-    pub fn raw_mdl(&self) -> PMDL {
+    pub fn raw_mdl(&self) -> *mut _MDL {
         self.handle
     }
 
-    pub fn into_raw(mut self) -> PMDL {
+    pub fn into_raw(mut self) -> *mut _MDL {
         let value = self.handle;
         self.handle = core::ptr::null_mut();
         value
@@ -59,6 +63,10 @@ impl Mdl {
 
     pub fn lock(self, access_mode: KPROCESSOR_MODE, operation: u32) -> Result<LockedMDL, Mdl> {
         LockedMDL::try_lock(self, access_mode, operation)
+    }
+
+    pub fn len(&self) -> usize {
+        unsafe { &*self.raw_mdl() }.byte_count as usize
     }
 }
 
@@ -108,15 +116,15 @@ pub struct LockedMDL {
 
 impl LockedMDL {
     fn try_lock(mdl: Mdl, access_mode: KPROCESSOR_MODE, operation: u32) -> Result<Self, Mdl> {
-        if !seh::probe_and_lock_pages(mdl.raw_mdl(), access_mode, operation) {
+        if !seh::probe_and_lock_pages(mdl.raw_mdl() as *const (), access_mode, operation) {
             Err(mdl)
         } else {
             Ok(Self { handle: Some(mdl) })
         }
     }
 
-    pub fn raw_mdl(&self) -> PMDL {
-        self.handle.as_ref().unwrap().raw_mdl()
+    pub fn mdl(&self) -> &Mdl {
+        self.handle.as_ref().unwrap()
     }
 
     pub fn unlock(mut self) -> Mdl {
@@ -126,7 +134,7 @@ impl LockedMDL {
 
     fn do_unlock(&mut self) {
         let imports = GLOBAL_IMPORTS.unwrap();
-        unsafe { (imports.MmUnlockPages)(self.raw_mdl()) };
+        unsafe { (imports.MmUnlockPages)(self.mdl().raw_mdl()) };
     }
 
     pub fn map(
@@ -144,7 +152,7 @@ impl LockedMDL {
 
         let address = unsafe {
             (imports.MmMapLockedPagesSpecifyCache)(
-                self.raw_mdl(),
+                self.mdl().raw_mdl(),
                 access_mode,
                 cache_type,
                 requested_address,
@@ -178,96 +186,23 @@ impl MappedLockedMDL {
     pub fn address(&self) -> PVOID {
         self.address
     }
+
+    pub fn len(&self) -> usize {
+        self.mdl.mdl().len()
+    }
+
+    pub fn as_slice(&self) -> &[u8] {
+        unsafe { slice::from_raw_parts(self.address as *const u8, self.len()) }
+    }
+
+    pub fn as_slice_mut(&self) -> &mut [u8] {
+        unsafe { slice::from_raw_parts_mut(self.address as *mut u8, self.len()) }
+    }
 }
 
 impl Drop for MappedLockedMDL {
     fn drop(&mut self) {
         let imports = GLOBAL_IMPORTS.unwrap();
-        unsafe { (imports.MmUnmapLockedPages)(self.address, self.mdl.raw_mdl()) };
+        unsafe { (imports.MmUnmapLockedPages)(self.address, self.mdl.mdl().raw_mdl()) };
     }
 }
-
-// pub struct LockedVirtMem {
-//     mdl: PMDL,
-//     address: PVOID,
-//     length: usize,
-// }
-
-// impl LockedVirtMem {
-//     pub fn create(
-//         address: u64,
-//         length: usize,
-//         access_mode: KPROCESSOR_MODE,
-//         operation: u32,
-//         cache: u32,
-//     ) -> Option<Self> {
-//         log::debug!("MDL");
-//         let imports = GLOBAL_IMPORTS.unwrap();
-//         let mdl = unsafe {
-//             (imports.IoAllocateMdl)(
-//                 address as PVOID,
-//                 length as u32,
-//                 false,
-//                 false,
-//                 core::ptr::null_mut(),
-//             )
-//         };
-//         if mdl.is_null() {
-//             return None;
-//         }
-
-//         log::debug!("P&L");
-//         if !self::probe_and_lock_pages(mdl, access_mode, operation) {
-//             unsafe {
-//                 (imports.IoFreeMdl)(mdl);
-//             }
-
-//             return None;
-//         }
-
-//         log::debug!("MmMapLockedPagesSpecifyCache");
-//         let address = unsafe {
-//             (imports.MmMapLockedPagesSpecifyCache)(
-//                 mdl,
-//                 KPROCESSOR_MODE::KernelMode,
-//                 cache,
-//                 core::ptr::null_mut(),
-//                 0,
-//                 0,
-//             )
-//         };
-//         // let address = unsafe {
-//         //     MmGetSystemAddressForMdlSafe(mdl, 0)
-//         // };
-
-//         if address.is_null() {
-//             unsafe {
-//                 (imports.MmUnlockPages)(mdl);
-//                 (imports.IoFreeMdl)(mdl);
-//             }
-
-//             return None;
-//         }
-
-//         Some(Self {
-//             mdl,
-//             length,
-//             address,
-//         })
-//     }
-
-//     pub fn memory(&self) -> &mut [u8] {
-//         unsafe { core::slice::from_raw_parts_mut(self.address as *mut u8, self.length) }
-//     }
-// }
-
-// impl Drop for LockedVirtMem {
-//     fn drop(&mut self) {
-//         let imports = GLOBAL_IMPORTS.unwrap();
-//         unsafe {
-//             //MmUnmapLockedPages(self.address, self.mdl);
-//             (imports.MmUnlockPages)(self.mdl);
-//             (imports.IoFreeMdl)(self.mdl);
-//         }
-//     }
-// }

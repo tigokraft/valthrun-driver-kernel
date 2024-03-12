@@ -24,8 +24,8 @@ use kdef::{
 };
 use obfstr::obfstr;
 use valthrun_driver_shared::{
-    ByteSequencePattern,
     KeyboardState,
+    Signature,
 };
 use winapi::{
     km::wdm::DRIVER_OBJECT,
@@ -35,10 +35,7 @@ use winapi::{
     },
 };
 
-use crate::{
-    offsets::NtOffsets,
-    winver::os_info,
-};
+use crate::offsets::NtOffsets;
 
 pub struct KeyboardInput {
     kb_device: Object,
@@ -84,22 +81,26 @@ fn find_keyboard_service_callback() -> anyhow::Result<KeyboardClassServiceCallba
     let module_kdbclass = KModule::find_by_name(obfstr!("kbdclass.sys"))?
         .with_context(|| anyhow!("failed to locate {} module", obfstr!("kbdclass.sys")))?;
 
-    let pattern = if os_info().dwBuildNumber >= 22_000 {
-        ByteSequencePattern::parse(obfstr!("48 8D 05 ? ? ? ? 48 89 45"))
-    } else {
-        ByteSequencePattern::parse(obfstr!("48 8D 05 ? ? ? ? 48 89 44 24"))
-    }
-    .with_context(|| {
-        obfstr!("Failed to compile KeyboardClassServiceCallback pattern").to_string()
-    })?;
-
-    NtOffsets::locate_function(
-        &module_kdbclass,
-        obfstr!("KeyboardClassServiceCallback"),
-        &pattern,
-        0x03,
-        0x07,
-    )
+    [
+        /* Windows 11 */
+        Signature::relative_address(
+            obfstr!("KeyboardClassServiceCallback (>= 22000)"),
+            obfstr!("48 8D 05 ? ? ? ? 48 89 45"),
+            0x03,
+            0x07,
+        ),
+        /* Windows 11 */
+        Signature::relative_address(
+            obfstr!("KeyboardClassServiceCallback (< 22000)"),
+            obfstr!("48 8D 05 ? ? ? ? 48 89 44 24"),
+            0x03,
+            0x07,
+        ),
+    ]
+    .iter()
+    .find_map(|sig| NtOffsets::locate_signature(&module_kdbclass, sig).ok())
+    .map(|v| unsafe { core::mem::transmute_copy(&v) })
+    .with_context(|| obfstr!("Failed to find KeyboardClassServiceCallback").to_string())
 }
 
 #[allow(unused)]

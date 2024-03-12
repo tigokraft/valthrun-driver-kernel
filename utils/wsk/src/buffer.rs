@@ -52,7 +52,7 @@ impl<'a> WskBuffer<'a> {
 
         Ok(Self {
             buffer: _WSK_BUF {
-                Mdl: locked_mdl.raw_mdl() as PMDL,
+                Mdl: locked_mdl.mdl().raw_mdl() as PMDL,
                 Offset: 0,
                 Length: length as u64,
             },
