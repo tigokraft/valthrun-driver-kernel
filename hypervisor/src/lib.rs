@@ -32,6 +32,8 @@ use winapi::{
 };
 use x86::controlregs;
 
+use crate::mem::invvpid;
+
 extern crate alloc;
 
 mod cpu;
@@ -135,7 +137,17 @@ fn rust_driver_entry(_driver: &mut DRIVER_OBJECT) -> anyhow::Result<()> {
     log::debug!("Before states:");
     log::debug!("  Hypervisor ID: {:X?}", cpu::hypervisor_id());
     log::debug!("  Processor ID: {:X?}", processor::current());
+    log::debug!(
+        "  CR0: {:X} | {:?}",
+        unsafe { controlregs::cr0() },
+        unsafe { controlregs::cr0() }
+    );
     log::debug!("  CR3: {:X}", unsafe { controlregs::cr3() });
+    log::debug!(
+        "  CR4: {:X} | {:?}",
+        unsafe { controlregs::cr4() },
+        unsafe { controlregs::cr4() }
+    );
 
     // let mtrr = ept::read_mtrr()?;
     // log::debug!("{:?}", mtrr.capability);
@@ -154,8 +166,21 @@ fn rust_driver_entry(_driver: &mut DRIVER_OBJECT) -> anyhow::Result<()> {
 
     log::debug!("After states");
     log::debug!("  Hypervisor ID: {:X?}", cpu::hypervisor_id());
+    log::debug!(
+        "  CR0: {:X} | {:?}",
+        unsafe { controlregs::cr0() },
+        unsafe { controlregs::cr0() }
+    );
     log::debug!("  CR3: {:X}", unsafe { controlregs::cr3() });
+    log::debug!(
+        "  CR4: {:X} | {:?}",
+        unsafe { controlregs::cr4() },
+        unsafe { controlregs::cr4() }
+    );
 
+    unsafe {
+        invvpid(InvVpidMode::AllContext);
+    }
     //unsafe { asm!("int 3") };
     // vm::exit_virtualisation();
     // log::debug!("Cleanup states");

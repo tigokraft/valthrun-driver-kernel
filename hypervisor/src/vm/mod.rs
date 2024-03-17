@@ -23,7 +23,10 @@ use kapi_kmodule::{
 };
 use obfstr::obfstr;
 use x86::{
-    controlregs,
+    controlregs::{
+        self,
+        Cr4,
+    },
     dtables::{
         self,
         DescriptorTablePointer,
@@ -62,10 +65,7 @@ use crate::{
         EPTP,
         PAGE_SIZE,
     },
-    mem::{
-        MemoryAddress,
-        MemoryAddressEx,
-    },
+    mem::MemoryAddressEx,
     processor,
     utils,
     vmx::{
@@ -135,16 +135,13 @@ pub fn virtualize_current_system() -> anyhow::Result<()> {
 
     let mtrr = read_mtrr()?;
     let ept = VmPagingTable::new_identity(&mtrr);
-    log::debug!(
-        "PML4E = {:X}",
-        ept.pml4e.entries.as_ptr().get_physical_address() as u64
-    );
+    log::debug!("PML4E = {:X}", ept.pml4e.as_ptr().get_physical_address().0);
 
     for state in cpu_state::all() {
         state.eptp = EPTP::new()
             .with_memory_type(MemoryType::WriteBack)
             .with_page_walk_length(3)
-            .with_pml4_address(ept.pml4e.entries.as_ptr().get_physical_address() as u64 / PAGE_SIZE)
+            .with_pml4_address(ept.pml4e.as_ptr().get_physical_address().0 / PAGE_SIZE)
             .with_dirty_and_access(true);
     }
 
@@ -172,7 +169,7 @@ fn virtualize_current_system_current_cpu() {
     }
 
     {
-        let vmcs_address = state.vmcs.get_physical_address() as u64;
+        let vmcs_address = state.vmcs.get_physical_address().0;
         // "the VMCLEAR instruction initializes any implementation-specific
         //  information in the VMCS region referenced by its operand. (...),
         //  software should execute VMCLEAR on a VMCS region before making the
@@ -382,7 +379,10 @@ fn vmcs_setup_host() -> anyhow::Result<()> {
 
 fn vmcs_setup_guest() -> anyhow::Result<()> {
     /* entry rsp & rip will be set when known */
-    let guest_config = VmGuestConfiguration::from_current_host(0, 0);
+    let mut guest_config = VmGuestConfiguration::from_current_host(0, 0);
+
+    /* Does not work... */
+    //guest_config.cr4 &= !Cr4::CR4_ENABLE_VMX;
 
     guest_config.apply()
 }
@@ -416,19 +416,20 @@ fn vmcs_setup_controls() -> anyhow::Result<()> {
         vm_write!(vmcs::control::VMENTRY_INTERRUPTION_INFO_FIELD, 0)?;
 
         /* TODO: Is this correct or shall we all assign the same VPID? */
-        vm_write!(vmcs::control::VPID, 1)?;
+        //vm_write!(vmcs::control::VPID, 1)?;
 
         apply_control(ExitControls::HOST_ADDRESS_SPACE_SIZE | ExitControls::ACK_INTERRUPT_ON_EXIT)?;
         apply_control(EntryControls::IA32E_MODE_GUEST)?;
         apply_control(PinbasedControls::empty())?;
         apply_control(
-            PrimaryControls::SECONDARY_CONTROLS | PrimaryControls::CR3_LOAD_EXITING, // | PrimaryControls::INVLPG_EXITING,
+            PrimaryControls::SECONDARY_CONTROLS | PrimaryControls::USE_MSR_BITMAPS, //| PrimaryControls::CR3_LOAD_EXITING, // | PrimaryControls::INVLPG_EXITING,
         )?; // | IA32_VMX_PROCBASED_CTLS_ACTIVATE_MSR_BITMAP,
         apply_control(
-            SecondaryControls::ENABLE_VPID |
-                SecondaryControls::ENABLE_INVPCID |
-                SecondaryControls::ENABLE_RDTSCP |
+            //SecondaryControls::ENABLE_VPID |
+            // SecondaryControls::ENABLE_INVPCID |
+            SecondaryControls::ENABLE_RDTSCP |
                 SecondaryControls::ENABLE_XSAVES_XRSTORS |
+                SecondaryControls::ENABLE_INVPCID |
                 SecondaryControls::ENABLE_EPT,
         )?;
 
@@ -444,9 +445,8 @@ fn vmcs_setup_controls() -> anyhow::Result<()> {
         vm_write!(vmcs::control::CR4_GUEST_HOST_MASK, 0)?;
         vm_write!(vmcs::control::CR4_READ_SHADOW, 0)?;
 
-        let msr_bitmap =
-            MemoryAddress::Virtual(&*state.msr_bitmap as *const _ as usize).physical_address();
-        vm_write!(vmcs::control::MSR_BITMAPS_ADDR_FULL, msr_bitmap as u64)?;
+        let msr_bitmap = state.msr_bitmap.get_physical_address();
+        vm_write!(vmcs::control::MSR_BITMAPS_ADDR_FULL, msr_bitmap.0)?;
 
         let eptp: u64 = state.eptp.into();
         vm_write!(vmcs::control::EPTP_FULL, eptp)?;

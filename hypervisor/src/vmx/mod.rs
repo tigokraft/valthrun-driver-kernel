@@ -1,5 +1,3 @@
-use core::ops::BitAnd;
-
 use kapi::{
     KeGetCurrentIrql,
     DISPATCH_LEVEL,
@@ -8,9 +6,10 @@ use obfstr::obfstr;
 use x86::{
     controlregs::{
         self,
+        Cr0,
         Cr4,
     },
-    cpuid::cpuid,
+    cpuid::CpuId,
     current::vmx,
     msr::{
         self,
@@ -22,7 +21,11 @@ use x86::{
 
 use crate::{
     cpu_state,
-    mem::MemoryAddressEx,
+    mem::{
+        invvpid,
+        InvVpidMode,
+        MemoryAddressEx,
+    },
     msr::Ia32FeatureControlMsr,
 };
 
@@ -177,8 +180,11 @@ impl CpuRegisters {
 }
 
 pub fn feature_support() -> VmxSupport {
-    let cpuid = cpuid!(1);
-    if cpuid.ecx.bitand(1 << 5) == 0 {
+    let cpu_support = CpuId::new()
+        .get_feature_info()
+        .map(|info| info.has_vmx())
+        .unwrap_or(false);
+    if !cpu_support {
         return VmxSupport::CpuUnsupported;
     }
 
@@ -243,19 +249,36 @@ pub fn enable_current_cpu() -> anyhow::Result<()> {
     unsafe {
         let mut cr0 = controlregs::cr0().bits() as u64;
         cr0 |= rdmsr(x86::msr::IA32_VMX_CR0_FIXED0);
+        log::debug!(
+            "Fixed CR0: {:?}",
+            Cr0::from_bits_truncate(rdmsr(x86::msr::IA32_VMX_CR0_FIXED0) as usize)
+        );
         cr0 &= rdmsr(x86::msr::IA32_VMX_CR0_FIXED1);
+        log::debug!(
+            "Avail CR0: {:?}",
+            Cr0::from_bits_truncate(rdmsr(x86::msr::IA32_VMX_CR0_FIXED1) as usize)
+        );
         controlregs::cr0_write(controlregs::Cr0::from_bits_truncate(cr0 as usize));
 
         let mut cr4 = controlregs::cr4().bits() as u64;
         cr4 |= rdmsr(x86::msr::IA32_VMX_CR4_FIXED0);
+        log::debug!(
+            "Fixed CR4: {:?}",
+            Cr4::from_bits_truncate(rdmsr(x86::msr::IA32_VMX_CR0_FIXED0) as usize)
+        );
         cr4 &= rdmsr(x86::msr::IA32_VMX_CR4_FIXED1);
+        log::debug!(
+            "Avail CR4: {:?}",
+            Cr4::from_bits_truncate(rdmsr(x86::msr::IA32_VMX_CR4_FIXED1) as usize)
+        );
         controlregs::cr4_write(controlregs::Cr4::from_bits_truncate(cr4 as usize));
     }
 
-    let result = unsafe { vmx::vmxon(state.vmxon.get_physical_address() as u64) };
+    let result = unsafe { vmx::vmxon(state.vmxon.get_physical_address().0) };
     match result {
         Ok(_) => {
             state.vmxon_active = true;
+            invvpid(InvVpidMode::AllContext);
             log::debug!("{} VMX enabled", state.processor_index);
             Ok(())
         }

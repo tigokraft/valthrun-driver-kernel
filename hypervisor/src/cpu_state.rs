@@ -12,7 +12,7 @@ use x86::msr::{
 
 use crate::{
     ept::EPTP,
-    mem::MemoryAddress,
+    mem::MemoryAddressEx,
     msr::Ia32VmxBasicMsr,
     processor,
     vmx::{
@@ -67,18 +67,15 @@ pub fn allocate() -> anyhow::Result<()> {
             let mut vmxon = unsafe { Box::<Vmxon>::new_zeroed().assume_init() };
             vmxon.revision_id = vmx_basic.revision_identifier();
 
-            let vmxon_phys = MemoryAddress::Virtual(&*vmxon as *const _ as usize);
-            if !vmxon_phys
-                .physical_ptr::<()>()
-                .is_aligned_to(ALIGNMENT_PAGE_SIZE)
-            {
+            let vmxon_phys = vmxon.get_physical_address();
+            if !vmxon_phys.is_base_page_aligned() {
                 anyhow::bail!("failed to allocate aligned vmxon memory");
             }
             log::trace!(
                 "{} VMXON at {:X} (virt: {:X})",
                 index,
-                vmxon_phys.physical_address(),
-                vmxon_phys.virtual_address()
+                vmxon_phys.0,
+                &*vmxon as *const _ as u64
             );
 
             vmxon
@@ -88,18 +85,15 @@ pub fn allocate() -> anyhow::Result<()> {
             let mut vmcs = unsafe { Box::<Vmcs>::new_zeroed().assume_init() };
             vmcs.revision_id = vmx_basic.revision_identifier();
 
-            let vmcs_phys = MemoryAddress::Virtual(&*vmcs as *const _ as usize);
-            if !vmcs_phys
-                .physical_ptr::<()>()
-                .is_aligned_to(ALIGNMENT_PAGE_SIZE)
-            {
+            let vmcs_phys = vmcs.get_physical_address();
+            if !vmcs_phys.is_base_page_aligned() {
                 anyhow::bail!("failed to allocate aligned vmcs memory");
             }
             log::trace!(
                 "{} VMCS at {:X} (virt: {:X})",
                 index,
-                vmcs_phys.physical_address(),
-                vmcs_phys.virtual_address()
+                vmcs_phys.0,
+                &*vmcs as *const _ as u64
             );
 
             vmcs

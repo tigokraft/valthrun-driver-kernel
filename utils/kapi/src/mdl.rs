@@ -6,12 +6,9 @@ use core::{
 use kdef::_MDL;
 use winapi::{
     ctypes::c_void,
-    km::{
-        ndis::PMDL,
-        wdm::{
-            KPROCESSOR_MODE,
-            PIRP,
-        },
+    km::wdm::{
+        KPROCESSOR_MODE,
+        PIRP,
     },
     shared::ntdef::PVOID,
 };

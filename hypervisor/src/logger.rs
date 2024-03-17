@@ -77,14 +77,6 @@ impl log::Log for KernelLogger {
             return;
         }
 
-        let level_prefix = match record.level() {
-            log::Level::Trace => "T",
-            log::Level::Debug => "D",
-            log::Level::Info => "I",
-            log::Level::Warn => "W",
-            log::Level::Error => "E",
-        };
-
         let is_vmx_root_mode = cpu_state::try_current()
             .map(|state| state.vmx_root_mode)
             .unwrap_or(false);
@@ -96,8 +88,7 @@ impl log::Log for KernelLogger {
                 queue.enqueue_entry(
                     record.level(),
                     format_args!(
-                        "[{}][VMX][{}] {}\0",
-                        level_prefix,
+                        "[VMX][{}] {}\0",
                         record.module_path().unwrap_or("default"),
                         record.args()
                     ),
@@ -110,8 +101,7 @@ impl log::Log for KernelLogger {
         }
 
         let message = alloc::fmt::format(format_args!(
-            "[{}][{}] {}\0",
-            level_prefix,
+            "[{}] {}\0",
             record.module_path().unwrap_or("default"),
             record.args()
         ));
@@ -196,11 +186,20 @@ fn do_log_entry(level: log::Level, message: *const u8) {
     //     log::Level::Error => DPFLTR_LEVEL::ERROR,
     // };
 
+    let level_prefix = match level {
+        log::Level::Trace => "T\0",
+        log::Level::Debug => "D\0",
+        log::Level::Info => "I\0",
+        log::Level::Warn => "W\0",
+        log::Level::Error => "E\0",
+    };
+
     unsafe {
         (imports.DbgPrintEx)(
             77, /* DPFLTR_IHVDRIVER_ID */
             log_level as u32,
-            obfstr!("[VTHV]%s\n\0").as_ptr(),
+            obfstr!("[VTHV][%s]%s\n\0").as_ptr(),
+            level_prefix.as_ptr(),
             message,
         );
     }

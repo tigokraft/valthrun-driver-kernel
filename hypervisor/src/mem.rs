@@ -5,9 +5,13 @@ use utils_imports::{
     dynamic_import_table,
     provider::SystemExport,
 };
+use x86::bits64::paging::{
+    PAddr,
+    VAddr,
+};
 
-type MmGetPhysicalAddress = unsafe extern "system" fn(BaseAddress: usize) -> usize;
-type MmGetVirtualForPhysical = unsafe extern "system" fn(BaseAddress: usize) -> usize;
+type MmGetPhysicalAddress = unsafe extern "system" fn(BaseAddress: u64) -> u64;
+type MmGetVirtualForPhysical = unsafe extern "system" fn(BaseAddress: u64) -> u64;
 
 dynamic_import_table! {
     imports DYNAMIC_IMPORTS {
@@ -18,63 +22,63 @@ dynamic_import_table! {
 
 pub trait MemoryAddressEx {
     /// Using MmGetPhysicalAddress to get the physical address for this structure
-    fn get_physical_address(&self) -> usize;
+    fn get_physical_address(&self) -> PAddr;
 }
 
 impl<T> MemoryAddressEx for Box<T> {
-    fn get_physical_address(&self) -> usize {
-        MemoryAddress::Virtual(&**self as *const _ as usize).physical_address()
+    fn get_physical_address(&self) -> PAddr {
+        MemoryAddress::Virtual(&**self as *const _ as u64).physical_address()
     }
 }
 
 impl<T> MemoryAddressEx for *const T {
-    fn get_physical_address(&self) -> usize {
-        MemoryAddress::Virtual(*self as *const _ as usize).physical_address()
+    fn get_physical_address(&self) -> PAddr {
+        MemoryAddress::Virtual(*self as *const _ as u64).physical_address()
     }
 }
 
 #[derive(Clone, Copy, Debug)]
 pub enum MemoryAddress {
-    Physical(usize),
-    Virtual(usize),
+    Physical(u64),
+    Virtual(u64),
 }
 
 #[allow(unused)]
 impl MemoryAddress {
     pub fn physical_ptr_mut<T>(self) -> *mut T {
-        self.physical_address() as *mut T
+        self.physical_address().0 as *mut T
     }
 
     pub fn physical_ptr<T>(self) -> *const T {
-        self.physical_address() as *const T
+        self.physical_address().0 as *const T
     }
 
     pub fn virtual_ptr_mut<T>(self) -> *mut T {
-        self.virtual_address() as *mut T
+        self.virtual_address().0 as *mut T
     }
 
     pub fn virtual_ptr<T>(self) -> *const T {
-        self.virtual_address() as *const T
+        self.virtual_address().0 as *const T
     }
 
-    pub fn raw_address(self) -> usize {
+    pub fn raw_address(self) -> u64 {
         match self {
             Self::Physical(address) => address,
             Self::Virtual(address) => address,
         }
     }
 
-    pub fn physical_address(self) -> usize {
+    pub fn physical_address(self) -> PAddr {
         match self {
-            Self::Virtual(_) => self.to_physical().raw_address(),
-            Self::Physical(address) => address,
+            Self::Virtual(_) => PAddr(self.to_physical().raw_address()),
+            Self::Physical(address) => PAddr(address),
         }
     }
 
-    pub fn virtual_address(self) -> usize {
+    pub fn virtual_address(self) -> VAddr {
         match self {
-            Self::Physical(_) => self.to_virtual().raw_address(),
-            Self::Virtual(address) => address,
+            Self::Physical(_) => VAddr(self.to_virtual().raw_address()),
+            Self::Virtual(address) => VAddr(address),
         }
     }
 

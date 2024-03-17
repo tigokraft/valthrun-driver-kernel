@@ -248,7 +248,7 @@ extern "system" fn callback_vmexit(registers: &mut CpuRegisters) -> bool {
             unsafe { asm!("invd") };
         }
         ExitReason::InvlPg => {
-            let q = unsafe { vmx::vmread(vmcs::ro::EXIT_QUALIFICATION).unwrap() };
+            let _q = unsafe { vmx::vmread(vmcs::ro::EXIT_QUALIFICATION).unwrap() };
             //mem::invvpid(mem::InvVpidMode::IndividualAddress(1, q));
             unsafe {
                 asm!("int 3");
