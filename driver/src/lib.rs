@@ -14,7 +14,10 @@ use core::{
 };
 
 use device::ValthrunDevice;
-use handler::HandlerRegistry;
+use handler::{
+    handler_get_modules,
+    HandlerRegistry,
+};
 use kb::KeyboardInput;
 use metrics::{
     MetricsClient,
@@ -34,7 +37,7 @@ use winapi::{
 
 use crate::{
     handler::{
-        handler_get_modules,
+        handler_get_cs2_modules,
         handler_init,
         handler_keyboard_state,
         handler_metrics_record,
@@ -232,7 +235,7 @@ pub fn internal_driver_entry(driver: &mut DRIVER_OBJECT) -> NTSTATUS {
         res.success = true;
         Ok(())
     });
-    handler.register(&handler_get_modules);
+    handler.register(&handler_get_cs2_modules);
     handler.register(&handler_read);
     handler.register(&handler_write);
     handler.register(&handler_protection_toggle);
@@ -240,6 +243,7 @@ pub fn internal_driver_entry(driver: &mut DRIVER_OBJECT) -> NTSTATUS {
     handler.register(&handler_keyboard_state);
     handler.register(&handler_init);
     handler.register(&handler_metrics_record);
+    handler.register(&handler_get_modules);
 
     unsafe { *REQUEST_HANDLER.get() = Some(handler) };
 

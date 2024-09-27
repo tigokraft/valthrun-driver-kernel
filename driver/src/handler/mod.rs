@@ -21,7 +21,10 @@ pub use init::*;
 mod metrics;
 pub use metrics::*;
 
-pub const FUNCTION_CODE_MAX: usize = 0x20;
+mod module;
+pub use module::*;
+
+pub const FUNCTION_CODE_MAX: usize = 0x10;
 
 type RequestHandlerGeneric = dyn (Fn(&(), &mut ()) -> anyhow::Result<()>) + Send + Sync;
 struct HandlerInfo {
@@ -67,12 +70,12 @@ impl HandlerRegistry {
     ) -> anyhow::Result<()> {
         let function_code = ((irp_request_code >> 2) & 0x3F) as usize;
         if function_code >= FUNCTION_CODE_MAX {
-            anyhow::bail!("invalid function code ({})", function_code)
+            anyhow::bail!("invalid function code (0x{:X})", function_code)
         }
 
         let handler = match &self.handlers[function_code as usize] {
             Some(handler) => handler,
-            None => anyhow::bail!("function {} has no handler", function_code),
+            None => anyhow::bail!("function 0x{:X} has no handler", function_code),
         };
 
         if handler.input_buffer_size != inbuffer.len() {
