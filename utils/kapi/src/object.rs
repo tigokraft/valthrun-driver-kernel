@@ -131,9 +131,9 @@ impl ObjectType {
     pub fn resolve_system_type(&self) -> *const POBJECT_TYPE {
         let result = match self {
             Self::IoDriverObjectType => {
-                utils_imports::resolve_system(None, obfstr!("IoDriverObjectType"))
+                kapi_kmodule::resolve_import(None, obfstr!("IoDriverObjectType"))
             }
-            Self::PsProcessType => utils_imports::resolve_system(None, obfstr!("PsProcessType")),
+            Self::PsProcessType => kapi_kmodule::resolve_import(None, obfstr!("PsProcessType")),
         };
 
         result.as_ptr() as *const POBJECT_TYPE

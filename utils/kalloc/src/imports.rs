@@ -6,6 +6,11 @@ use winapi::{
     shared::ntdef::PVOID,
 };
 
+/*
+ * We have to use utils_imports::resolve_system here to ensure
+ * we do the bare minimum when resolving these functions as if we would allocate any memory,
+ * we would end up in an infinity loop
+ */
 #[lazy_link(resolver = "utils_imports::resolve_system")]
 extern "system" {
     pub fn ExAllocatePoolWithTag(PoolType: POOL_TYPE, NumberOfBytes: usize, Tag: u32) -> PVOID;

@@ -10,7 +10,7 @@ use crate::process_protection;
 
 /// Get EPROCESS.SignatureLevel offset dynamically
 pub fn get_eprocess_signature_level_offset() -> isize {
-    let base_address = utils_imports::resolve_system(None, obfstr!("PsGetProcessSignatureLevel"));
+    let base_address = kapi_kmodule::resolve_import(None, obfstr!("PsGetProcessSignatureLevel"));
     let function_bytes: &[u8] =
         unsafe { core::slice::from_raw_parts(base_address.as_ptr() as *const u8, 20) };
 

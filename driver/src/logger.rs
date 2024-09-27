@@ -79,7 +79,7 @@ pub fn get_logger_instance() -> &'static KernelLogger {
         APP_LOGGER.get_or_insert_with(|| {
             KernelLogger {
                 dbg_print_ex: mem::transmute(
-                    utils_imports::resolve_system(None, "DbgPrintEx").as_ptr(),
+                    kapi_kmodule::resolve_import(None, "DbgPrintEx").as_ptr(),
                 ),
             }
         })

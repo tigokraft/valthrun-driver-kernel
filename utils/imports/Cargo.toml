@@ -9,6 +9,7 @@ obfstr = "0.4.3"
 paste = "1.0.14"
 x86 = "0.52.0"
 utils-kernelbase = { version = "0.1.0", path = "../kernelbase" }
+log = "0.4.22"
 
 [dependencies.winapi]
 git = "https://github.com/Trantect/winapi-rs.git"

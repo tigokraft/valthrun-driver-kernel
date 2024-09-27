@@ -22,10 +22,10 @@ struct FunctionTable {
 impl FunctionTable {
     pub fn resolve() -> Self {
         Self {
-            probe_for_read: utils_imports::resolve_system(None, "ProbeForRead").as_ptr() as u64,
-            probe_for_write: utils_imports::resolve_system(None, "ProbeForWrite").as_ptr() as u64,
-            memmove: utils_imports::resolve_system(None, "memmove").as_ptr() as u64,
-            mm_probe_and_lock_process_pages: utils_imports::resolve_system(
+            probe_for_read: kapi_kmodule::resolve_import(None, "ProbeForRead").as_ptr() as u64,
+            probe_for_write: kapi_kmodule::resolve_import(None, "ProbeForWrite").as_ptr() as u64,
+            memmove: kapi_kmodule::resolve_import(None, "memmove").as_ptr() as u64,
+            mm_probe_and_lock_process_pages: kapi_kmodule::resolve_import(
                 None,
                 "MmProbeAndLockProcessPages",
             )
