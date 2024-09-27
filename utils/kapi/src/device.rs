@@ -21,10 +21,13 @@ use winapi::{
     },
 };
 
-use super::NTStatusEx;
 use crate::{
+    imports::{
+        IoCreateDeviceSecure,
+        IoDeleteDevice,
+    },
     IrpEx,
-    GLOBAL_IMPORTS,
+    NTStatusEx,
 };
 
 type DeviceMajorFn<T> = fn(device: &mut DeviceHandle<T>, irp: &mut IRP) -> NTSTATUS;
@@ -49,8 +52,7 @@ impl<T> DeviceHandle<T> {
     ) -> anyhow::Result<Pin<Box<Self>>> {
         let mut device_ptr: PDEVICE_OBJECT = core::ptr::null_mut();
         let result = unsafe {
-            let imports = GLOBAL_IMPORTS.unwrap();
-            (imports.IoCreateDeviceSecure)(
+            IoCreateDeviceSecure(
                 driver,
                 core::mem::size_of::<*const ()>() as u32,
                 device_name
@@ -98,8 +100,7 @@ impl<T> DeviceHandle<T> {
 
 impl<T> Drop for DeviceHandle<T> {
     fn drop(&mut self) {
-        let imports = GLOBAL_IMPORTS.unwrap();
-        let result = unsafe { (imports.IoDeleteDevice)(&mut *self.device) };
+        let result = unsafe { IoDeleteDevice(&mut *self.device) };
 
         if !result.is_success() {
             log::warn!("Failed to destroy device: {}", result)

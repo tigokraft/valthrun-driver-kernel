@@ -1,16 +1,10 @@
 use alloc::vec::Vec;
-use core::ffi::CStr;
 
 use kapi::Process;
 
-use crate::{
-    imports::GLOBAL_IMPORTS,
-    offsets::get_nt_offsets,
-};
+use crate::offsets::get_nt_offsets;
 
 pub fn find_processes_by_name(target_name: &str) -> anyhow::Result<Vec<Process>> {
-    let imports = GLOBAL_IMPORTS.unwrap();
-
     #[allow(non_snake_case)]
     let PsGetNextProcess = get_nt_offsets().PsGetNextProcess;
 
@@ -26,11 +20,8 @@ pub fn find_processes_by_name(target_name: &str) -> anyhow::Result<Vec<Process>>
             break;
         }
 
-        let image_file_name = unsafe {
-            CStr::from_ptr((imports.PsGetProcessImageFileName)(current_peprocess))
-                .to_str()
-                .ok()
-        };
+        let process = Process::from_raw(current_peprocess, false);
+        let image_file_name = process.get_image_file_name();
 
         if image_file_name != Some(target_name) {
             continue;

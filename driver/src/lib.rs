@@ -1,8 +1,6 @@
 #![no_std]
-#![feature(error_in_core)]
 #![feature(sync_unsafe_cell)]
 #![feature(result_flattening)]
-#![feature(new_uninit)]
 #![feature(linkage)]
 #![feature(naked_functions)]
 #![feature(core_intrinsics)]
@@ -45,7 +43,6 @@ use crate::{
         handler_read,
         handler_write,
     },
-    imports::GLOBAL_IMPORTS,
     metrics::RECORD_TYPE_DRIVER_STATUS,
     offsets::initialize_nt_offsets,
     status::{
@@ -62,6 +59,7 @@ mod device;
 mod handler;
 mod imports;
 mod kb;
+mod logger;
 pub mod metrics;
 mod mouse;
 mod offsets;
@@ -86,6 +84,8 @@ pub static MOUSE_INPUT: SyncUnsafeCell<Option<MouseInput>> = SyncUnsafeCell::new
 pub static METRICS_CLIENT: SyncUnsafeCell<Option<MetricsClient>> =
     SyncUnsafeCell::new(Option::None);
 pub static METRICS_HEARTBEAT: SyncUnsafeCell<Option<MetricsHeartbeat>> = SyncUnsafeCell::new(None);
+
+pub use logger::get_logger_instance;
 
 /// Call this function to unload the driver.
 /// Note: Also call when initialization failed.
@@ -131,27 +131,6 @@ pub extern "system" fn driver_unload() {
     log::info!("Driver Unloaded");
 }
 
-fn wsk_dummy() -> anyhow::Result<()> {
-    // if let Some(metrics) = unsafe { &*METRICS_CLIENT.get() } {
-    //     for i in 0..1_000 {
-    //         metrics.add_record(format!("testing_{}", i), "some payload but the content is a little longer so it will trigger the message too long issue");
-    //     }
-    // }
-
-    // let wsk = unsafe { &*WSK.get() };
-    // let wsk = wsk.as_ref().context("missing WSK instance")?;
-    // match metrics::send_report(&wsk, "/report", "{ \"message\": \"Hello World?\" }") {
-    //     Ok(_) => {
-    //         log::debug!("Success!");
-    //     }
-    //     Err(error) => {
-    //         log::debug!("Fail: {:#}", error);
-    //     }
-    // }
-
-    Ok(())
-}
-
 pub fn internal_driver_entry(driver: &mut DRIVER_OBJECT) -> NTSTATUS {
     if let Err(error) = initialize_os_info() {
         log::error!("{}: {}", obfstr!("Failed to load OS version info"), error);
@@ -159,15 +138,6 @@ pub fn internal_driver_entry(driver: &mut DRIVER_OBJECT) -> NTSTATUS {
     }
 
     log::info!("WinVer {}", os_info().dwBuildNumber);
-    if let Err(error) = GLOBAL_IMPORTS.resolve() {
-        log::error!(
-            "{}: {:#}",
-            obfstr!("Failed to load the global import table"),
-            error
-        );
-        return CSTATUS_DRIVER_INIT_FAILED;
-    }
-
     if let Err(error) = kapi::initialize(Some(driver)) {
         log::error!("{}: {:#}", obfstr!("Failed to initialize SEH"), error);
         return CSTATUS_DRIVER_INIT_FAILED;
@@ -194,11 +164,6 @@ pub fn internal_driver_entry(driver: &mut DRIVER_OBJECT) -> NTSTATUS {
     }
 
     unsafe { *METRICS_HEARTBEAT.get() = Some(MetricsHeartbeat::new(Duration::from_secs(60 * 60))) };
-
-    if let Err(err) = wsk_dummy() {
-        log::error!("{}: {:#}", obfstr!("WSK dummy error"), err);
-        return CSTATUS_DRIVER_INIT_FAILED;
-    }
 
     if let Err(error) = initialize_nt_offsets() {
         log::error!(

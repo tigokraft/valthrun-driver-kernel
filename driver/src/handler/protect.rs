@@ -1,43 +1,18 @@
-use kapi::UnicodeStringEx;
+use kapi::Process;
 use kdef::ProcessProtectionInformation;
+use obfstr::obfstr;
 use valthrun_driver_shared::requests::{
     RequestProtectionToggle,
     ResponseProtectionToggle,
 };
-use winapi::{
-    km::wdm::PEPROCESS,
-    shared::ntdef::{
-        PVOID,
-        UNICODE_STRING,
-    },
-};
 
-use crate::{
-    imports::GLOBAL_IMPORTS,
-    process_protection,
-};
-
-/// Gets ta pointer to a function from ntoskrnl exports
-fn get_ntoskrnl_exports(function_name: *const UNICODE_STRING) -> PVOID {
-    //The MmGetSystemRoutineAddress routine returns a pointer to a function specified by SystemRoutineName.
-    let imports = GLOBAL_IMPORTS.unwrap();
-    return unsafe { (imports.MmGetSystemRoutineAddress)(function_name) };
-}
-
-// Gets function base address
-fn get_function_base_address(function_name: *const UNICODE_STRING) -> PVOID {
-    let base = get_ntoskrnl_exports(function_name);
-    return base;
-}
+use crate::process_protection;
 
 /// Get EPROCESS.SignatureLevel offset dynamically
 pub fn get_eprocess_signature_level_offset() -> isize {
-    let unicode_function_name =
-        UNICODE_STRING::from_bytes(obfstr::wide!("PsGetProcessSignatureLevel\0"));
-
-    let base_address = get_function_base_address(&unicode_function_name);
+    let base_address = utils_imports::resolve_system(None, obfstr!("PsGetProcessSignatureLevel"));
     let function_bytes: &[u8] =
-        unsafe { core::slice::from_raw_parts(base_address as *const u8, 20) };
+        unsafe { core::slice::from_raw_parts(base_address.as_ptr() as *const u8, 20) };
 
     let slice = &function_bytes[15..17];
     let signature_level_offset = u16::from_le_bytes(slice.try_into().unwrap());
@@ -46,10 +21,11 @@ pub fn get_eprocess_signature_level_offset() -> isize {
 }
 
 /// Add process protection
-pub fn protect_process(process: PEPROCESS) {
+pub fn protect_process(process: &Process) {
     let signature_level_offset = get_eprocess_signature_level_offset();
     let ps_protection = unsafe {
         process
+            .eprocess()
             .cast::<u8>()
             .offset(signature_level_offset)
             .cast::<ProcessProtectionInformation>()
@@ -72,14 +48,11 @@ pub fn handler_protection_toggle(
     req: &RequestProtectionToggle,
     _res: &mut ResponseProtectionToggle,
 ) -> anyhow::Result<()> {
-    let imports = GLOBAL_IMPORTS.unwrap();
-    let process = unsafe { (imports.PsGetCurrentProcess)() };
-    let current_thread_id = unsafe { (imports.PsGetProcessId)(process) };
-
-    process_protection::toggle_protection(current_thread_id, req.enabled);
+    let process = Process::current();
+    process_protection::toggle_protection(process.get_id(), req.enabled);
 
     if req.enabled {
-        protect_process(process);
+        protect_process(&process);
     }
 
     Ok(())

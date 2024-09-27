@@ -11,9 +11,9 @@ use kapi::{
     KeLowerIrql,
     KeRaiseIrql,
     Object,
+    ObjectType,
     UnicodeStringEx,
     DISPATCH_LEVEL,
-    OBJECT_TYPE_IMPORT,
 };
 use kapi_kmodule::KModule;
 use kdef::{
@@ -109,7 +109,7 @@ pub fn create_keyboard_input() -> anyhow::Result<KeyboardInput> {
 
     let name = UNICODE_STRING::from_bytes(obfstr::wide!("\\Driver\\KbdClass"));
     let kb_driver = Object::reference_by_name(&name, unsafe {
-        *OBJECT_TYPE_IMPORT.unwrap().IoDriverObjectType
+        *ObjectType::IoDriverObjectType.resolve_system_type()
     })
     .map_err(|code| anyhow!("{} 0x{:X}", obfstr!("Object::reference_by_name"), code))?;
     let kb_driver = kb_driver.cast::<DRIVER_OBJECT>();

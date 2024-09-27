@@ -4,7 +4,6 @@ use alloc::string::{
 };
 
 use kapi::NTStatusEx;
-use obfstr::obfstr;
 use vtk_wsk_sys::{
     addrinfoexW,
     sockaddr,
@@ -15,8 +14,11 @@ use vtk_wsk_sys::{
 };
 
 use crate::{
+    imports::{
+        RtlIpv4AddressToStringExA,
+        RtlIpv6AddressToStringExA,
+    },
     WskInstance,
-    WSK_IMPORTS,
 };
 
 pub trait SocketAddrInetEx {
@@ -59,15 +61,9 @@ impl SocketAddrInetEx for SOCKADDR_INET {
         let mut buffer = [0u8; 128];
         let mut buffer_length = buffer.len() as u32;
 
-        let imports = if let Ok(imports) = WSK_IMPORTS.resolve() {
-            imports
-        } else {
-            panic!("{}", obfstr!("global imports should have been resolved"))
-        };
-
         let status = match unsafe { self.si_family } as u32 {
             AF_INET => unsafe {
-                (imports.RtlIpv4AddressToStringExA)(
+                RtlIpv4AddressToStringExA(
                     &self.Ipv4.sin_addr,
                     self.Ipv4.sin_port,
                     buffer.as_mut_ptr(),
@@ -75,7 +71,7 @@ impl SocketAddrInetEx for SOCKADDR_INET {
                 )
             },
             AF_INET6 => unsafe {
-                (imports.RtlIpv6AddressToStringExA)(
+                RtlIpv6AddressToStringExA(
                     &self.Ipv6.sin6_addr,
                     self.Ipv6.__bindgen_anon_1.sin6_scope_id,
                     self.Ipv6.sin6_port,

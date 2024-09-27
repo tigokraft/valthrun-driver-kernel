@@ -11,9 +11,9 @@ use anyhow::{
 use kapi::{
     FastMutex,
     NTStatusEx,
+    ObjectType,
     Process,
     UnicodeStringEx,
-    OBJECT_TYPE_IMPORT,
 };
 use kapi_kmodule::KModule;
 use kdef::{
@@ -36,7 +36,10 @@ use winapi::shared::ntdef::{
 };
 
 use crate::{
-    imports::GLOBAL_IMPORTS,
+    imports::{
+        ObRegisterCallbacks,
+        ObUnRegisterCallbacks,
+    },
     offsets::get_nt_offsets,
 };
 
@@ -72,8 +75,7 @@ extern "system" fn process_protection_callback(
         return 0;
     }
 
-    let imports = GLOBAL_IMPORTS.unwrap();
-    let target_process_id = unsafe { (imports.PsGetProcessId)(info.Object) };
+    let target_process_id = target_process.get_id();
     if log::log_enabled!(target: "ProcessAttachments", Level::Trace) && false {
         let current_process_name = current_process.get_image_file_name().unwrap_or_default();
         if current_process_name != obfstr!("svchost.exe") &&
@@ -170,16 +172,13 @@ pub fn finalize() {
         }
     };
 
-    let imports = GLOBAL_IMPORTS.unwrap();
     unsafe {
-        (imports.ObUnRegisterCallbacks)(context.ob_registration);
+        ObUnRegisterCallbacks(context.ob_registration);
     }
 }
 
 #[allow(unused)]
 pub fn initialize() -> anyhow::Result<()> {
-    let imports = GLOBAL_IMPORTS.unwrap();
-
     let mut context = process_protection_state().lock();
     if context.is_some() {
         anyhow::bail!("{}", obfstr!("process protection already initialized"));
@@ -231,7 +230,7 @@ pub fn initialize() -> anyhow::Result<()> {
         // );
 
         let mut operation_reg = core::mem::zeroed::<_OB_OPERATION_REGISTRATION>();
-        operation_reg.ObjectType = OBJECT_TYPE_IMPORT.unwrap().PsProcessType;
+        operation_reg.ObjectType = ObjectType::PsProcessType.resolve_system_type();
         operation_reg.Operations = OB_OPERATION_HANDLE_CREATE | OB_OPERATION_HANDLE_DUPLICATE;
         operation_reg.PostOperation = None;
 
@@ -248,7 +247,7 @@ pub fn initialize() -> anyhow::Result<()> {
         // An anticheat which registers a lowest and highest altitude callback
         // can just reset the desiered permissions (especially with file name filtering).
         // Therefore this "protection" is easily removeable. Anyhow this requires a kernel module!
-        (imports.ObRegisterCallbacks)(&callback_reg, &mut reg_handle)
+        ObRegisterCallbacks(&callback_reg, &mut reg_handle)
             .ok()
             .map_err(|err| {
                 anyhow!(

@@ -13,7 +13,13 @@ use winapi::{
     shared::ntdef::PVOID,
 };
 
-use crate::imports::GLOBAL_IMPORTS;
+use crate::imports::{
+    IoAllocateMdl,
+    IoFreeMdl,
+    MmMapLockedPagesSpecifyCache,
+    MmUnlockPages,
+    MmUnmapLockedPages,
+};
 
 pub struct Mdl {
     handle: *mut _MDL,
@@ -31,9 +37,8 @@ impl Mdl {
         charge_quota: bool,
         irp: PIRP,
     ) -> Option<Self> {
-        let imports = GLOBAL_IMPORTS.unwrap();
         let mdl = unsafe {
-            (imports.IoAllocateMdl)(
+            IoAllocateMdl(
                 address as *mut _,
                 length as u32,
                 secondary_buffer,
@@ -73,8 +78,7 @@ impl Drop for Mdl {
             return;
         }
 
-        let imports = GLOBAL_IMPORTS.unwrap();
-        unsafe { (imports.IoFreeMdl)(self.handle) };
+        unsafe { IoFreeMdl(self.handle) };
     }
 }
 
@@ -130,8 +134,7 @@ impl LockedMDL {
     }
 
     fn do_unlock(&mut self) {
-        let imports = GLOBAL_IMPORTS.unwrap();
-        unsafe { (imports.MmUnlockPages)(self.mdl().raw_mdl()) };
+        unsafe { MmUnlockPages(self.mdl().raw_mdl()) };
     }
 
     pub fn map(
@@ -141,14 +144,13 @@ impl LockedMDL {
         mut requested_address: Option<usize>,
         priority: PagePriority,
     ) -> Result<MappedLockedMDL, LockedMDL> {
-        let imports = GLOBAL_IMPORTS.unwrap();
         let requested_address = requested_address
             .as_mut()
             .map(|r| r as *mut _ as *mut c_void)
             .unwrap_or_else(ptr::null_mut);
 
         let address = unsafe {
-            (imports.MmMapLockedPagesSpecifyCache)(
+            MmMapLockedPagesSpecifyCache(
                 self.mdl().raw_mdl(),
                 access_mode,
                 cache_type,
@@ -199,7 +201,6 @@ impl MappedLockedMDL {
 
 impl Drop for MappedLockedMDL {
     fn drop(&mut self) {
-        let imports = GLOBAL_IMPORTS.unwrap();
-        unsafe { (imports.MmUnmapLockedPages)(self.address, self.mdl.mdl().raw_mdl()) };
+        unsafe { MmUnmapLockedPages(self.address, self.mdl.mdl().raw_mdl()) };
     }
 }

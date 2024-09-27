@@ -6,23 +6,21 @@
 use alloc::format;
 
 use driver::{
+    get_logger_instance,
     metrics::RECORD_TYPE_DRIVER_STATUS,
     status::{
         CSTATUS_DRIVER_ALREADY_LOADED,
         CSTATUS_DRIVER_PREINIT_FAILED,
     },
 };
+use imports::IoCreateDriver;
 use kalloc::NonPagedAllocator;
 use kapi::{
     NTStatusEx,
     UnicodeStringEx,
 };
-use kdef::DPFLTR_LEVEL;
 use log::LevelFilter;
-use logger::APP_LOGGER;
 use obfstr::obfstr;
-use panic_hook::DEBUG_IMPORTS;
-use utils_imports::provider::SystemExport;
 use winapi::{
     km::wdm::DRIVER_OBJECT,
     shared::{
@@ -38,12 +36,9 @@ use winapi::{
     },
 };
 
-use crate::imports::GLOBAL_IMPORTS;
-
 extern crate alloc;
 
 mod imports;
-mod logger;
 mod panic_hook;
 
 #[global_allocator]
@@ -54,40 +49,15 @@ pub extern "system" fn driver_entry(
     driver: *mut DRIVER_OBJECT,
     registry_path: *const UNICODE_STRING,
 ) -> NTSTATUS {
-    SystemExport::initialize(None);
-    if DEBUG_IMPORTS.resolve().is_err() {
-        /*
-         * If this import fails, we can't do anything else except return an appropiate status code.
-         */
-        return STATUS_FAILED_DRIVER_ENTRY;
-    }
+    utils_kernelbase::initialize(None);
 
     log::set_max_level(LevelFilter::Trace);
-    if log::set_logger(&APP_LOGGER).is_err() {
-        let imports = DEBUG_IMPORTS.unwrap();
-        unsafe {
-            (imports.DbgPrintEx)(
-                0,
-                DPFLTR_LEVEL::ERROR as u32,
-                obfstr!("[VT] Failed to initialize app logger!\n\0").as_ptr(),
-            );
-        }
-
-        return STATUS_FAILED_DRIVER_ENTRY;
-    }
+    let _ = log::set_logger(get_logger_instance());
 
     if let Err(err) = kapi::initialize(None) {
         log::error!("{}: {:?}", "Failed to initialize kernel API", err);
         return STATUS_FAILED_DRIVER_ENTRY;
     }
-
-    let ll_imports = match GLOBAL_IMPORTS.resolve() {
-        Ok(imports) => imports,
-        Err(error) => {
-            log::error!("{}: {:#}", obfstr!("Failed to initialize imports"), error);
-            return CSTATUS_DRIVER_PREINIT_FAILED;
-        }
-    };
 
     let status = match unsafe { driver.as_mut() } {
         Some(driver) => internal_driver_entry(driver, registry_path),
@@ -98,12 +68,7 @@ pub extern "system" fn driver_entry(
             // https://research.checkpoint.com/2021/a-deep-dive-into-doublefeature-equation-groups-post-exploitation-dashboard/
             let driver_name =
                 UNICODE_STRING::from_bytes(obfstr::wide!("\\Driver\\valthrun-driver"));
-            let result = unsafe {
-                (ll_imports.IoCreateDriver)(
-                    &driver_name,
-                    internal_driver_entry as usize as *const _,
-                )
-            };
+            let result = unsafe { IoCreateDriver(&driver_name, internal_driver_entry as *const _) };
             if let Err(code) = result.ok() {
                 if code == STATUS_OBJECT_NAME_COLLISION {
                     log::error!("{}", obfstr!("Failed to create valthrun driver as a driver with this name is already loaded."));
@@ -168,7 +133,7 @@ extern "C" fn internal_driver_entry(
             "Initialize driver at {:X} ({:?}). Kernel base {:X}",
             driver as *mut _ as u64,
             registry_path,
-            SystemExport::kernel_base()
+            utils_kernelbase::get().unwrap_or(0)
         );
     }
 

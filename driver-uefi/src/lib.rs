@@ -5,8 +5,12 @@
 
 use alloc::format;
 
-use driver::metrics::RECORD_TYPE_DRIVER_STATUS;
+use driver::{
+    get_logger_instance,
+    metrics::RECORD_TYPE_DRIVER_STATUS,
+};
 use entry::FnDriverEntry;
+use imports::IoCreateDriver;
 use kalloc::NonPagedAllocator;
 use kapi::{
     thread,
@@ -14,12 +18,8 @@ use kapi::{
     NTStatusEx,
     UnicodeStringEx,
 };
-use kdef::DPFLTR_LEVEL;
 use log::LevelFilter;
-use logger::APP_LOGGER;
 use obfstr::obfstr;
-use panic_hook::DEBUG_IMPORTS;
-use utils_imports::provider::SystemExport;
 use winapi::{
     km::wdm::DRIVER_OBJECT,
     shared::{
@@ -34,13 +34,10 @@ use winapi::{
     },
 };
 
-use crate::imports::GLOBAL_IMPORTS;
-
 extern crate alloc;
 
 mod entry;
 mod imports;
-mod logger;
 mod panic_hook;
 
 #[global_allocator]
@@ -52,27 +49,10 @@ pub extern "system" fn driver_entry(
     entry_arg2: *const UNICODE_STRING,
     entry_point: FnDriverEntry,
 ) -> NTSTATUS {
-    SystemExport::initialize(None);
-    if DEBUG_IMPORTS.resolve().is_err() {
-        /*
-         * If this import fails, we can't do anything else except return an appropiate status code.
-         */
-        return STATUS_FAILED_DRIVER_ENTRY;
-    }
+    utils_kernelbase::initialize(None);
 
     log::set_max_level(LevelFilter::Trace);
-    if log::set_logger(&APP_LOGGER).is_err() {
-        let imports = DEBUG_IMPORTS.unwrap();
-        unsafe {
-            (imports.DbgPrintEx)(
-                0,
-                DPFLTR_LEVEL::ERROR as u32,
-                obfstr!("[VT] Failed to initialize app logger!\n\0").as_ptr(),
-            );
-        }
-
-        return STATUS_FAILED_DRIVER_ENTRY;
-    }
+    let _ = log::set_logger(get_logger_instance());
 
     if let Err(err) = kapi::initialize(None) {
         log::error!("{}: {:?}", "Failed to initialize kernel API", err);
@@ -104,20 +84,7 @@ pub extern "system" fn driver_entry(
         log::debug!("{}", obfstr!("No custom entry. Do not patch entry point."));
     }
 
-    let imports = match GLOBAL_IMPORTS.resolve() {
-        Ok(imports) => imports,
-        Err(error) => {
-            log::error!(
-                "{}: {:#}",
-                obfstr!("Failed to initialize ll imports"),
-                error
-            );
-            return STATUS_FAILED_DRIVER_ENTRY;
-        }
-    };
-
     log::info!("{}", obfstr!("Manually mapped driver via UEFI."));
-
     thread::spawn(|| {
         log::debug!("Waiting for the system to boot up before initializing");
 
@@ -127,9 +94,7 @@ pub extern "system" fn driver_entry(
         log::debug!("Elapsed: {:#?}", now.elapsed());
 
         let driver_name = UNICODE_STRING::from_bytes(obfstr::wide!("\\Driver\\valthrun-driver"));
-        let result = unsafe {
-            (imports.IoCreateDriver)(&driver_name, internal_driver_entry as usize as *const _)
-        };
+        let result = unsafe { IoCreateDriver(&driver_name, internal_driver_entry as *const _) };
         if let Err(code) = result.ok() {
             log::error!(
                 "{} {:X}",
@@ -170,7 +135,7 @@ extern "C" fn internal_driver_entry(
             "Initialize UEFI driver at {:X} ({:?}). Kernel base: {:X}",
             driver as *mut _ as u64,
             registry_path,
-            SystemExport::kernel_base()
+            utils_kernelbase::get().unwrap_or(0)
         );
     }
     driver::internal_driver_entry(unsafe { &mut *(driver as *mut DRIVER_OBJECT) })

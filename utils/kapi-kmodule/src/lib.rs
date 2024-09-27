@@ -2,15 +2,12 @@
 
 extern crate alloc;
 
-mod module;
-pub use module::*;
-
+mod def;
 mod imports;
+pub use imports::resolve_import;
 
-mod imports_module;
-pub use imports_module::*;
-pub use valthrun_driver_shared::{
-    BytePattern,
-    ByteSequencePattern,
-    SearchPattern,
+mod module;
+pub use module::{
+    KModule,
+    KModuleSection,
 };

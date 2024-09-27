@@ -1,19 +1,14 @@
+#![allow(non_snake_case)]
 use core::{
     ops::Sub,
     time::Duration,
 };
 
-use utils_imports::{
-    dynamic_import_table,
-    provider::SystemExport,
-};
+use lazy_link::lazy_link;
 
-type KeQueryPerformanceCounter = unsafe extern "C" fn(PerformanceFrequency: *mut u64) -> u64;
-
-dynamic_import_table! {
-    pub imports TIME_IMPORTS {
-        pub KeQueryPerformanceCounter: KeQueryPerformanceCounter = SystemExport::new(obfstr!("KeQueryPerformanceCounter")),
-    }
+#[lazy_link(resolver = "kapi_kmodule::resolve_import")]
+extern "C" {
+    pub fn KeQueryPerformanceCounter(PerformanceFrequency: *mut u64) -> u64;
 }
 
 /// A measurement of a monotonically nondecreasing clock.
@@ -25,10 +20,8 @@ pub struct Instant {
 
 impl Instant {
     pub fn now() -> Self {
-        let imports = TIME_IMPORTS.unwrap();
-
         let mut frequency = 0;
-        let counter = unsafe { (imports.KeQueryPerformanceCounter)(&mut frequency) };
+        let counter = unsafe { KeQueryPerformanceCounter(&mut frequency) };
 
         Self {
             value: (counter * 1_000_000_000) / frequency,

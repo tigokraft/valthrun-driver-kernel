@@ -23,7 +23,12 @@ use super::{
     NTStatusEx,
     Object,
 };
-use crate::imports::GLOBAL_IMPORTS;
+use crate::imports::{
+    KeDelayExecutionThread,
+    KeWaitForSingleObject,
+    PsCreateSystemThread,
+    ZwClose,
+};
 
 struct ThreadContext<F, T>
 where
@@ -49,11 +54,10 @@ pub enum TryJoinResult<T> {
 
 impl<T> JoinHandle<T> {
     pub fn try_join(self, timeout: Duration) -> TryJoinResult<T> {
-        let imports = GLOBAL_IMPORTS.unwrap();
         let timeout = (timeout.as_nanos() / 100) as i64 * -1;
 
         let success = unsafe {
-            (imports.KeWaitForSingleObject)(
+            KeWaitForSingleObject(
                 self.thread_object.cast(),
                 _KWAIT_REASON_Executive as u32,
                 KPROCESSOR_MODE::KernelMode,
@@ -72,9 +76,8 @@ impl<T> JoinHandle<T> {
     }
 
     pub fn join(self) -> T {
-        let imports = GLOBAL_IMPORTS.unwrap();
         let success = unsafe {
-            (imports.KeWaitForSingleObject)(
+            KeWaitForSingleObject(
                 self.thread_object.cast(),
                 _KWAIT_REASON_Executive as u32,
                 KPROCESSOR_MODE::KernelMode,
@@ -130,8 +133,6 @@ where
     F: FnOnce() -> T + Send + 'static,
     T: Send + 'static,
 {
-    let imports = GLOBAL_IMPORTS.unwrap();
-
     let result = Arc::new(UnsafeCell::new(None));
     let context = Box::new(ThreadContext {
         callback: f,
@@ -140,7 +141,7 @@ where
 
     let mut handle = core::ptr::null_mut();
     unsafe {
-        (imports.PsCreateSystemThread)(
+        PsCreateSystemThread(
             &mut handle,
             0,
             core::ptr::null_mut(),
@@ -157,7 +158,7 @@ where
         .ok()
         .expect(obfstr!("the thread object to be present"));
 
-    unsafe { (imports.ZwClose)(handle) };
+    unsafe { ZwClose(handle) };
     JoinHandle {
         thread_object,
         result,
@@ -169,9 +170,8 @@ pub fn sleep_ms(time: u64) {
 }
 
 pub fn sleep_us(time: u64) {
-    let imports = GLOBAL_IMPORTS.unwrap();
     let time = -(time as i64 * 10);
     unsafe {
-        (imports.KeDelayExecutionThread)(KPROCESSOR_MODE::KernelMode, false, &time);
+        KeDelayExecutionThread(KPROCESSOR_MODE::KernelMode, false, &time);
     }
 }

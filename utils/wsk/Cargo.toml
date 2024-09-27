@@ -14,6 +14,7 @@ kapi-kmodule = { version = "0.1.0", path = "../kapi-kmodule" }
 embedded-io = { version = "0.6.0", features = ["alloc"] }
 thiserror = { version = "1.0", package = "thiserror-core", default-features = false }
 log = "0.4.20"
+lazy_link = "0.1.1"
 
 [dependencies.winapi]
 git = "https://github.com/Trantect/winapi-rs.git"

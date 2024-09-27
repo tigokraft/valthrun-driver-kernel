@@ -8,6 +8,7 @@ thiserror = { version = "1.0", package = "thiserror-core", default-features = fa
 obfstr = "0.4.3"
 paste = "1.0.14"
 x86 = "0.52.0"
+utils-kernelbase = { version = "0.1.0", path = "../kernelbase" }
 
 [dependencies.winapi]
 git = "https://github.com/Trantect/winapi-rs.git"

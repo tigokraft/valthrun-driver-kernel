@@ -1,8 +1,5 @@
 use core::{
     arch::asm,
-    fmt::Debug,
-    mem::size_of,
-    slice,
     sync::atomic::{
         AtomicU64,
         Ordering,
@@ -15,86 +12,9 @@ use winapi::um::winnt::{
 };
 
 use crate::{
-    utils,
-    DynamicImport,
-    DynamicImportError,
-    ImportResult,
+    def::KIDTEntry64,
+    utils::search_binary_pattern,
 };
-
-/// Provider for ntos imports.
-/// This provider does not allocate any heap memory.
-///
-/// Note:
-/// You must call `SystemExport::initialize` before resolving any system exports.
-#[derive(Debug)]
-pub struct SystemExport<'a> {
-    function: &'a str,
-}
-
-impl<'a> SystemExport<'a> {
-    pub fn new(function: &'a str) -> Self {
-        Self { function }
-    }
-
-    /// Initialize the system export provider.
-    ///
-    /// Attention:
-    /// If the ntoskrnl can not be located this function will cause a BSOD!
-    pub fn initialize(ntoskrnl_base: Option<u64>) {
-        let ntoskrnl_base = ntoskrnl_base.unwrap_or_else(find_ntoskrnl_image);
-        WINDOWS_KERNEL_BASE.store(ntoskrnl_base, Ordering::Relaxed);
-    }
-
-    pub fn kernel_base() -> u64 {
-        WINDOWS_KERNEL_BASE.load(Ordering::Relaxed)
-    }
-}
-
-impl<'a, T> DynamicImport<T> for SystemExport<'a> {
-    fn resolve(self) -> ImportResult<T> {
-        let ntoskrnl_base = WINDOWS_KERNEL_BASE.load(Ordering::Relaxed);
-        if ntoskrnl_base == 0 {
-            /* ntoskrnl has not yet been initialized */
-            return Err(DynamicImportError::ProviderNotInitialized);
-        }
-
-        utils::resolve_symbol_from_pimage(ntoskrnl_base, self.function)
-            .map(|value| unsafe { core::mem::transmute_copy(&value) })
-            .ok_or(DynamicImportError::SymbolUnknown)
-    }
-}
-
-static WINDOWS_KERNEL_BASE: AtomicU64 = AtomicU64::new(0);
-
-fn search_binary_pattern(address: u64, pattern: &[u8], dummy: u8, direction: i64) -> u64 {
-    let mut address = address as i64;
-    loop {
-        let buffer = unsafe { slice::from_raw_parts(address as *const u8, pattern.len()) };
-
-        let is_match = pattern
-            .iter()
-            .zip(buffer.iter())
-            .find(|(p, v)| **p != dummy && **p != **v)
-            .is_none();
-
-        if is_match {
-            return address as u64;
-        }
-
-        address += direction;
-    }
-}
-
-#[repr(C)]
-#[derive(Clone, Copy)]
-struct KIDTEntry64 {
-    pub offset_low: u16,
-    pub selector: u16,
-    pub flags: u16,
-    pub offset_middle: u16,
-    pub offset_high: u32,
-}
-const _: [(); 0x0C] = [(); size_of::<KIDTEntry64>()];
 
 /// Find the NT kernel base address.
 ///
@@ -183,5 +103,25 @@ fn find_ntoskrnl_image() -> u64 {
 
         /* This PE image seems like the ntoskrnl */
         return kernel_base;
+    }
+}
+
+static WINDOWS_KERNEL_BASE: AtomicU64 = AtomicU64::new(0);
+
+/// Initialize the system export provider.
+///
+/// Attention:
+/// If the ntoskrnl can not be located this function will cause a BSOD!
+pub fn initialize(ntoskrnl_base: Option<u64>) {
+    let ntoskrnl_base = ntoskrnl_base.unwrap_or_else(find_ntoskrnl_image);
+    WINDOWS_KERNEL_BASE.store(ntoskrnl_base, Ordering::Relaxed);
+}
+
+pub fn get() -> Option<u64> {
+    let value = WINDOWS_KERNEL_BASE.load(Ordering::Relaxed);
+    if value > 0 {
+        Some(value)
+    } else {
+        None
     }
 }

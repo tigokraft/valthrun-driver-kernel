@@ -7,7 +7,12 @@ use winapi::{
     shared::ntdef::NTSTATUS,
 };
 
-use crate::GLOBAL_IMPORTS;
+use crate::imports::{
+    IoAllocateIrp,
+    IoCancelIrp,
+    IoCompleteRequest,
+    IoFreeIrp,
+};
 
 pub trait IrpEx {
     fn cancel_request(&mut self);
@@ -19,21 +24,17 @@ pub trait IrpEx {
 
 impl IrpEx for IRP {
     fn cancel_request(&mut self) {
-        let imports = GLOBAL_IMPORTS.unwrap();
-        unsafe { (imports.IoCancelIrp)(self) };
+        unsafe { IoCancelIrp(self) };
     }
 
     fn complete_request(&mut self, status: NTSTATUS) -> NTSTATUS {
-        let imports = GLOBAL_IMPORTS.unwrap();
-
         self.IoStatus.Information = status as usize;
-        unsafe { (imports.IoCompleteRequest)(self, IO_NO_INCREMENT) };
+        unsafe { IoCompleteRequest(self, IO_NO_INCREMENT) };
         return status;
     }
 
     fn allocate(stack_size: i8, charge_quota: bool) -> Option<PIRP> {
-        let imports = GLOBAL_IMPORTS.unwrap();
-        let irp = unsafe { (imports.IoAllocateIrp)(stack_size, charge_quota) };
+        let irp = unsafe { IoAllocateIrp(stack_size, charge_quota) };
         if irp.is_null() {
             None
         } else {
@@ -42,7 +43,6 @@ impl IrpEx for IRP {
     }
 
     fn free(&mut self) {
-        let imports = GLOBAL_IMPORTS.unwrap();
-        unsafe { (imports.IoFreeIrp)(self) };
+        unsafe { IoFreeIrp(self) };
     }
 }

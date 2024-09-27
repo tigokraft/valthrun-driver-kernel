@@ -1,3 +1,4 @@
+#![allow(non_snake_case)]
 #![allow(unused)]
 
 use kdef::{
@@ -8,10 +9,7 @@ use kdef::{
     _OB_CALLBACK_REGISTRATION,
     _PEB,
 };
-use utils_imports::{
-    dynamic_import_table,
-    provider::SystemExport,
-};
+use lazy_link::lazy_link;
 use winapi::{
     km::{
         ndis::PMDL,
@@ -52,180 +50,119 @@ use winapi::{
 pub const BCRYPT_RNG_USE_ENTROPY_IN_BUFFER: u32 = 0x00000001;
 pub const BCRYPT_USE_SYSTEM_PREFERRED_RNG: u32 = 0x00000002;
 
-type BCryptGenRandom = unsafe extern "C" fn(
-    hAlgorithm: *mut (),
-    pbBuffer: *mut u8,
-    cbBuffer: u32,
-    dwFlags: u32,
-) -> NTSTATUS;
+#[lazy_link(resolver = "kapi_kmodule::resolve_import")]
+extern "C" {
+    pub fn RtlImageNtHeader(ModuleAddress: PVOID) -> PIMAGE_NT_HEADERS;
 
-type RtlImageNtHeader = unsafe extern "C" fn(ModuleAddress: PVOID) -> PIMAGE_NT_HEADERS;
+    pub fn KeQuerySystemTimePrecise(CurrentTime: *mut u64) -> ();
+    pub fn KeQueryTimeIncrement() -> u32;
+    pub fn KeStackAttachProcess(process: PEPROCESS, apc_state: *mut _KAPC_STATE) -> ();
+    pub fn KeUnstackDetachProcess(apc_state: *mut _KAPC_STATE) -> ();
+    pub fn KeWaitForSingleObject(
+        Object: PVOID,
+        WaitReason: u32,
+        WaitMode: KPROCESSOR_MODE,
+        Alertable: bool,
+        Timeout: *const i64,
+    ) -> NTSTATUS;
+    pub fn KeDelayExecutionThread(
+        WaitMode: KPROCESSOR_MODE,
+        Alertable: bool,
+        Interval: *const i64,
+    ) -> NTSTATUS;
 
-type RtlRandomEx = unsafe extern "C" fn(Seed: *mut u32) -> u32;
+    pub fn RtlRandomEx(Seed: *mut u32) -> u32;
 
-type PsGetCurrentThread = unsafe extern "C" fn() -> PETHREAD;
-type PsGetCurrentProcess = unsafe extern "C" fn() -> PEPROCESS;
-type PsGetProcessId = unsafe extern "C" fn(process: PEPROCESS) -> i32;
-type PsGetProcessPeb = unsafe extern "C" fn(process: PEPROCESS) -> *const _PEB;
-type PsLookupProcessByProcessId =
-    unsafe extern "C" fn(process_id: i32, process: *mut PEPROCESS) -> NTSTATUS;
-type PsGetProcessImageFileName = unsafe extern "C" fn(Process: PEPROCESS) -> *const i8;
-type PsCreateSystemThread = unsafe extern "C" fn(
-    ThreadHandle: PHANDLE,
-    DesiredAccess: u32,
-    ObjectAttributes: POBJECT_ATTRIBUTES,
-    ProcessHandle: HANDLE,
-    ClientId: *mut u32,
-    StartRoutine: extern "C" fn(PVOID) -> (),
-    StartContext: PVOID,
-) -> NTSTATUS;
+    pub fn PsGetCurrentThread() -> PETHREAD;
+    pub fn PsGetCurrentProcess() -> PEPROCESS;
+    pub fn PsGetProcessId(process: PEPROCESS) -> i32;
+    pub fn PsGetProcessPeb(process: PEPROCESS) -> *const _PEB;
+    pub fn PsLookupProcessByProcessId(process_id: i32, process: *mut PEPROCESS) -> NTSTATUS;
+    pub fn PsGetProcessImageFileName(Process: PEPROCESS) -> *const i8;
+    pub fn PsCreateSystemThread(
+        ThreadHandle: PHANDLE,
+        DesiredAccess: u32,
+        ObjectAttributes: POBJECT_ATTRIBUTES,
+        ProcessHandle: HANDLE,
+        ClientId: *mut u32,
+        StartRoutine: extern "C" fn(PVOID) -> (),
+        StartContext: PVOID,
+    ) -> NTSTATUS;
 
-type KeQuerySystemTimePrecise = unsafe extern "C" fn(CurrentTime: *mut u64) -> ();
-type KeQueryTimeIncrement = unsafe extern "C" fn() -> u32;
-type KeStackAttachProcess =
-    unsafe extern "C" fn(process: PEPROCESS, apc_state: *mut _KAPC_STATE) -> ();
-type KeUnstackDetachProcess = unsafe extern "C" fn(apc_state: *mut _KAPC_STATE) -> ();
-pub type KeWaitForSingleObject = unsafe extern "C" fn(
-    Object: PVOID,
-    WaitReason: u32,
-    WaitMode: KPROCESSOR_MODE,
-    Alertable: bool,
-    Timeout: *const i64,
-) -> NTSTATUS;
-type KeDelayExecutionThread = unsafe extern "C" fn(
-    WaitMode: KPROCESSOR_MODE,
-    Alertable: bool,
-    Interval: *const i64,
-) -> NTSTATUS;
+    pub fn MmGetSystemRoutineAddress(system_routine_name: *const UNICODE_STRING) -> PVOID;
+    //pub MmSystemRangeStart: MmSystemRangeStart = SystemExport::new(obfstr!("MmSystemRangeStart")),
 
-type MmGetSystemRoutineAddress =
-    unsafe extern "C" fn(system_routine_name: *const UNICODE_STRING) -> PVOID;
+    pub fn IoCreateDeviceSecure(
+        DriverObject: *mut DRIVER_OBJECT,
+        DeviceExtensionSize: u32,
+        DeviceName: PCUNICODE_STRING,
+        DeviceType: DEVICE_TYPE,
+        DeviceCharacteristics: u32,
+        Exclusive: BOOLEAN,
+        DefaultSDDLString: PCUNICODE_STRING,
+        DeviceClassGuid: LPCGUID,
+        DeviceObject: *mut PDEVICE_OBJECT,
+    ) -> NTSTATUS;
+    pub fn IoDeleteDevice(DeviceObject: *mut DEVICE_OBJECT) -> NTSTATUS;
 
-type ZwQuerySystemInformation = unsafe extern "system" fn(
-    SystemInformationClass: u32,
-    SystemInformation: *mut (),
-    SystemInformationLength: u32,
-    ReturnLength: *mut u32,
-) -> NTSTATUS;
-type ZwClose = unsafe extern "C" fn(Handle: HANDLE) -> NTSTATUS;
+    pub fn IoAllocateIrp(StackSize: CCHAR, ChargeQuota: bool) -> PIRP;
+    pub fn IoCancelIrp(Irp: PIRP);
+    pub fn IoCompleteRequest(Irp: PIRP, PriorityBoost: KPRIORITY_BOOST);
+    pub fn IoFreeIrp(Irp: PIRP);
 
-type IoCreateDeviceSecure = unsafe extern "system" fn(
-    DriverObject: *mut DRIVER_OBJECT,
-    DeviceExtensionSize: u32,
-    DeviceName: PCUNICODE_STRING,
-    DeviceType: DEVICE_TYPE,
-    DeviceCharacteristics: u32,
-    Exclusive: BOOLEAN,
-    DefaultSDDLString: PCUNICODE_STRING,
-    DeviceClassGuid: LPCGUID,
-    DeviceObject: *mut PDEVICE_OBJECT,
-) -> NTSTATUS;
-type IoAllocateIrp = unsafe extern "system" fn(StackSize: CCHAR, ChargeQuota: bool) -> PIRP;
-type IoCancelIrp = unsafe extern "system" fn(Irp: PIRP);
-type IoCompleteRequest = unsafe extern "system" fn(Irp: PIRP, PriorityBoost: KPRIORITY_BOOST);
-type IoDeleteDevice = unsafe extern "system" fn(DeviceObject: *mut DEVICE_OBJECT) -> NTSTATUS;
-type IoAllocateMdl = unsafe extern "system" fn(
-    VirtualAddress: PVOID,
-    Length: u32,
-    SecondaryBuffer: bool,
-    ChargeQuota: bool,
-    Irp: PIRP,
-) -> *mut _MDL;
-type IoFreeMdl = unsafe extern "system" fn(MemoryDescriptorList: *mut _MDL);
-type IoFreeIrp = unsafe extern "system" fn(Irp: PIRP);
+    pub fn IoAllocateMdl(
+        VirtualAddress: PVOID,
+        Length: u32,
+        SecondaryBuffer: bool,
+        ChargeQuota: bool,
+        Irp: PIRP,
+    ) -> *mut _MDL;
+    pub fn IoFreeMdl(MemoryDescriptorList: *mut _MDL);
 
-type ObfDereferenceObject = unsafe extern "system" fn(object: PVOID);
-type ObfReferenceObject = unsafe extern "system" fn(object: PVOID);
-type ObQueryNameString = unsafe extern "system" fn(
-    Object: PVOID,
-    ObjectNameInfo: *mut OBJECT_NAME_INFORMATION,
-    Length: u32,
-    ReturnLength: &mut u32,
-) -> NTSTATUS;
-type ObReferenceObjectByName = unsafe extern "system" fn(
-    ObjectName: PCUNICODE_STRING,
-    Attributes: u32,
-    AccessState: *mut (),
-    DesiredAccess: ACCESS_MASK,
-    ObjectType: POBJECT_TYPE,
-    AccessMode: KPROCESSOR_MODE,
-    ParseContext: PVOID,
-    Object: PVOID,
-) -> NTSTATUS;
-type ObReferenceObjectByHandle = unsafe extern "system" fn(
-    Handle: HANDLE,
-    DesiredAccess: ACCESS_MASK,
-    ObjectType: POBJECT_TYPE,
-    AccessMode: KPROCESSOR_MODE,
-    Object: PVOID,
-    HandleInformation: PVOID,
-) -> NTSTATUS;
-type ObRegisterCallbacks = unsafe extern "system" fn(
-    CallbackRegistration: *const _OB_CALLBACK_REGISTRATION,
-    RegistrationHandle: *mut PVOID,
-) -> NTSTATUS;
-type ObUnRegisterCallbacks = unsafe extern "system" fn(RegistrationHandle: PVOID);
+    pub fn ZwQuerySystemInformation(
+        SystemInformationClass: u32,
+        SystemInformation: *mut (),
+        SystemInformationLength: u32,
+        ReturnLength: *mut u32,
+    ) -> NTSTATUS;
+    pub fn ZwClose(Handle: HANDLE) -> NTSTATUS;
 
-type MmUnlockPages = unsafe extern "system" fn(MemoryDescriptorList: *mut _MDL);
-type MmMapLockedPagesSpecifyCache = unsafe extern "system" fn(
-    MemoryDescriptorList: *mut _MDL,
-    AccessMode: KPROCESSOR_MODE,
-    CacheType: u32,
-    RequestedAddress: PVOID,
-    BugCheckOnFailure: u32,
-    Priority: u32,
-) -> PVOID;
-type MmUnmapLockedPages =
-    unsafe extern "system" fn(BaseAddress: PVOID, MemoryDescriptorList: *mut _MDL) -> ();
-type MmIsAddressValid = unsafe extern "system" fn(Address: PVOID) -> bool;
+    pub fn ObfReferenceObject(object: PVOID);
+    pub fn ObfDereferenceObject(object: PVOID);
+    pub fn ObQueryNameString(
+        Object: PVOID,
+        ObjectNameInfo: *mut OBJECT_NAME_INFORMATION,
+        Length: u32,
+        ReturnLength: &mut u32,
+    ) -> NTSTATUS;
+    pub fn ObReferenceObjectByName(
+        ObjectName: PCUNICODE_STRING,
+        Attributes: u32,
+        AccessState: *mut (),
+        DesiredAccess: ACCESS_MASK,
+        ObjectType: POBJECT_TYPE,
+        AccessMode: KPROCESSOR_MODE,
+        ParseContext: PVOID,
+        Object: PVOID,
+    ) -> NTSTATUS;
+    pub fn ObReferenceObjectByHandle(
+        Handle: HANDLE,
+        DesiredAccess: ACCESS_MASK,
+        ObjectType: POBJECT_TYPE,
+        AccessMode: KPROCESSOR_MODE,
+        Object: PVOID,
+        HandleInformation: PVOID,
+    ) -> NTSTATUS;
 
-dynamic_import_table! {
-    pub imports GLOBAL_IMPORTS {
-        pub RtlImageNtHeader: RtlImageNtHeader = SystemExport::new(obfstr!("RtlImageNtHeader")),
-
-        pub KeQuerySystemTimePrecise: KeQuerySystemTimePrecise = SystemExport::new(obfstr!("KeQuerySystemTimePrecise")),
-        pub KeQueryTimeIncrement: KeQueryTimeIncrement = SystemExport::new(obfstr!("KeQueryTimeIncrement")),
-        pub KeStackAttachProcess: KeStackAttachProcess = SystemExport::new(obfstr!("KeStackAttachProcess")),
-        pub KeUnstackDetachProcess: KeUnstackDetachProcess = SystemExport::new(obfstr!("KeUnstackDetachProcess")),
-        pub KeWaitForSingleObject: KeWaitForSingleObject = SystemExport::new(obfstr!("KeWaitForSingleObject")),
-        pub KeDelayExecutionThread: KeDelayExecutionThread = SystemExport::new(obfstr!("KeDelayExecutionThread")),
-
-        pub RtlRandomEx: RtlRandomEx = SystemExport::new(obfstr!("RtlRandomEx")),
-
-        pub PsGetCurrentThread: PsGetCurrentThread = SystemExport::new(obfstr!("PsGetCurrentThread")),
-        pub PsGetCurrentProcess: PsGetCurrentProcess = SystemExport::new(obfstr!("PsGetCurrentProcess")),
-        pub PsGetProcessId: PsGetProcessId = SystemExport::new(obfstr!("PsGetProcessId")),
-        pub PsGetProcessPeb: PsGetProcessPeb = SystemExport::new(obfstr!("PsGetProcessPeb")),
-        pub PsGetProcessImageFileName: PsGetProcessImageFileName = SystemExport::new(obfstr!("PsGetProcessImageFileName")),
-        pub PsLookupProcessByProcessId: PsLookupProcessByProcessId = SystemExport::new(obfstr!("PsLookupProcessByProcessId")),
-        pub PsCreateSystemThread: PsCreateSystemThread = SystemExport::new(obfstr!("PsCreateSystemThread")),
-
-        pub MmGetSystemRoutineAddress: MmGetSystemRoutineAddress = SystemExport::new(obfstr!("MmGetSystemRoutineAddress")),
-        //pub MmSystemRangeStart: MmSystemRangeStart = SystemExport::new(obfstr!("MmSystemRangeStart")),
-
-        pub IoCreateDeviceSecure: IoCreateDeviceSecure = SystemExport::new(obfstr!("IoCreateDeviceSecure")),
-        pub IoDeleteDevice: IoDeleteDevice = SystemExport::new(obfstr!("IoDeleteDevice")),
-        pub IoAllocateIrp: IoAllocateIrp = SystemExport::new(obfstr!("IoAllocateIrp")),
-        pub IoCompleteRequest: IoCompleteRequest = SystemExport::new(obfstr!("IoCompleteRequest")),
-        pub IoCancelIrp: IoCancelIrp = SystemExport::new(obfstr!("IoCancelIrp")),
-        pub IoFreeIrp: IoFreeIrp = SystemExport::new(obfstr!("IoFreeIrp")),
-        pub IoAllocateMdl: IoAllocateMdl = SystemExport::new(obfstr!("IoAllocateMdl")),
-        pub IoFreeMdl: IoFreeMdl = SystemExport::new(obfstr!("IoFreeMdl")),
-
-        pub ZwQuerySystemInformation: ZwQuerySystemInformation = SystemExport::new(obfstr!("ZwQuerySystemInformation")),
-        pub ZwClose: ZwClose = SystemExport::new(obfstr!("ZwClose")),
-
-        pub ObfDereferenceObject: ObfDereferenceObject = SystemExport::new(obfstr!("ObfDereferenceObject")),
-        pub ObfReferenceObject: ObfReferenceObject = SystemExport::new(obfstr!("ObfReferenceObject")),
-        pub ObQueryNameString: ObQueryNameString = SystemExport::new(obfstr!("ObQueryNameString")),
-        pub ObReferenceObjectByName: ObReferenceObjectByName = SystemExport::new(obfstr!("ObReferenceObjectByName")),
-        pub ObReferenceObjectByHandle: ObReferenceObjectByHandle = SystemExport::new(obfstr!("ObReferenceObjectByHandle")),
-        pub ObRegisterCallbacks: ObRegisterCallbacks = SystemExport::new(obfstr!("ObRegisterCallbacks")),
-        pub ObUnRegisterCallbacks: ObUnRegisterCallbacks = SystemExport::new(obfstr!("ObUnRegisterCallbacks")),
-
-        pub MmUnlockPages: MmUnlockPages = SystemExport::new(obfstr!("MmUnlockPages")),
-        pub MmMapLockedPagesSpecifyCache: MmMapLockedPagesSpecifyCache = SystemExport::new(obfstr!("MmMapLockedPagesSpecifyCache")),
-        pub MmUnmapLockedPages: MmUnmapLockedPages = SystemExport::new(obfstr!("MmUnmapLockedPages")),
-        pub MmIsAddressValid: MmIsAddressValid = SystemExport::new(obfstr!("MmIsAddressValid")),
-    }
+    pub fn MmUnlockPages(MemoryDescriptorList: *mut _MDL);
+    pub fn MmMapLockedPagesSpecifyCache(
+        MemoryDescriptorList: *mut _MDL,
+        AccessMode: KPROCESSOR_MODE,
+        CacheType: u32,
+        RequestedAddress: PVOID,
+        BugCheckOnFailure: u32,
+        Priority: u32,
+    ) -> PVOID;
+    pub fn MmUnmapLockedPages(BaseAddress: PVOID, MemoryDescriptorList: *mut _MDL) -> ();
+    pub fn MmIsAddressValid(Address: PVOID) -> bool;
 }

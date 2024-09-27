@@ -1,21 +1,15 @@
-use utils_imports::{
-    dynamic_import_table,
-    provider::SystemExport,
-};
-use winapi::{
-    km::wdm::KIRQL,
-    shared::ntdef::{
-        NTSTATUS,
-        UNICODE_STRING,
-    },
+#![allow(non_snake_case)]
+
+use lazy_link::lazy_link;
+use winapi::shared::ntdef::{
+    NTSTATUS,
+    UNICODE_STRING,
 };
 
-type IoCreateDriver =
-    unsafe extern "system" fn(name: *const UNICODE_STRING, entry: *const ()) -> NTSTATUS;
-type KeGetCurrentIrql = unsafe extern "system" fn() -> KIRQL;
-dynamic_import_table! {
-    pub imports GLOBAL_IMPORTS {
-        pub IoCreateDriver: IoCreateDriver = SystemExport::new(obfstr!("IoCreateDriver")),
-        pub KeGetCurrentIrql: KeGetCurrentIrql = SystemExport::new(obfstr!("KeGetCurrentIrql")),
-    }
+#[lazy_link(resolver = "kapi_kmodule::resolve_import")]
+extern "C" {
+    pub fn IoCreateDriver(name: *const UNICODE_STRING, entry: *const ()) -> NTSTATUS;
+    //pub fn DbgPrintEx(ComponentId: u32, Level: u32, Format: *const u8, ...) -> NTSTATUS;
+    pub fn DbgBreakPoint();
+    pub fn KeBugCheck(code: u32) -> !;
 }

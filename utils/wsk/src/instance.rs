@@ -48,12 +48,15 @@ use winapi::{
 };
 
 use crate::{
+    imports::{
+        WskCaptureProviderNPI,
+        WskReleaseProviderNPI,
+    },
     WskAddressInfo,
     WskBuffer,
     WskError,
     WskRegistration,
     WskResult,
-    WSK_IMPORTS,
 };
 pub struct WskInstance {
     registration: WskRegistration,
@@ -65,19 +68,13 @@ unsafe impl Sync for WskInstance {}
 
 impl WskInstance {
     pub fn create(version: u16) -> WskResult<Self> {
-        let wsk_imports = WSK_IMPORTS.resolve().map_err(WskError::ImportError)?;
-
         let registration = WskRegistration::new(version)?;
         let mut provider = Box::pin(unsafe { core::mem::zeroed() });
 
         unsafe {
-            (wsk_imports.WskCaptureProviderNPI)(
-                registration.wsk_registration(),
-                WSK_NO_WAIT,
-                &mut *provider,
-            )
-            .ok()
-            .map_err(WskError::CaptureProvider)?;
+            WskCaptureProviderNPI(registration.wsk_registration(), WSK_NO_WAIT, &mut *provider)
+                .ok()
+                .map_err(WskError::CaptureProvider)?;
         }
 
         Ok(Self {
@@ -199,10 +196,8 @@ impl WskInstance {
 
 impl Drop for WskInstance {
     fn drop(&mut self) {
-        if let Ok(wsk_imports) = WSK_IMPORTS.resolve() {
-            unsafe {
-                (wsk_imports.WskReleaseProviderNPI)(self.registration.wsk_registration());
-            }
+        unsafe {
+            WskReleaseProviderNPI(self.registration.wsk_registration());
         }
     }
 }

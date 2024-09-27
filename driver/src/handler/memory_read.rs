@@ -17,7 +17,7 @@ use winapi::{
 };
 
 use crate::{
-    imports::GLOBAL_IMPORTS,
+    imports::MmCopyVirtualMemory,
     pmem,
 };
 
@@ -71,7 +71,6 @@ fn read_memory_attached(ctx: &mut ReadContext) -> bool {
 
 #[allow(unused)]
 fn read_memory_mm(ctx: &mut ReadContext) -> bool {
-    let imports = GLOBAL_IMPORTS.unwrap();
     let current_process = Process::current();
 
     let mut current_address = ctx.offsets[0];
@@ -87,7 +86,7 @@ fn read_memory_mm(ctx: &mut ReadContext) -> bool {
 
         let success = unsafe {
             let mut bytes_copied = 0usize;
-            (imports.MmCopyVirtualMemory)(
+            MmCopyVirtualMemory(
                 ctx.process.eprocess(),
                 current_address as *const c_void,
                 current_process.eprocess(),
@@ -113,7 +112,7 @@ fn read_memory_mm(ctx: &mut ReadContext) -> bool {
 
     unsafe {
         let mut bytes_copied = 0usize;
-        let status = (imports.MmCopyVirtualMemory)(
+        let status = MmCopyVirtualMemory(
             ctx.process.eprocess(),
             current_address as *const c_void,
             current_process.eprocess(),

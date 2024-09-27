@@ -1,10 +1,8 @@
+#![allow(non_snake_case)]
 use alloc::boxed::Box;
 use core::time::Duration;
 
-use utils_imports::{
-    dynamic_import_table,
-    provider::SystemExport,
-};
+use lazy_link::lazy_link;
 use winapi::{
     km::wdm::KPROCESSOR_MODE,
     shared::{
@@ -23,30 +21,26 @@ use winapi::{
     },
 };
 
-pub type KeWaitForSingleObject = unsafe extern "C" fn(
-    Object: PVOID,
-    WaitReason: i32,
-    WaitMode: KPROCESSOR_MODE,
-    Alertable: bool,
-    Timeout: *const i64,
-) -> NTSTATUS;
+#[lazy_link(resolver = "kapi_kmodule::resolve_import")]
+extern "C" {
+    pub fn KeWaitForSingleObject(
+        Object: PVOID,
+        WaitReason: i32,
+        WaitMode: KPROCESSOR_MODE,
+        Alertable: bool,
+        Timeout: *const i64,
+    ) -> NTSTATUS;
 
-pub type KeWaitForMultipleObjects = unsafe extern "C" fn(
-    Count: u32,
-    Object: PVOID,
-    WaitType: u32,
-    WaitReason: i32,
-    WaitMode: KPROCESSOR_MODE,
-    Alertable: bool,
-    Timeout: *const i64,
-    WaitBlockArray: *const _KWAIT_BLOCK,
-) -> NTSTATUS;
-
-dynamic_import_table! {
-    pub imports WAIT_IMPORTS {
-        pub KeWaitForSingleObject: KeWaitForSingleObject = SystemExport::new(obfstr!("KeWaitForSingleObject")),
-        pub KeWaitForMultipleObjects: KeWaitForMultipleObjects = SystemExport::new(obfstr!("KeWaitForMultipleObjects")),
-    }
+    pub fn KeWaitForMultipleObjects(
+        Count: u32,
+        Object: PVOID,
+        WaitType: u32,
+        WaitReason: i32,
+        WaitMode: KPROCESSOR_MODE,
+        Alertable: bool,
+        Timeout: *const i64,
+        WaitBlockArray: *const _KWAIT_BLOCK,
+    ) -> NTSTATUS;
 }
 
 #[allow(non_snake_case, non_camel_case_types)]
@@ -74,11 +68,10 @@ pub trait Waitable {
         alertable: bool,
         timeout: Option<Duration>,
     ) -> bool {
-        let imports = WAIT_IMPORTS.unwrap();
         let timeout = timeout.map(|value| (value.as_nanos() / 100) as i64 * -1);
 
         let status = unsafe {
-            (imports.KeWaitForSingleObject)(
+            KeWaitForSingleObject(
                 self.wait_object(),
                 reason,
                 mode,
@@ -128,11 +121,9 @@ impl<const N: usize> MultipleWait<[&dyn Waitable; N]> for [&dyn Waitable; N] {
             None
         };
 
-        let imports = WAIT_IMPORTS.unwrap();
         let timeout = timeout.map(|value| (value.as_nanos() / 100) as i64 * -1);
-
         let status = unsafe {
-            (imports.KeWaitForMultipleObjects)(
+            KeWaitForMultipleObjects(
                 N as u32,
                 objects.as_ptr() as PVOID,
                 WaitAll,
@@ -169,11 +160,10 @@ impl<const N: usize> MultipleWait<[&dyn Waitable; N]> for [&dyn Waitable; N] {
             None
         };
 
-        let imports = WAIT_IMPORTS.unwrap();
         let timeout = timeout.map(|value| (value.as_nanos() / 100) as i64 * -1);
 
         let status = unsafe {
-            (imports.KeWaitForMultipleObjects)(
+            KeWaitForMultipleObjects(
                 N as u32,
                 objects.as_ptr() as PVOID,
                 WaitAny,

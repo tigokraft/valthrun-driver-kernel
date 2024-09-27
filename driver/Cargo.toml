@@ -41,6 +41,7 @@ serde_json = { version = "1.0.107", default-features = false, features = [
 aes-gcm = "0.10.3"
 hex = { version = "0.4.3", default-features = false, features = ["alloc"] }
 vtk-wsk = { version = "0.1.0", path = "../utils/wsk" }
+lazy_link = "0.1.1"
 
 [dependencies.winapi]
 git = "https://github.com/Trantect/winapi-rs.git"

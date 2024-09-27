@@ -13,7 +13,7 @@ use winapi::{
     },
 };
 
-use crate::imports::GLOBAL_IMPORTS;
+use crate::imports::MmCopyVirtualMemory;
 
 struct WriteContext<'a> {
     /// Target process where we want to read the data from
@@ -44,12 +44,11 @@ fn write_memory_attached(ctx: &WriteContext) -> bool {
 }
 
 fn write_memory_mm(ctx: &WriteContext) -> bool {
-    let imports = GLOBAL_IMPORTS.unwrap();
     let current_process = Process::current();
 
     unsafe {
         let mut bytes_copied = 0usize;
-        let status = (imports.MmCopyVirtualMemory)(
+        let status = MmCopyVirtualMemory(
             current_process.eprocess(),
             ctx.buffer.as_ptr() as PVOID,
             ctx.process.eprocess(),

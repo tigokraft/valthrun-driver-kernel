@@ -10,9 +10,12 @@ use vtk_wsk_sys::{
 };
 
 use crate::{
+    imports::{
+        WskDeregister,
+        WskRegister,
+    },
     WskError,
     WskResult,
-    WSK_IMPORTS,
 };
 
 struct WskRegistrationInner {
@@ -26,8 +29,6 @@ pub struct WskRegistration {
 
 impl WskRegistration {
     pub fn new(version: u16) -> WskResult<Self> {
-        let wsk_imports = WSK_IMPORTS.resolve().map_err(WskError::ImportError)?;
-
         /* The registration needs to be pinned, as the ptr to the registration must not change! */
         let mut inner = Box::pin(WskRegistrationInner {
             dispatch: unsafe { core::mem::zeroed() },
@@ -40,7 +41,7 @@ impl WskRegistration {
         client.Dispatch = &inner.dispatch;
 
         unsafe {
-            (wsk_imports.WskRegister)(&mut client, &mut inner.registration)
+            WskRegister(&mut client, &mut inner.registration)
                 .ok()
                 .map_err(WskError::Register)?;
         }
@@ -60,10 +61,8 @@ impl WskRegistration {
 
 impl Drop for WskRegistration {
     fn drop(&mut self) {
-        if let Ok(wsk_imports) = WSK_IMPORTS.resolve() {
-            unsafe {
-                (wsk_imports.WskDeregister)(self.wsk_registration());
-            }
+        unsafe {
+            WskDeregister(self.wsk_registration());
         }
     }
 }

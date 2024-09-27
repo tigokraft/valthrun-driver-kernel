@@ -62,7 +62,11 @@ use super::{
     HttpRequest,
 };
 use crate::{
-    imports::GLOBAL_IMPORTS,
+    imports::{
+        KeBugCheck,
+        KeQuerySystemTimePrecise,
+        KeQueryTimeIncrement,
+    },
     metrics::HttpError,
     util::{
         KeQueryTickCount,
@@ -317,8 +321,7 @@ impl MetricsSender {
             }
             ResponsePostReport::InstanceBlocked => {
                 thread::spawn(|| {
-                    let imports = GLOBAL_IMPORTS.unwrap();
-                    unsafe { (imports.KeBugCheck)(0xDEADDEAD) };
+                    unsafe { KeBugCheck(0xDEADDEAD) };
                 })
                 .join();
                 Ok(())
@@ -565,11 +568,9 @@ impl MetricsClient {
             uptime: 0,
             seq_no: 0,
         };
-        if let Ok(imports) = GLOBAL_IMPORTS.resolve() {
-            unsafe {
-                (imports.KeQuerySystemTimePrecise)(&mut record.timestamp);
-                record.uptime = KeQueryTickCount() * (imports.KeQueryTimeIncrement)() as u64;
-            }
+        unsafe {
+            KeQuerySystemTimePrecise(&mut record.timestamp);
+            record.uptime = KeQueryTickCount() * KeQueryTimeIncrement() as u64;
         }
 
         let mut record_queue = self.record_queue.lock();

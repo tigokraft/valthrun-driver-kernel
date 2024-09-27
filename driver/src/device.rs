@@ -41,7 +41,10 @@ use winapi::{
 };
 
 use crate::{
-    imports::GLOBAL_IMPORTS,
+    imports::{
+        IoRegisterShutdownNotification,
+        IoUnregisterShutdownNotification,
+    },
     metrics::{
         RECORD_TYPE_DRIVER_IRP_STATUS,
         RECORD_TYPE_DRIVER_STATUS,
@@ -59,8 +62,6 @@ pub struct ValthrunDevice {
 unsafe impl Sync for ValthrunDevice {}
 impl ValthrunDevice {
     pub fn create(driver: &mut DRIVER_OBJECT) -> anyhow::Result<Self> {
-        let imports = GLOBAL_IMPORTS.unwrap();
-
         let device_name = UNICODE_STRING::from_bytes(obfstr::wide!("\\Device\\valthrun"));
         let sddl =
             UNICODE_STRING::from_bytes(obfstr::wide!("D:P(A;;GA;;;SY)(A;;GA;;;BU)(A;;GA;;;AU)"));
@@ -88,7 +89,7 @@ impl ValthrunDevice {
         *device.flags_mut() |= DEVICE_FLAGS::DO_DIRECT_IO as u32;
         device.mark_initialized();
 
-        unsafe { (imports.IoRegisterShutdownNotification)(device.device) };
+        unsafe { IoRegisterShutdownNotification(device.device) };
         Ok(Self {
             device_handle: device,
         })
@@ -97,8 +98,7 @@ impl ValthrunDevice {
 
 impl Drop for ValthrunDevice {
     fn drop(&mut self) {
-        let imports = GLOBAL_IMPORTS.unwrap();
-        unsafe { (imports.IoUnregisterShutdownNotification)(self.device_handle.device) };
+        unsafe { IoUnregisterShutdownNotification(self.device_handle.device) };
     }
 }
 

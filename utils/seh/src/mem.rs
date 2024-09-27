@@ -1,36 +1,71 @@
+#![allow(static_mut_refs)]
+
 use kdef::_PEB;
-use utils_imports::{
-    dynamic_import_table,
-    provider::SystemExport,
-    ImportResult,
-};
+use lazy_link::lazy_link;
 use winapi::km::wdm::KPROCESSOR_MODE;
 
 use crate::wrapper;
 
-dynamic_import_table! {
-    imports MEM_IMPORTS {
-        pub ProbeForRead: u64 = SystemExport::new(obfstr!("ProbeForRead")),
-        pub ProbeForWrite: u64 = SystemExport::new(obfstr!("ProbeForWrite")),
-        pub memmove: u64 = SystemExport::new(obfstr!("memmove")),
-        pub MmProbeAndLockProcessPages: u64 = SystemExport::new(obfstr!("MmProbeAndLockProcessPages")),
+#[lazy_link(resolver = "kapi_kmodule::resolve_import")]
+extern "C" {
+    #[allow(non_snake_case)]
+    fn PsGetCurrentProcess() -> *mut _PEB;
+}
 
-        pub PsGetCurrentProcess: unsafe extern "C" fn() -> *mut _PEB = SystemExport::new(obfstr!("PsGetCurrentProcess")),
+struct FunctionTable {
+    probe_for_read: u64,
+    probe_for_write: u64,
+    memmove: u64,
+    mm_probe_and_lock_process_pages: u64,
+}
+
+impl FunctionTable {
+    pub fn resolve() -> Self {
+        Self {
+            probe_for_read: utils_imports::resolve_system(None, "ProbeForRead").as_ptr() as u64,
+            probe_for_write: utils_imports::resolve_system(None, "ProbeForWrite").as_ptr() as u64,
+            memmove: utils_imports::resolve_system(None, "memmove").as_ptr() as u64,
+            mm_probe_and_lock_process_pages: utils_imports::resolve_system(
+                None,
+                "MmProbeAndLockProcessPages",
+            )
+            .as_ptr() as u64,
+        }
     }
 }
 
-pub fn init() -> ImportResult<()> {
-    MEM_IMPORTS.resolve().map(|_| ())
+static mut FUNCTION_TABLE: Option<FunctionTable> = None;
+
+pub fn initialize() {
+    unsafe {
+        FUNCTION_TABLE = Some(FunctionTable::resolve());
+    }
 }
 
 pub fn probe_read(target: u64, length: usize, align: usize) -> bool {
-    let target_fn = MEM_IMPORTS.unwrap().ProbeForRead;
-    unsafe { wrapper::seh_invoke(target_fn, target, length as u64, align as u64, 0) }
+    let functions = unsafe { FUNCTION_TABLE.as_ref().unwrap() };
+    unsafe {
+        wrapper::seh_invoke(
+            functions.probe_for_read,
+            target,
+            length as u64,
+            align as u64,
+            0,
+        )
+    }
 }
 
 pub fn probe_write(target: u64, length: usize, align: usize) -> bool {
-    let target_fn = MEM_IMPORTS.unwrap().ProbeForWrite;
-    unsafe { wrapper::seh_invoke(target_fn, target, length as u64, align as u64, 0) }
+    let functions = unsafe { FUNCTION_TABLE.as_ref().unwrap() };
+    unsafe {
+        wrapper::seh_invoke(
+            functions.probe_for_write,
+            target,
+            length as u64,
+            align as u64,
+            0,
+        )
+    }
 }
 
 pub fn probe_and_lock_pages(mdl: *const (), access_mode: KPROCESSOR_MODE, operation: u32) -> bool {
@@ -39,13 +74,12 @@ pub fn probe_and_lock_pages(mdl: *const (), access_mode: KPROCESSOR_MODE, operat
      * MmProbeAndLockPages writes to the shaddow stack, which we do not support.
      * MmProbeAndLockProcessPages is identical when Process == PsGetCurrentProcess() therefore we're good here.
      */
-    let imports = MEM_IMPORTS.unwrap();
-    let target = imports.MmProbeAndLockProcessPages;
-    let current_process = unsafe { (imports.PsGetCurrentProcess)() };
+    let functions = unsafe { FUNCTION_TABLE.as_ref().unwrap() };
+    let current_process = unsafe { PsGetCurrentProcess() };
 
     unsafe {
         wrapper::seh_invoke(
-            target,
+            functions.mm_probe_and_lock_process_pages,
             mdl as u64,
             current_process as u64,
             access_mode as u64,
@@ -57,10 +91,10 @@ pub fn probe_and_lock_pages(mdl: *const (), access_mode: KPROCESSOR_MODE, operat
 /// Copy memory from source into target.
 /// Returns false on failure.
 pub fn safe_copy(target: &mut [u8], source: u64) -> bool {
-    let target_fn = MEM_IMPORTS.unwrap().memmove;
+    let functions = unsafe { FUNCTION_TABLE.as_ref().unwrap() };
     unsafe {
         wrapper::seh_invoke(
-            target_fn,
+            functions.memmove,
             target.as_mut_ptr() as u64,
             source,
             target.len() as u64,

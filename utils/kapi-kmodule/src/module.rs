@@ -15,10 +15,7 @@ use obfstr::obfstr;
 use valthrun_driver_shared::SearchPattern;
 use winapi::{
     shared::{
-        ntdef::{
-            HANDLE,
-            PVOID,
-        },
+        ntdef::PVOID,
         ntstatus::STATUS_SUCCESS,
     },
     um::winnt::{
@@ -28,41 +25,18 @@ use winapi::{
     },
 };
 
-use crate::imports::GLOBAL_IMPORTS;
-
-#[repr(C)]
-#[allow(non_snake_case, non_camel_case_types)]
-struct _SYSTEM_MODULE_ENTRY {
-    pub Section: HANDLE,
-    pub MappedBase: PVOID,
-    pub ImageBase: PVOID,
-    pub ImageSize: u32,
-    pub Flags: u32,
-    pub LoadOrderIndex: u16,
-    pub InitOrderIndex: u16,
-    pub LoadCount: u16,
-    pub OffsetToFileName: u16,
-    pub FullPathName: [u8; 256],
-}
-
-#[repr(C)]
-#[allow(non_snake_case, non_camel_case_types)]
-struct _SYSTEM_MODULE_INFORMATION {
-    Count: u32,
-    Module: [_SYSTEM_MODULE_ENTRY; 0],
-}
-
-impl _SYSTEM_MODULE_INFORMATION {
-    pub fn modules(&self) -> &[_SYSTEM_MODULE_ENTRY] {
-        unsafe {
-            let ptr = core::mem::transmute::<_, *const _SYSTEM_MODULE_ENTRY>(&self.Module);
-            core::slice::from_raw_parts(ptr, self.Count as usize)
-        }
-    }
-}
-
-#[allow(non_upper_case_globals)]
-const SystemModuleInformation: u32 = 0x0B;
+use crate::{
+    def::{
+        SystemModuleInformation,
+        _SYSTEM_MODULE_ENTRY,
+        _SYSTEM_MODULE_INFORMATION,
+    },
+    imports::{
+        MmIsAddressValid,
+        RtlImageNtHeader,
+        ZwQuerySystemInformation,
+    },
+};
 
 pub struct KModuleSection {
     pub name: String,
@@ -88,8 +62,7 @@ impl KModuleSection {
     }
 
     pub fn is_data_valid(&self) -> bool {
-        let imports = GLOBAL_IMPORTS.unwrap();
-        unsafe { (imports.MmIsAddressValid)(self.raw_data_address() as *const () as PVOID) }
+        unsafe { MmIsAddressValid(self.raw_data_address() as *const () as PVOID) }
     }
 
     pub fn raw_data_unchecked(&self) -> &[u8] {
@@ -130,17 +103,20 @@ pub struct KModule {
 
 impl KModule {
     fn from_module_entry(entry: &_SYSTEM_MODULE_ENTRY) -> Self {
-        Self {
-            file_path: CStr::from_bytes_until_nul(&entry.FullPathName)
-                .unwrap_or_default()
-                .to_string_lossy()
-                .to_string(),
-            file_name: CStr::from_bytes_until_nul(
-                &entry.FullPathName[entry.OffsetToFileName as usize..],
-            )
+        let file_path = CStr::from_bytes_until_nul(&entry.FullPathName)
             .unwrap_or_default()
             .to_string_lossy()
-            .to_string(),
+            .to_string();
+
+        let file_name =
+            CStr::from_bytes_until_nul(&entry.FullPathName[entry.OffsetToFileName as usize..])
+                .unwrap_or_default()
+                .to_string_lossy()
+                .to_string();
+
+        Self {
+            file_path,
+            file_name,
             base_address: entry.ImageBase as usize,
             module_size: entry.ImageSize as usize,
         }
@@ -149,13 +125,11 @@ impl KModule {
 
 impl KModule {
     pub fn is_base_data_valid(&self) -> bool {
-        let imports = GLOBAL_IMPORTS.unwrap();
-        unsafe { (imports.MmIsAddressValid)(self.base_address as *const () as PVOID) }
+        unsafe { MmIsAddressValid(self.base_address as *const () as PVOID) }
     }
 
     fn section_headers(&self) -> anyhow::Result<&'static [IMAGE_SECTION_HEADER]> {
-        let imports = GLOBAL_IMPORTS.unwrap();
-        let header = unsafe { (imports.RtlImageNtHeader)(self.base_address as PVOID).as_mut() }
+        let header = unsafe { RtlImageNtHeader(self.base_address as PVOID).as_mut() }
             .with_context(|| obfstr!("RtlImageNtHeader failed").to_string())?;
 
         let section_headers = (&header.FileHeader as *const _ as *const ())
@@ -192,10 +166,9 @@ impl KModule {
     }
 
     pub fn query_modules() -> anyhow::Result<Vec<KModule>> {
-        let imports = GLOBAL_IMPORTS.unwrap();
         unsafe {
             let mut bytes = 0;
-            (imports.ZwQuerySystemInformation)(
+            ZwQuerySystemInformation(
                 SystemModuleInformation,
                 core::ptr::null_mut(),
                 0,
@@ -205,7 +178,7 @@ impl KModule {
             let mut buffer = Vec::<u8>::with_capacity(bytes as usize);
             buffer.set_len(bytes as usize);
 
-            let status = (imports.ZwQuerySystemInformation)(
+            let status = ZwQuerySystemInformation(
                 SystemModuleInformation,
                 buffer.as_mut_ptr() as *mut (),
                 bytes,
@@ -221,18 +194,15 @@ impl KModule {
 
             let info =
                 &*core::mem::transmute::<_, *const _SYSTEM_MODULE_INFORMATION>(buffer.as_ptr());
-            Ok(
-                /* Result needs to be copied as buffer will be deallocated */
-                info.modules()
-                    .iter()
-                    .map(KModule::from_module_entry)
-                    .collect(),
-            )
+            Ok(info
+                .modules()
+                .iter()
+                .map(KModule::from_module_entry)
+                .collect())
         }
     }
 
     pub fn find_by_name(target: &str) -> anyhow::Result<Option<KModule>> {
-        /* Not using a closure here as it inflates the stack */
         for module in Self::query_modules()? {
             if module.file_name == target {
                 return Ok(Some(module));

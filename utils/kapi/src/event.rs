@@ -1,10 +1,9 @@
+#![allow(non_snake_case)]
+
 use alloc::sync::Arc;
 use core::cell::SyncUnsafeCell;
 
-use utils_imports::{
-    dynamic_import_table,
-    provider::SystemExport,
-};
+use lazy_link::lazy_link;
 use winapi::{
     km::wdm::{
         IO_PRIORITY::{
@@ -22,21 +21,13 @@ use winapi::{
 
 use crate::Waitable;
 
-type KeInitializeEvent = unsafe extern "C" fn(Event: PKEVENT, event_type: EVENT_TYPE, state: bool);
-type KeSetEvent =
-    unsafe extern "C" fn(Event: PKEVENT, Increment: KPRIORITY_BOOST, Wait: bool) -> i32;
-type KeReadStateEvent = unsafe extern "C" fn(Event: PKEVENT) -> i32;
-type KeResetEvent = unsafe extern "C" fn(Event: PKEVENT) -> i32;
-type KeClearEvent = unsafe extern "C" fn(Event: PKEVENT);
-
-dynamic_import_table! {
-    pub imports KEVENT_IMPORTS {
-        pub KeInitializeEvent: KeInitializeEvent = SystemExport::new(obfstr!("KeInitializeEvent")),
-        pub KeSetEvent: KeSetEvent = SystemExport::new(obfstr!("KeSetEvent")),
-        pub KeReadStateEvent: KeReadStateEvent = SystemExport::new(obfstr!("KeReadStateEvent")),
-        pub KeResetEvent: KeResetEvent = SystemExport::new(obfstr!("KeResetEvent")),
-        pub KeClearEvent: KeClearEvent = SystemExport::new(obfstr!("KeClearEvent")),
-    }
+#[lazy_link(resolver = "kapi_kmodule::resolve_import")]
+extern "C" {
+    pub fn KeInitializeEvent(Event: PKEVENT, event_type: EVENT_TYPE, state: bool);
+    pub fn KeSetEvent(Event: PKEVENT, Increment: KPRIORITY_BOOST, Wait: bool) -> i32;
+    pub fn KeReadStateEvent(Event: PKEVENT) -> i32;
+    pub fn KeResetEvent(Event: PKEVENT) -> i32;
+    pub fn KeClearEvent(Event: PKEVENT);
 }
 
 #[derive(Clone)]
@@ -49,10 +40,9 @@ unsafe impl Send for KEvent {}
 
 impl KEvent {
     pub fn new(event_type: EVENT_TYPE) -> Self {
-        let imports = KEVENT_IMPORTS.unwrap();
         let inner = Arc::new(SyncUnsafeCell::new(unsafe { core::mem::zeroed() }));
         unsafe {
-            (imports.KeInitializeEvent)(inner.get(), event_type, false);
+            KeInitializeEvent(inner.get(), event_type, false);
         }
 
         Self { inner }
@@ -67,23 +57,19 @@ impl KEvent {
     }
 
     pub fn signal_ex(&self, increment: KPRIORITY_BOOST, wait: bool) -> i32 {
-        let imports = KEVENT_IMPORTS.unwrap();
-        unsafe { (imports.KeSetEvent)(self.inner.get(), increment, wait) }
+        unsafe { KeSetEvent(self.inner.get(), increment, wait) }
     }
 
     pub fn read_state(&self) -> i32 {
-        let imports = KEVENT_IMPORTS.unwrap();
-        unsafe { (imports.KeReadStateEvent)(self.inner.get()) }
+        unsafe { KeReadStateEvent(self.inner.get()) }
     }
 
     pub fn reset_event(&self) -> i32 {
-        let imports = KEVENT_IMPORTS.unwrap();
-        unsafe { (imports.KeResetEvent)(self.inner.get()) }
+        unsafe { KeResetEvent(self.inner.get()) }
     }
 
     pub fn clear_event(&self) {
-        let imports = KEVENT_IMPORTS.unwrap();
-        unsafe { (imports.KeClearEvent)(self.inner.get()) }
+        unsafe { KeClearEvent(self.inner.get()) }
     }
 }
 

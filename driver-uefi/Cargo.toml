@@ -22,9 +22,10 @@ kapi-kmodule = { version = "0.1.0", path = "../utils/kapi-kmodule" }
 kdef = { version = "0.1.0", path = "../utils/kdef" }
 seh = { version = "0.1.0", path = "../utils/seh" }
 utils-imports = { version = "0.1.0", path = "../utils/imports" }
-x86 = "0.52.0"
 driver = { version = "0.2.1", path = "../driver" }
 kalloc = { version = "0.1.0", path = "../utils/kalloc" }
+utils-kernelbase = { version = "0.1.0", path = "../utils/kernelbase" }
+lazy_link = "0.1.1"
 
 [dependencies.compiler_builtins]
 git = "https://github.com/rust-lang/compiler-builtins"

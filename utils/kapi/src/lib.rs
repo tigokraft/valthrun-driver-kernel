@@ -1,8 +1,8 @@
 #![no_std]
 #![allow(dead_code)]
 #![feature(sync_unsafe_cell)]
-#![feature(new_uninit)]
 #![feature(allocator_api)]
+#![feature(new_zeroed_alloc)]
 
 extern crate alloc;
 
@@ -10,7 +10,6 @@ mod imports;
 use alloc::string::ToString;
 
 use anyhow::Context;
-pub(crate) use imports::GLOBAL_IMPORTS;
 
 mod process;
 use obfstr::obfstr;

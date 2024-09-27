@@ -14,11 +14,19 @@ use winapi::{
     },
 };
 
-use super::{
-    Object,
+use super::Object;
+use crate::{
+    imports::{
+        KeStackAttachProcess,
+        KeUnstackDetachProcess,
+        PsGetCurrentProcess,
+        PsGetProcessId,
+        PsGetProcessImageFileName,
+        PsGetProcessPeb,
+        PsLookupProcessByProcessId,
+    },
     UnicodeStringEx,
 };
-use crate::GLOBAL_IMPORTS;
 
 pub struct Process {
     inner: Object,
@@ -40,15 +48,13 @@ impl Process {
     }
 
     pub fn current() -> Process {
-        let imports = GLOBAL_IMPORTS.unwrap();
-        Self::from_raw(unsafe { (imports.PsGetCurrentProcess)() }, false)
+        Self::from_raw(unsafe { PsGetCurrentProcess() }, false)
     }
 
     pub fn by_id(process_id: i32) -> Option<Self> {
         let mut process = core::ptr::null_mut();
 
-        let imports = GLOBAL_IMPORTS.unwrap();
-        let status = unsafe { (imports.PsLookupProcessByProcessId)(process_id as _, &mut process) };
+        let status = unsafe { PsLookupProcessByProcessId(process_id as _, &mut process) };
         if NT_SUCCESS(status) {
             Some(Self::from_raw(process, true))
         } else {
@@ -57,26 +63,21 @@ impl Process {
     }
 
     pub fn get_id(&self) -> i32 {
-        let imports = GLOBAL_IMPORTS.unwrap();
-        unsafe { (imports.PsGetProcessId)(self.eprocess()) }
+        unsafe { PsGetProcessId(self.eprocess()) }
     }
 
     /// Process image file name (max 14 characters log)!
     pub fn get_image_file_name(&self) -> Option<&str> {
-        let imports = GLOBAL_IMPORTS.resolve().ok()?;
-
         unsafe {
-            CStr::from_ptr((imports.PsGetProcessImageFileName)(self.eprocess()))
+            CStr::from_ptr(PsGetProcessImageFileName(self.eprocess()))
                 .to_str()
                 .ok()
         }
     }
 
     pub fn attach(&self) -> AttachedProcess {
-        let imports = GLOBAL_IMPORTS.unwrap();
-
         let mut apc_state: _KAPC_STATE = unsafe { core::mem::zeroed() };
-        unsafe { (imports.KeStackAttachProcess)(self.eprocess(), &mut apc_state) };
+        unsafe { KeStackAttachProcess(self.eprocess(), &mut apc_state) };
         AttachedProcess {
             process: self,
             apc_state,
@@ -99,10 +100,9 @@ impl AttachedProcess<'_> {
     }
 
     pub fn get_modules(&self) -> Vec<ModuleInfo> {
-        let imports = GLOBAL_IMPORTS.unwrap();
         let mut result = Vec::with_capacity(64);
 
-        let peb = match unsafe { (imports.PsGetProcessPeb)(self.process.eprocess()).as_ref() } {
+        let peb = match unsafe { PsGetProcessPeb(self.process.eprocess()).as_ref() } {
             Some(peb) => peb,
             None => {
                 log::warn!("Failed to get PEB for {:X}", self.process.eprocess() as u64);
@@ -151,7 +151,6 @@ impl AttachedProcess<'_> {
 
 impl Drop for AttachedProcess<'_> {
     fn drop(&mut self) {
-        let imports = GLOBAL_IMPORTS.unwrap();
-        unsafe { (imports.KeUnstackDetachProcess)(&mut self.apc_state) };
+        unsafe { KeUnstackDetachProcess(&mut self.apc_state) };
     }
 }

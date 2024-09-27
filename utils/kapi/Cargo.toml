@@ -11,6 +11,8 @@ anyhow = { version = "1.0", default-features = false }
 obfstr = "0.4.3"
 valthrun-driver-shared = { version = "0.1.0", path = "../../shared" }
 seh = { version = "0.1.0", path = "../seh" }
+lazy_link = "0.1.1"
+kapi-kmodule = { version = "0.1.0", path = "../kapi-kmodule" }
 
 [dependencies.winapi]
 git = "https://github.com/Trantect/winapi-rs.git"

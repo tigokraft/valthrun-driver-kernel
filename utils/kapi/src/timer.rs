@@ -1,3 +1,4 @@
+#![allow(non_snake_case)]
 use alloc::boxed::Box;
 use core::{
     cell::UnsafeCell,
@@ -6,25 +7,16 @@ use core::{
 };
 
 use kdef::_KTIMER;
-use utils_imports::{
-    dynamic_import_table,
-    provider::SystemExport,
-};
+use lazy_link::lazy_link;
 use winapi::shared::ntdef::PVOID;
 
 use crate::Waitable;
 
-type KeInitializeTimer = unsafe extern "C" fn(Timer: *mut _KTIMER);
-type KeCancelTimer = unsafe extern "C" fn(Timer: *mut _KTIMER) -> bool;
-type KeSetTimerEx =
-    unsafe extern "C" fn(Timer: *mut _KTIMER, DueTime: i64, Period: i32, *mut ()) -> bool;
-
-dynamic_import_table! {
-    pub imports TIMER_IMPORTS {
-        pub KeInitializeTimer: KeInitializeTimer = SystemExport::new(obfstr!("KeInitializeTimer")),
-        pub KeCancelTimer: KeCancelTimer = SystemExport::new(obfstr!("KeCancelTimer")),
-        pub KeSetTimerEx: KeSetTimerEx = SystemExport::new(obfstr!("KeSetTimerEx")),
-    }
+#[lazy_link(resolver = "kapi_kmodule::resolve_import")]
+extern "C" {
+    pub fn KeInitializeTimer(Timer: *mut _KTIMER);
+    pub fn KeCancelTimer(Timer: *mut _KTIMER) -> bool;
+    pub fn KeSetTimerEx(Timer: *mut _KTIMER, DueTime: i64, Period: i32, _: *mut ()) -> bool;
 }
 
 pub struct KTimer {
@@ -33,17 +25,15 @@ pub struct KTimer {
 
 impl KTimer {
     pub fn new() -> Self {
-        let imports = TIMER_IMPORTS.unwrap();
         let inner = Box::pin(UnsafeCell::new(unsafe { core::mem::zeroed() }));
 
-        unsafe { (imports.KeInitializeTimer)(&mut *inner.get()) };
+        unsafe { KeInitializeTimer(&mut *inner.get()) };
         Self { inner }
     }
 
     pub fn set(&self, duration: Duration) -> bool {
-        let imports = TIMER_IMPORTS.unwrap();
         unsafe {
-            (imports.KeSetTimerEx)(
+            KeSetTimerEx(
                 &mut *self.inner.get(),
                 (duration.as_nanos() / 100) as i64 * -1,
                 0,
@@ -71,8 +61,7 @@ impl KTimer {
     // }
 
     pub fn clear(&self) -> bool {
-        let imports = TIMER_IMPORTS.unwrap();
-        unsafe { (imports.KeCancelTimer)(&mut *self.inner.get()) }
+        unsafe { KeCancelTimer(&mut *self.inner.get()) }
     }
 }
 

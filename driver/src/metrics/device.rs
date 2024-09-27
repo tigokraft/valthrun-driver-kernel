@@ -13,7 +13,7 @@ use winapi::shared::{
 
 use super::data::DeviceInfo;
 use crate::{
-    imports::GLOBAL_IMPORTS,
+    imports::ExGetSystemFirmwareTable,
     winver::os_info,
 };
 
@@ -21,13 +21,8 @@ const FT_PROVIDER_RSMB: u32 = 0x52534d42; // hex for 'RSMB'
 fn get_bios_unique_id() -> anyhow::Result<Option<String>> {
     let table_size = unsafe {
         let mut result = 0;
-        let status_code = (GLOBAL_IMPORTS.unwrap().ExGetSystemFirmwareTable)(
-            FT_PROVIDER_RSMB,
-            0,
-            core::ptr::null_mut(),
-            0,
-            &mut result,
-        );
+        let status_code =
+            ExGetSystemFirmwareTable(FT_PROVIDER_RSMB, 0, core::ptr::null_mut(), 0, &mut result);
         if status_code != STATUS_BUFFER_TOO_SMALL {
             anyhow::bail!("recv size: {:X}", status_code);
         }
@@ -39,7 +34,7 @@ fn get_bios_unique_id() -> anyhow::Result<Option<String>> {
     buffer.resize(table_size, 0);
     let table_size = unsafe {
         let mut result = 0;
-        let status_code = (GLOBAL_IMPORTS.unwrap().ExGetSystemFirmwareTable)(
+        let status_code = ExGetSystemFirmwareTable(
             FT_PROVIDER_RSMB,
             0,
             buffer.as_mut_ptr() as PVOID,

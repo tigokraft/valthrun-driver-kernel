@@ -1,14 +1,21 @@
+#![allow(static_mut_refs)]
+
 use alloc::{
     ffi::CString,
     format,
 };
+use core::mem;
 
 use kdef::DPFLTR_LEVEL;
 use obfstr::obfstr;
+use winapi::shared::ntdef::NTSTATUS;
 
-use crate::panic_hook::DEBUG_IMPORTS;
+type DbgPrintEx =
+    unsafe extern "C" fn(ComponentId: u32, Level: u32, Format: *const u8, ...) -> NTSTATUS;
 
-pub struct KernelLogger;
+pub struct KernelLogger {
+    dbg_print_ex: DbgPrintEx,
+}
 
 impl log::Log for KernelLogger {
     fn enabled(&self, metadata: &log::Metadata) -> bool {
@@ -29,15 +36,6 @@ impl log::Log for KernelLogger {
         if !self.enabled(record.metadata()) {
             return;
         }
-
-        let imports = match DEBUG_IMPORTS.get() {
-            Some(imports) => imports,
-            /*
-             * Debug imports have not been initialized.
-             * To avoid infinite looping, we must avoid initializing them.
-             */
-            None => return,
-        };
 
         let (level_prefix, log_level) = match record.level() {
             log::Level::Trace => ("T", DPFLTR_LEVEL::TRACE),
@@ -63,7 +61,7 @@ impl log::Log for KernelLogger {
         };
 
         unsafe {
-            (imports.DbgPrintEx)(
+            (self.dbg_print_ex)(
                 77, /* DPFLTR_IHVDRIVER_ID */
                 log_level as u32,
                 obfstr!("[VT]%s\n\0").as_ptr(),
@@ -75,4 +73,15 @@ impl log::Log for KernelLogger {
     fn flush(&self) {}
 }
 
-pub static APP_LOGGER: KernelLogger = KernelLogger;
+static mut APP_LOGGER: Option<KernelLogger> = None;
+pub fn get_logger_instance() -> &'static KernelLogger {
+    unsafe {
+        APP_LOGGER.get_or_insert_with(|| {
+            KernelLogger {
+                dbg_print_ex: mem::transmute(
+                    utils_imports::resolve_system(None, "DbgPrintEx").as_ptr(),
+                ),
+            }
+        })
+    }
+}
