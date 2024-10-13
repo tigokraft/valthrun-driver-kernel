@@ -29,6 +29,7 @@ lazy_link = "0.1.1"
 
 [dependencies.compiler_builtins]
 git = "https://github.com/rust-lang/compiler-builtins"
+version = "0.1.132"
 features = ["mem"]
 
 [dependencies.winapi]

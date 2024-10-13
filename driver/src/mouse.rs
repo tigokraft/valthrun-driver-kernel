@@ -124,12 +124,22 @@ fn find_mouse_service_callback() -> anyhow::Result<MouseClassServiceCallbackFn> 
     let module_kdbclass = KModule::find_by_name(obfstr!("mouclass.sys"))?
         .with_context(|| anyhow!("failed to locate {} module", obfstr!("mouclass.sys")))?;
 
-    [/* Windows 11 */ Signature::relative_address(
-        obfstr!("MouseClassServiceCallback"),
-        obfstr!("48 8D 05 ? ? ? ? 48 89 44"),
-        0x03,
-        0x07,
-    )]
+    // 48 8D 05 ? ? ? ? 48 89 44
+    [
+        Signature::relative_address(
+            obfstr!("MouseClassServiceCallback"),
+            obfstr!("48 8D 05 ? ? ? ? 48 89 44"),
+            0x03,
+            0x07,
+        ),
+        /* Windows 11 */
+        Signature::relative_address(
+            obfstr!("MouseClassServiceCallback"),
+            obfstr!("48 8D 05 ? ? ? ? 48 89 44"),
+            0x03,
+            0x07,
+        ),
+    ]
     .iter()
     .find_map(|sig| NtOffsets::locate_signature(&module_kdbclass, sig).ok())
     .map(|v| unsafe { core::mem::transmute_copy(&v) })
