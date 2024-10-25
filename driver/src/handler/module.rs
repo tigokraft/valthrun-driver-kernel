@@ -22,6 +22,14 @@ pub fn handler_get_modules(
     req: &RequestProcessModules,
     res: &mut ResponseProcessModules,
 ) -> anyhow::Result<()> {
+    handler_get_modules_internal(req, res, false)
+}
+
+pub fn handler_get_modules_internal(
+    req: &RequestProcessModules,
+    res: &mut ResponseProcessModules,
+    kernel_filter: bool,
+) -> anyhow::Result<()> {
     let module_buffer = unsafe {
         if !seh::probe_write(
             req.module_buffer as u64,
@@ -38,7 +46,7 @@ pub fn handler_get_modules(
         ProcessFilter::Id { id } => Process::by_id(id).map(|p| vec![p]).unwrap_or_default(),
         ProcessFilter::Name { name, name_length } => {
             let name = unsafe {
-                if !seh::probe_read(name as u64, name_length, 0x01) {
+                if !kernel_filter && !seh::probe_read(name as u64, name_length, 0x01) {
                     anyhow::bail!("{}", obfstr!("name buffer not readable"));
                 }
 
