@@ -95,6 +95,12 @@ pub fn initialize_nt_offsets() -> anyhow::Result<()> {
 
     let ps_get_next_process = {
         [
+            Signature::relative_address(
+                obfstr!("PsGetNextProcess (2600.1252)"),
+                obfstr!("E8 ? ? ? ? 48 8B D8 48 89 44 24 ? 48 85 C0 48"),
+                0x01,
+                0x05,
+            ),
             /* Windows 11 */
             Signature::relative_address(
                 obfstr!("PsGetNextProcess (Win 11)"),
@@ -117,19 +123,26 @@ pub fn initialize_nt_offsets() -> anyhow::Result<()> {
     };
 
     let mm_verify_callback_function_flags = {
-        if let Ok(target) = find_mm_verify_callback_function_flags_new(&ntoskrnl) {
-            unsafe { core::mem::transmute_copy::<_, _>(&target) }
-        } else {
-            log::debug!("{}", obfstr!("Failed to resolve MmVerifyCallbackFunctionFlags by instruction pattern. Try old pattern."));
-            if let Ok(target) = find_mm_verify_callback_function_flags_old(&ntoskrnl) {
-                unsafe { core::mem::transmute_copy::<_, _>(&target) }
-            } else {
-                anyhow::bail!(
-                    "{}",
-                    obfstr!("Failed to resolve MmVerifyCallbackFunctionFlags")
-                )
-            }
-        }
+        [
+            Signature::relative_address(
+                obfstr!("MmVerifyCallbackFunctionFlags (2600.1252)"),
+                obfstr!("E8 ? ? ? ? 85 C0 74 6F 48 8B 4E"),
+                0x01,
+                0x05,
+            ),
+            Signature::pattern(
+                obfstr!("MmVerifyCallbackFunctionFlags (Win 11)"),
+                obfstr!("48 89 5C 24 ? 48 89 6C 24 ? 48 89 74 24 ? 57 48 83 EC 20 8B FA 48 8B F1"),
+            ),
+            Signature::pattern(
+                obfstr!("MmVerifyCallbackFunctionFlags"),
+                obfstr!("E8 ?? ?? ?? ?? 85 C0 0F 84 ?? ?? ?? ?? 48 8B 4D 00"),
+            ),
+        ]
+        .iter()
+        .find_map(|sig| NtOffsets::locate_signature(&ntoskrnl, sig).ok())
+        .map(|v| unsafe { core::mem::transmute_copy(&v) })
+        .with_context(|| obfstr!("Failed to find MmVerifyCallbackFunctionFlags").to_string())?
     };
 
     log::debug!(
@@ -141,6 +154,12 @@ pub fn initialize_nt_offsets() -> anyhow::Result<()> {
     );
     let eprocess_thread_list_head = {
         [
+            Signature::offset(
+                obfstr!("_EPROCESS.ThreadListHead (2600.1252)"),
+                obfstr!("4C 8D B1 ? ? ? ? 33 ED 45"),
+                0x03,
+            ),
+
             /* Windows 11 */
             Signature::offset(
                 obfstr!("_EPROCESS.ThreadListHead (Win 11)"),

@@ -220,8 +220,8 @@ dependencies = [
 
 [[package]]
 name = "compiler_builtins"
-version = "0.1.129"
-source = "git+https://github.com/rust-lang/compiler-builtins#40015f2ba8ed2e21203edaa53a248b040974caf7"
+version = "0.1.133"
+source = "git+https://github.com/rust-lang/compiler-builtins#cb060052ab7e4bad408c85d44be7e60096e93e38"
 
 [[package]]
 name = "const-oid"

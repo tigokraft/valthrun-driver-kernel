@@ -58,3 +58,10 @@ pub unsafe extern "C" fn __CxxFrameHandler3() {
         KeBugCheck(BUGCHECK_CODE_CXX_FRAME);
     }
 }
+
+#[no_mangle]
+extern "C" fn __chkstk() {
+    use core::arch::asm;
+
+    // unsafe { asm!("int 3") };
+}
