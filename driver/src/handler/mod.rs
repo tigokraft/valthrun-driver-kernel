@@ -1,7 +1,8 @@
-use valthrun_driver_shared::requests::DriverRequest;
-
-mod cs_module;
-pub use cs_module::*;
+use alloc::{
+    boxed::Box,
+    format,
+};
+use core::mem;
 
 mod memory_read;
 pub use memory_read::*;
@@ -23,82 +24,81 @@ pub use metrics::*;
 
 mod module;
 pub use module::*;
+use valthrun_driver_protocol::{
+    command::DriverCommand,
+    utils::str_to_fixed_buffer,
+    CommandResult,
+};
 
-pub const FUNCTION_CODE_MAX: usize = 0x10;
-
-type RequestHandlerGeneric = dyn (Fn(&(), &mut ()) -> anyhow::Result<()>) + Send + Sync;
-struct HandlerInfo {
-    handler: &'static RequestHandlerGeneric,
-    input_buffer_size: usize,
-    output_buffer_size: usize,
+trait HandlerInvoker: Send + Sync {
+    fn invoke(&self, command: &mut [u8], error_buffer: &mut [u8]) -> CommandResult;
 }
 
-/// Request handler registry for handling kernel requests.
+struct HandlerImpl<C: DriverCommand + 'static> {
+    inner: &'static (dyn Fn(&mut C) -> anyhow::Result<()> + Send + Sync),
+}
+
+impl<C: DriverCommand + 'static> HandlerInvoker for HandlerImpl<C> {
+    fn invoke(&self, command: &mut [u8], error_buffer: &mut [u8]) -> CommandResult {
+        if mem::size_of::<C>() != command.len() {
+            let message = format!(
+                "command size miss match (expected {}, received: {})",
+                mem::size_of::<C>(),
+                command.len()
+            );
+
+            str_to_fixed_buffer(error_buffer, &message);
+            return CommandResult::CommandParameterInvalid;
+        }
+
+        let command = unsafe { &mut *(command.as_mut_ptr() as *mut C) };
+        match (self.inner)(command) {
+            Ok(_) => CommandResult::Success,
+            Err(error) => {
+                let message = format!("{:#}", error);
+                str_to_fixed_buffer(error_buffer, &message);
+                return CommandResult::Error;
+            }
+        }
+    }
+}
+
 pub struct HandlerRegistry {
-    handlers: [Option<HandlerInfo>; FUNCTION_CODE_MAX],
+    handler: [Option<Box<dyn HandlerInvoker>>; 0x20],
 }
 
+pub const COMMAND_ID_MAX: u32 = 0x10;
 impl HandlerRegistry {
     pub fn new() -> Self {
-        const INIT: Option<HandlerInfo> = None;
         Self {
-            handlers: [INIT; FUNCTION_CODE_MAX],
+            handler: [const { None }; 0x20],
         }
     }
 
-    /// Register a request handler.
-    /// Attention:
-    /// The input and output function parameters are all located in the callers user space!
-    /// The struct itself has been probed for read & write and is therefore ensured to be valid.
-    pub fn register<R: DriverRequest>(
+    pub fn register<C: DriverCommand>(
         &mut self,
-        handler: &'static dyn Fn(&R, &mut R::Result) -> anyhow::Result<()>,
+        handler: &'static (dyn Fn(&mut C) -> anyhow::Result<()> + Send + Sync),
     ) {
-        assert!((R::function_code() as usize) < FUNCTION_CODE_MAX);
-        self.handlers[R::function_code() as usize] = Some(HandlerInfo {
-            handler: unsafe { core::mem::transmute(handler) },
-            input_buffer_size: core::mem::size_of::<R>(),
-            output_buffer_size: core::mem::size_of::<R::Result>(),
-        });
+        assert!(C::COMMAND_ID < COMMAND_ID_MAX);
+        self.handler[C::COMMAND_ID as usize] = Some(Box::new(HandlerImpl { inner: handler }))
     }
 
     pub fn handle(
         &self,
-        irp_request_code: u32,
-        inbuffer: &[u8],
-        outbuffer: &mut [u8],
-    ) -> anyhow::Result<()> {
-        let function_code = ((irp_request_code >> 2) & 0x3F) as usize;
-        if function_code >= FUNCTION_CODE_MAX {
-            anyhow::bail!("invalid function code (0x{:X})", function_code)
+        command_id: u32,
+        command: &mut [u8],
+        error_buffer: &mut [u8],
+    ) -> CommandResult {
+        if command_id >= COMMAND_ID_MAX {
+            return CommandResult::CommandInvalid;
         }
 
-        let handler = match &self.handlers[function_code as usize] {
+        let handler = match &self.handler[command_id as usize] {
             Some(handler) => handler,
-            None => anyhow::bail!("function 0x{:X} has no handler", function_code),
+            None => return CommandResult::CommandInvalid,
         };
 
-        if handler.input_buffer_size != inbuffer.len() {
-            anyhow::bail!(
-                "inbuffer size miss match (expected {}, received: {})",
-                handler.input_buffer_size,
-                inbuffer.len()
-            )
-        }
-
-        if handler.output_buffer_size != outbuffer.len() {
-            anyhow::bail!(
-                "outbuffer size miss match (expected {}, received: {})",
-                handler.output_buffer_size,
-                outbuffer.len()
-            )
-        }
-
-        unsafe {
-            (*handler.handler)(
-                &*(inbuffer.as_ptr() as *const ()),
-                &mut *(outbuffer.as_mut_ptr() as *mut ()),
-            )
-        }
+        //log::trace!("Invoking handler 0x{:X}", function_code);
+        handler.invoke(command, error_buffer)
     }
 }

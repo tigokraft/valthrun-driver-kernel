@@ -1,65 +1,64 @@
 use obfstr::obfstr;
-use valthrun_driver_shared::requests::{
-    ControllerInfo,
-    DriverInfo,
-    RequestInitialize,
-    ResponseInitialize,
-    INIT_STATUS_CONTROLLER_OUTDATED,
-    INIT_STATUS_DRIVER_OUTDATED,
-    INIT_STATUS_SUCCESS,
+use valthrun_driver_protocol::{
+    command::{
+        DriverCommandInitialize,
+        InitializeResult,
+        VersionInfo,
+    },
+    types::DriverFeature,
+    PROTOCOL_VERSION,
 };
 
-fn driver_version() -> u32 {
-    let major = env!("CARGO_PKG_VERSION_MAJOR").parse::<u32>().unwrap();
-    let minor = env!("CARGO_PKG_VERSION_MINOR").parse::<u32>().unwrap();
-    let patch = env!("CARGO_PKG_VERSION_PATCH").parse::<u32>().unwrap();
-    return (major << 24) | (minor << 16) | (patch << 8);
+use crate::{
+    KEYBOARD_INPUT,
+    METRICS_CLIENT,
+    MOUSE_INPUT,
+};
+
+fn driver_version() -> VersionInfo {
+    let mut info = VersionInfo::default();
+    info.set_application_name(obfstr!("kernel-driver"));
+
+    info.version_major = env!("CARGO_PKG_VERSION_MAJOR").parse::<u32>().unwrap();
+    info.version_minor = env!("CARGO_PKG_VERSION_MINOR").parse::<u32>().unwrap();
+    info.version_patch = env!("CARGO_PKG_VERSION_PATCH").parse::<u32>().unwrap();
+
+    return info;
 }
 
-pub fn handler_init(req: &RequestInitialize, res: &mut ResponseInitialize) -> anyhow::Result<()> {
-    res.status_code = INIT_STATUS_SUCCESS;
-    res.driver_version = driver_version();
-
-    if res.driver_version < req.target_version {
-        /* driver is outdated */
-        log::debug!(
-            "{}. Requested: {:X}, Current: {:X}",
-            obfstr!("Received init request for version which is newer then the current version"),
-            req.target_version,
-            res.driver_version
-        );
-        res.status_code = INIT_STATUS_DRIVER_OUTDATED;
-        return Ok(());
-    }
-    if req.target_version > res.driver_version {
-        /* Newer version requested. Assuming currently everything is a breaking change. */
-        res.status_code = INIT_STATUS_CONTROLLER_OUTDATED;
+pub fn handler_init(command: &mut DriverCommandInitialize) -> anyhow::Result<()> {
+    command.driver_protocol_version = PROTOCOL_VERSION;
+    if command.client_protocol_version != PROTOCOL_VERSION {
         return Ok(());
     }
 
-    let _controller_info = unsafe {
-        if !seh::probe_read(req.controller_info as u64, req.controller_info_length, 0x01) {
-            anyhow::bail!("{}", obfstr!("faild to read controller info"));
-        }
-
-        if req.controller_info_length < core::mem::size_of::<ControllerInfo>() {
-            anyhow::bail!("{}", obfstr!("unexpected driver info size"));
-        }
-
-        &*req.controller_info
+    let feature_mouse = if unsafe { &*MOUSE_INPUT.get() }.is_some() {
+        DriverFeature::InputMouse
+    } else {
+        DriverFeature::empty()
     };
 
-    let _driver_info = unsafe {
-        if !seh::probe_write(req.driver_info as u64, req.driver_info_length, 0x01) {
-            anyhow::bail!("{}", obfstr!("faild to write driver info"));
-        }
-
-        if req.driver_info_length < core::mem::size_of::<DriverInfo>() {
-            anyhow::bail!("{}", obfstr!("unexpected driver info size"));
-        }
-
-        &mut *req.driver_info
+    let feature_keyboard = if unsafe { &*KEYBOARD_INPUT.get() }.is_some() {
+        DriverFeature::InputKeyboard
+    } else {
+        DriverFeature::empty()
     };
+
+    let feature_metrics = if unsafe { &*METRICS_CLIENT.get() }.is_some() {
+        DriverFeature::Metrics
+    } else {
+        DriverFeature::empty()
+    };
+
+    command.result = InitializeResult::Success;
+    command.driver_version = driver_version();
+    command.driver_features = DriverFeature::ProcessModules |
+        DriverFeature::MemoryRead |
+        DriverFeature::MemoryWrite |
+        feature_mouse |
+        feature_keyboard |
+        feature_metrics |
+        DriverFeature::ProcessProtectionKernel;
 
     Ok(())
 }

@@ -5,7 +5,6 @@ use kdef::{
     _KAPC_STATE,
     _LDR_DATA_TABLE_ENTRY,
 };
-use valthrun_driver_shared::ModuleInfo;
 use winapi::{
     km::wdm::PEPROCESS,
     shared::ntdef::{
@@ -131,7 +130,7 @@ impl AttachedProcess<'_> {
             };
             let base_name = entry.BaseDllName.as_string_lossy();
             let mut module_info = ModuleInfo {
-                base_dll_name: [0u8; 0xFF],
+                base_dll_name: [0u8; 0x100],
                 base_address: entry.DllBase as usize,
                 module_size: entry.SizeOfImage as usize,
             };
@@ -153,4 +152,11 @@ impl Drop for AttachedProcess<'_> {
     fn drop(&mut self) {
         unsafe { KeUnstackDetachProcess(&mut self.apc_state) };
     }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct ModuleInfo {
+    pub base_dll_name: [u8; 0x100],
+    pub base_address: usize,
+    pub module_size: usize,
 }

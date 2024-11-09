@@ -92,6 +92,15 @@ extern "C" {
     pub fn MmGetSystemRoutineAddress(system_routine_name: *const UNICODE_STRING) -> PVOID;
     //pub MmSystemRangeStart: MmSystemRangeStart = SystemExport::new(obfstr!("MmSystemRangeStart")),
 
+    pub fn IoCreateDevice(
+        DriverObject: *mut DRIVER_OBJECT,
+        DeviceExtensionSize: u32,
+        DeviceName: PCUNICODE_STRING,
+        DeviceType: DEVICE_TYPE,
+        DeviceCharacteristics: u32,
+        Exclusive: BOOLEAN,
+        DeviceObject: *mut PDEVICE_OBJECT,
+    ) -> NTSTATUS;
     pub fn IoCreateDeviceSecure(
         DriverObject: *mut DRIVER_OBJECT,
         DeviceExtensionSize: u32,

@@ -12,7 +12,7 @@ use core::{
 
 use anyhow::Context;
 use obfstr::obfstr;
-use valthrun_driver_shared::SearchPattern;
+use utils_pattern::SearchPattern;
 use winapi::{
     shared::{
         ntdef::PVOID,

@@ -17,6 +17,7 @@ use kdef::{
     IRP_MJ_SHUTDOWN,
 };
 use obfstr::obfstr;
+use valthrun_driver_protocol::CommandResult;
 use winapi::{
     km::{
         ntifs::DEVICE_FLAGS,
@@ -141,7 +142,7 @@ fn irp_control(_device: &mut ValthrunDeviceHandle, irp: &mut IRP) -> NTSTATUS {
     let outbuffer = irp.UserBuffer;
     let stack = unsafe { &mut *IoGetCurrentIrpStackLocation(irp) };
     let param = unsafe { stack.Parameters.DeviceIoControl() };
-    let request_code = param.IoControlCode;
+    let command_id = ((param.IoControlCode >> 2) & 0x3F) as u32;
 
     let handler = match unsafe { REQUEST_HANDLER.get().as_ref() }
         .map(Option::as_ref)
@@ -154,33 +155,34 @@ fn irp_control(_device: &mut ValthrunDeviceHandle, irp: &mut IRP) -> NTSTATUS {
         }
     };
 
-    /* Note: We do not lock the buffers as it's a sync call and the user should not be able to free the input buffers. */
-    let inbuffer = unsafe {
-        core::slice::from_raw_parts(
-            param.Type3InputBuffer as *const u8,
+    // Note:
+    // We do not lock the buffers as it's a sync call and the user should not be able to free the input buffers.
+    let command_buffer = unsafe {
+        core::slice::from_raw_parts_mut(
+            param.Type3InputBuffer as *mut u8,
             param.InputBufferLength as usize,
         )
     };
 
-    if !seh::probe_read(inbuffer.as_ptr() as u64, inbuffer.len(), 1) {
-        log::warn!("IRP request inbuffer invalid");
+    if !seh::probe_write(command_buffer.as_ptr() as u64, command_buffer.len(), 1) {
+        log::warn!("IRP request command buffer invalid");
         return irp.complete_request(STATUS_INVALID_PARAMETER);
     }
 
-    let outbuffer = unsafe {
+    let error_buffer = unsafe {
         core::slice::from_raw_parts_mut(outbuffer as *mut u8, param.OutputBufferLength as usize)
     };
-    if !seh::probe_write(outbuffer.as_ptr() as u64, outbuffer.len(), 1) {
-        log::warn!("IRP request outbuffer invalid");
+    if !seh::probe_write(error_buffer.as_ptr() as u64, error_buffer.len(), 1) {
+        log::warn!("IRP request error buffer invalid");
         return irp.complete_request(STATUS_INVALID_PARAMETER);
     }
 
-    match handler.handle(request_code, inbuffer, outbuffer) {
-        Ok(_) => irp.complete_request(STATUS_SUCCESS),
-        Err(error) => {
-            log::error!("IRP handle error: {}", error);
-            irp.complete_request(STATUS_INVALID_PARAMETER)
-        }
+    let handle_result = handler.handle(command_id, command_buffer, error_buffer);
+    if handle_result == CommandResult::Success {
+        irp.complete_request(STATUS_SUCCESS)
+    } else {
+        log::error!("IRP handle error: 0x{:X}", handle_result.bits());
+        irp.complete_request(STATUS_INVALID_PARAMETER)
     }
 }
 

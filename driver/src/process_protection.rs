@@ -29,7 +29,7 @@ use kdef::{
 use log::Level;
 use obfstr::obfstr;
 use once_cell::race::OnceBox;
-use valthrun_driver_shared::ByteSequencePattern;
+use utils_pattern::ByteSequencePattern;
 use winapi::shared::ntdef::{
     PVOID,
     UNICODE_STRING,

@@ -16,7 +16,7 @@ use core::{
 use anyhow::Context;
 use kapi_kmodule::KModule;
 use obfstr::obfstr;
-use valthrun_driver_shared::{
+use utils_pattern::{
     ByteSequencePattern,
     SearchPattern,
 };

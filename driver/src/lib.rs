@@ -25,7 +25,6 @@ use metrics::{
 };
 use mouse::MouseInput;
 use obfstr::obfstr;
-use valthrun_driver_shared::requests::RequestHealthCheck;
 use vtk_wsk::WskInstance;
 use winapi::{
     km::wdm::DRIVER_OBJECT,
@@ -37,7 +36,6 @@ use winapi::{
 
 use crate::{
     handler::{
-        handler_get_cs2_modules,
         handler_init,
         handler_keyboard_state,
         handler_metrics_record,
@@ -231,19 +229,18 @@ pub fn internal_driver_entry(driver: &mut DRIVER_OBJECT) -> NTSTATUS {
 
     let mut handler = Box::new(HandlerRegistry::new());
 
-    handler.register(&|_req: &RequestHealthCheck, res| {
-        res.success = true;
-        Ok(())
-    });
-    handler.register(&handler_get_cs2_modules);
+    handler.register(&handler_init);
+
     handler.register(&handler_read);
     handler.register(&handler_write);
+
+    handler.register(&handler_get_modules);
     handler.register(&handler_protection_toggle);
+
     handler.register(&handler_mouse_move);
     handler.register(&handler_keyboard_state);
-    handler.register(&handler_init);
+
     handler.register(&handler_metrics_record);
-    handler.register(&handler_get_modules);
 
     unsafe { *REQUEST_HANDLER.get() = Some(handler) };
 

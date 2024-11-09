@@ -23,10 +23,8 @@ use kdef::{
     KEYBOARD_INPUT_DATA,
 };
 use obfstr::obfstr;
-use valthrun_driver_shared::{
-    KeyboardState,
-    Signature,
-};
+use utils_pattern::Signature;
+use valthrun_driver_protocol::command::KeyboardState;
 use winapi::{
     km::wdm::DRIVER_OBJECT,
     shared::ntdef::{

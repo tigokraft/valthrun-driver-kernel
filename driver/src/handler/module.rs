@@ -6,47 +6,45 @@ use core::{
 
 use kapi::Process;
 use obfstr::obfstr;
-use valthrun_driver_shared::{
-    requests::{
-        ProcessFilter,
-        RequestProcessModules,
-        ResponseProcessModules,
+use valthrun_driver_protocol::{
+    command::{
+        DriverCommandProcessModules,
+        ProcessModulesResult,
     },
-    ModuleInfo,
-    ProcessModuleInfo,
+    types::{
+        ProcessFilter,
+        ProcessModuleInfo,
+    },
 };
 
 use crate::util::kprocess;
 
-pub fn handler_get_modules(
-    req: &RequestProcessModules,
-    res: &mut ResponseProcessModules,
-) -> anyhow::Result<()> {
-    handler_get_modules_internal(req, res, false)
-}
-
-pub fn handler_get_modules_internal(
-    req: &RequestProcessModules,
-    res: &mut ResponseProcessModules,
-    kernel_filter: bool,
-) -> anyhow::Result<()> {
+pub fn handler_get_modules(command: &mut DriverCommandProcessModules) -> anyhow::Result<()> {
     let module_buffer = unsafe {
         if !seh::probe_write(
-            req.module_buffer as u64,
-            req.module_buffer_length * size_of::<ModuleInfo>(),
+            command.module_buffer as u64,
+            command.module_buffer_length * size_of::<ProcessModuleInfo>(),
             0x01,
         ) {
             anyhow::bail!("{}", obfstr!("response buffer not writeable"));
         }
 
-        core::slice::from_raw_parts_mut(req.module_buffer, req.module_buffer_length)
+        core::slice::from_raw_parts_mut(command.module_buffer, command.module_buffer_length)
     };
 
-    let process_candidates = match req.filter {
-        ProcessFilter::Id { id } => Process::by_id(id).map(|p| vec![p]).unwrap_or_default(),
-        ProcessFilter::Name { name, name_length } => {
+    let process_candidates = match command.target_process {
+        ProcessFilter::None => {
+            command.result = ProcessModulesResult::ProcessUnknown;
+            return Ok(());
+        }
+        ProcessFilter::Id { id } => {
+            Process::by_id(id as i32)
+                .map(|p| vec![p])
+                .unwrap_or_default()
+        }
+        ProcessFilter::ImageBaseName { name, name_length } => {
             let name = unsafe {
-                if !kernel_filter && !seh::probe_read(name as u64, name_length, 0x01) {
+                if !seh::probe_read(name as u64, name_length, 0x01) {
                     anyhow::bail!("{}", obfstr!("name buffer not readable"));
                 }
 
@@ -60,20 +58,20 @@ pub fn handler_get_modules_internal(
 
     let process = match process_candidates.len() {
         0 => {
-            *res = ResponseProcessModules::NoProcess;
+            command.result = ProcessModulesResult::ProcessUnknown;
             return Ok(());
         }
         1 => process_candidates.first().unwrap(),
-        count => {
-            *res = ResponseProcessModules::UbiquitousProcesses(count);
+        _count => {
+            command.result = ProcessModulesResult::ProcessUbiquitous;
             return Ok(());
         }
     };
 
-    let process_id = process.get_id();
+    command.process_id = process.get_id() as u32;
     log::trace!(
         "Found process id {}. PEP at {:X}",
-        process_id,
+        command.process_id,
         process.eprocess() as u64
     );
 
@@ -82,18 +80,21 @@ pub fn handler_get_modules_internal(
         attached_process.get_modules()
     };
 
+    command.module_count = modules.len();
     if modules.len() > module_buffer.len() {
-        *res = ResponseProcessModules::BufferTooSmall {
-            expected: modules.len(),
-        };
+        command.result = ProcessModulesResult::BufferTooSmall;
         return Ok(());
     }
 
-    module_buffer[0..modules.len()].copy_from_slice(&modules);
+    for index in 0..modules.len() {
+        let output = &mut module_buffer[index];
+        let input = &modules[index];
 
-    let mut module_info: ProcessModuleInfo = Default::default();
-    module_info.process_id = process_id;
-    module_info.module_count = modules.len();
-    *res = ResponseProcessModules::Success(module_info);
+        output.base_dll_name.copy_from_slice(&input.base_dll_name);
+        output.base_address = input.base_address as u64;
+        output.module_size = input.module_size as u64;
+    }
+
+    command.result = ProcessModulesResult::Success;
     Ok(())
 }

@@ -1,9 +1,8 @@
 use kapi::Process;
 use obfstr::obfstr;
-use valthrun_driver_shared::requests::{
-    MemoryAccessMode,
-    RequestWrite,
-    ResponseWrite,
+use valthrun_driver_protocol::{
+    command::DriverCommandProcessMemoryWrite,
+    types::MemoryAccessResult,
 };
 use winapi::{
     km::wdm::KPROCESSOR_MODE,
@@ -62,42 +61,37 @@ fn write_memory_mm(ctx: &WriteContext) -> bool {
     }
 }
 
-pub fn handler_write(req: &RequestWrite, res: &mut ResponseWrite) -> anyhow::Result<()> {
+pub fn handler_write(command: &mut DriverCommandProcessMemoryWrite) -> anyhow::Result<()> {
     let buffer = unsafe {
-        if !seh::probe_read(req.buffer as u64, req.count, 0x01) {
+        if !seh::probe_read(command.buffer as u64, command.count, 0x01) {
             anyhow::bail!("{}", obfstr!("output buffer is not writeable"))
         }
 
-        core::slice::from_raw_parts(req.buffer, req.count)
+        core::slice::from_raw_parts(command.buffer, command.count)
     };
 
-    let process = match Process::by_id(req.process_id) {
+    let process = match Process::by_id(command.process_id as i32) {
         Some(process) => process,
         None => {
-            *res = ResponseWrite::UnknownProcess;
+            command.result = MemoryAccessResult::ProcessUnknown;
             return Ok(());
         }
     };
 
     let ctx = WriteContext {
         process: &process,
-        address: req.address as u64,
+        address: command.address as u64,
         buffer,
     };
-    let success: bool = match req.mode {
-        MemoryAccessMode::AttachProcess => write_memory_attached(&ctx),
-        MemoryAccessMode::CopyVirtualMemory => write_memory_mm(&ctx),
-        _ => {
-            *res = ResponseWrite::UnsuppportedAccessMode;
-            return Ok(());
-        }
-    };
+
+    let success = write_memory_attached(&ctx);
+    // let success = write_memory_mm(&ctx);
 
     if !success {
-        *res = ResponseWrite::InvalidAddress;
+        command.result = MemoryAccessResult::PartialSuccess { bytes_copied: 0 };
         return Ok(());
     }
 
-    *res = ResponseWrite::Success;
-    return Ok(());
+    command.result = MemoryAccessResult::Success;
+    Ok(())
 }

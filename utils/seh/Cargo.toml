@@ -11,14 +11,10 @@ utils-imports = { version = "0.1.0", path = "../imports" }
 obfstr = "0.4.3"
 anyhow = { version = "1.0", default-features = false }
 kapi-kmodule = { version = "0.1.0", path = "../kapi-kmodule" }
-valthrun-driver-shared = { version = "0.1.0", path = "../../shared" }
 lazy_link = "0.1.1"
+utils-pattern = { version = "0.1.0", path = "../pattern" }
 
 [dependencies.winapi]
 git = "https://github.com/Trantect/winapi-rs.git"
 branch = "feature/km"
-features = [
-    "wdm",
-    "ntstatus",
-    "impl-default"
-]
+features = ["wdm", "ntstatus", "impl-default"]

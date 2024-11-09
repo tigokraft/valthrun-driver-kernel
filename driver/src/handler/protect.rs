@@ -1,9 +1,9 @@
 use kapi::Process;
 use kdef::ProcessProtectionInformation;
 use obfstr::obfstr;
-use valthrun_driver_shared::requests::{
-    RequestProtectionToggle,
-    ResponseProtectionToggle,
+use valthrun_driver_protocol::command::{
+    DriverCommandProcessProtection,
+    ProcessProtectionMode,
 };
 
 use crate::process_protection;
@@ -45,13 +45,14 @@ pub fn protect_process(process: &Process) {
 }
 
 pub fn handler_protection_toggle(
-    req: &RequestProtectionToggle,
-    _res: &mut ResponseProtectionToggle,
+    command: &mut DriverCommandProcessProtection,
 ) -> anyhow::Result<()> {
-    let process = Process::current();
-    process_protection::toggle_protection(process.get_id(), req.enabled);
+    let enabled = matches!(command.mode, ProcessProtectionMode::Kernel);
 
-    if req.enabled {
+    let process = Process::current();
+    process_protection::toggle_protection(process.get_id(), enabled);
+
+    if enabled {
         protect_process(&process);
     }
 

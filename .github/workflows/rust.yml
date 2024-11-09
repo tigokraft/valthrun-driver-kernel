@@ -2,7 +2,7 @@ name: Rust
 
 on:
   push:
-    branches: ["master", "uefi"]
+    branches: ['master', 'uefi']
 
 env:
   CARGO_TERM_COLOR: always
@@ -33,9 +33,18 @@ jobs:
         with:
           toolchain: nightly-2024-09-25
           target: x86_64-unknown-uefi
+
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+
+      - name: Get package version
+        shell: bash
+        run: |
+          VERSION=$(cargo pkgid --manifest-path driver-standalone/Cargo.toml | cut -d# -f2 | cut -d: -f2 | cut -d@ -f2)
+          echo "Package version: $VERSION"
+          echo "ARTIFACT_VERSION=$VERSION" >> "$GITHUB_ENV"
+
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
@@ -43,12 +52,13 @@ jobs:
 
       - name: Build Driver
         run: ./.github/workflows/build-driver.ps1
-      - uses: actions/upload-artifact@v4
-        with:
-          name: valthrun-driver-standalone
-          path: |
-            target/x86_64-pc-windows-msvc/release/valthrun-driver.sys
-            target/x86_64-pc-windows-msvc/release/driver_standalone.pdb
+
+      - name: Upload release build to portal
+        shell: bash
+        run: .github/workflows/artifact_upload.sh kernel-driver target/x86_64-pc-windows-msvc/release/valthrun-driver.sys target/x86_64-pc-windows-msvc/release/driver_standalone.pdb
+        if: ${{ github.event_name != 'pull_request' }}
+        env:
+          ARTIFACT_API_KEY: ${{ secrets.ARTIFACT_API_KEY }}
 
   build-uefi:
     runs-on: windows-latest
@@ -60,9 +70,11 @@ jobs:
         with:
           toolchain: nightly-2024-09-25
           target: x86_64-unknown-uefi
+
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
@@ -70,6 +82,7 @@ jobs:
 
       - name: Build UEFI Driver
         run: ./.github/workflows/build-driver-uefi.ps1
+
       - uses: actions/upload-artifact@v4
         id: uefi-driver-upload
         with:

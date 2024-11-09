@@ -14,7 +14,7 @@ use kapi_kmodule::{
     KModuleSection,
 };
 use obfstr::obfstr;
-use valthrun_driver_shared::{
+use utils_pattern::{
     ByteSequencePattern,
     SearchPattern,
     Signature,

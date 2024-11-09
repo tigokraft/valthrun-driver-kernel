@@ -61,7 +61,5 @@ pub unsafe extern "C" fn __CxxFrameHandler3() {
 
 #[no_mangle]
 extern "C" fn __chkstk() {
-    use core::arch::asm;
-
     // unsafe { asm!("int 3") };
 }

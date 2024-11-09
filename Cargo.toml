@@ -1,7 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
-    "shared",
+    "valthrun-driver-protocol",
 
     "utils/kernelbase",
     "utils/wdk-locator",
@@ -12,6 +12,7 @@ members = [
     "utils/kapi",
     "utils/imports",
     "utils/wsk",
+    "utils/pattern",
 
     "driver",
     "driver-uefi",
