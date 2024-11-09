@@ -16,7 +16,7 @@ members = [
 
     "driver",
     "driver-uefi",
-    "driver-standalone",
+    "driver-standalone", "driver-interface",
 ]
 
 [profile.dev]
