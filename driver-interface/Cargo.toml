@@ -1,8 +1,8 @@
 [package]
-name = "valthrun-driver-kernel"
+name = "driver-interface-kernel"
 version = "0.1.0"
 edition = "2021"
-description = "Valthrun Kernel Driver memory interface implementation"
+description = "Valthrun Driver Interface for the Kernel Driver"
 
 [lib]
 crate-type = ["cdylib"]

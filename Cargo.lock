@@ -333,6 +333,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "driver-interface-kernel"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "obfstr",
+ "valthrun-driver-protocol",
+ "windows",
+]
+
+[[package]]
 name = "driver-standalone"
 version = "0.2.2"
 dependencies = [
@@ -1333,16 +1343,6 @@ dependencies = [
 [[package]]
 name = "utils-pattern"
 version = "0.1.0"
-
-[[package]]
-name = "valthrun-driver-kernel"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "obfstr",
- "valthrun-driver-protocol",
- "windows",
-]
 
 [[package]]
 name = "valthrun-driver-protocol"

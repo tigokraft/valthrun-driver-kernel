@@ -133,7 +133,7 @@ jobs:
 
       - name: Upload artifact to portal
         shell: bash
-        run: .github/workflows/artifact_upload.sh driver-interface-kernel target/release/valthrun_driver_kernel.dll target/release/valthrun_driver_kernel.pdb
+        run: .github/workflows/artifact_upload.sh driver-interface-kernel target/release/driver_interface_kernel.dll target/release/driver_interface_kernel.pdb
         if: ${{ github.event_name != 'pull_request' }}
         env:
           ARTIFACT_API_KEY: ${{ secrets.ARTIFACT_API_KEY }}
