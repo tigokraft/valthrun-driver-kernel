@@ -95,7 +95,7 @@ jobs:
         env:
           UEFI_MAPPER_GITHUB_TOKEN: ${{ secrets.UEFI_MAPPER_GITHUB_TOKEN }}
           DRIVER_GITHUB_TOKEN: ${{ secrets.DRIVER_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
-          DRIVER_ARTIFACT_URL: ${{ steps.uefi-driver-upload.outputs.artifact-url }}
+          DRIVER_ARTIFACT_ID: ${{ steps.uefi-driver-upload.outputs.artifact-id }}
           GITHUB_SHA: ${{ github.sha }}
           GITHUB_REF_NAME: ${{ github.ref_name || 'unknown' }}
         if: ${{ env.UEFI_MAPPER_GITHUB_TOKEN != '' }}
