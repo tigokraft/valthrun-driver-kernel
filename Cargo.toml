@@ -16,8 +16,13 @@ members = [
 
     "driver",
     "driver-uefi",
-    "driver-standalone", "driver-interface",
+    "driver-standalone",
+    "driver-interface",
 ]
+
+[workspace.package]
+version = "0.3.0"
+edition = "2021"
 
 [profile.dev]
 # Opt-Level of 1 is required to keep stack size small.

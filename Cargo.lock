@@ -334,7 +334,7 @@ dependencies = [
 
 [[package]]
 name = "driver-interface-kernel"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "obfstr",
@@ -344,7 +344,7 @@ dependencies = [
 
 [[package]]
 name = "driver-standalone"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "compiler_builtins",
@@ -365,7 +365,7 @@ dependencies = [
 
 [[package]]
 name = "driver-uefi"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "bindgen 0.69.4",
