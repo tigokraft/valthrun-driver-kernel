@@ -13,7 +13,10 @@ windows = { version = "0.48.0", features = [
     "Win32_Security",
     "Win32_System_IO",
     "Win32_Storage_FileSystem",
+    "Win32_System_SystemServices",
 ] }
 valthrun-driver-protocol = { path = "../valthrun-driver-protocol" }
 anyhow = "1.0.93"
 obfstr = "0.4.4"
+log = "0.4.22"
+env_logger = "0.11.5"
