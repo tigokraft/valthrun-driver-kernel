@@ -1,6 +1,7 @@
 use alloc::boxed::Box;
 use core::pin::Pin;
 
+use obfstr::obfstr;
 use winapi::{
     km::wdm::{
         IoGetCurrentIrpStackLocation,
@@ -23,6 +24,7 @@ use winapi::{
 
 use crate::{
     imports::{
+        IoCreateDevice,
         IoCreateDeviceSecure,
         IoDeleteDevice,
     },
@@ -52,19 +54,37 @@ impl<T> DeviceHandle<T> {
     ) -> anyhow::Result<Pin<Box<Self>>> {
         let mut device_ptr: PDEVICE_OBJECT = core::ptr::null_mut();
         let result = unsafe {
-            IoCreateDeviceSecure(
-                driver,
-                core::mem::size_of::<*const ()>() as u32,
-                device_name
-                    .map(|name| name as *const _)
-                    .unwrap_or(core::ptr::null()),
-                device_type,
-                characteristics,
-                if exclusive { 1 } else { 0 },
-                sddl,
-                class_guid,
-                &mut device_ptr as *mut PDEVICE_OBJECT,
-            )
+            if utils_imports::resolve_system_opt("IoCreateDeviceSecure").is_some() {
+                IoCreateDeviceSecure(
+                    driver,
+                    core::mem::size_of::<*const ()>() as u32,
+                    device_name
+                        .map(|name| name as *const _)
+                        .unwrap_or(core::ptr::null()),
+                    device_type,
+                    characteristics,
+                    if exclusive { 1 } else { 0 },
+                    sddl,
+                    class_guid,
+                    &mut device_ptr as *mut PDEVICE_OBJECT,
+                )
+            } else {
+                log::debug!(
+                    "{}",
+                    obfstr!("IoCreateDeviceSecure not supported. Using IoCreateDevice.")
+                );
+                IoCreateDevice(
+                    driver,
+                    core::mem::size_of::<*const ()>() as u32,
+                    device_name
+                        .map(|name| name as *const _)
+                        .unwrap_or(core::ptr::null()),
+                    device_type,
+                    characteristics,
+                    if exclusive { 1 } else { 0 },
+                    &mut device_ptr as *mut PDEVICE_OBJECT,
+                )
+            }
         };
 
         if !result.is_ok() {
