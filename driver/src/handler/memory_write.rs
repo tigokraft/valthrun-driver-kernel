@@ -1,7 +1,7 @@
 use kapi::Process;
 use obfstr::obfstr;
 use valthrun_driver_protocol::{
-    command::DriverCommandProcessMemoryWrite,
+    command::DriverCommandMemoryWrite,
     types::MemoryAccessResult,
 };
 use winapi::{
@@ -61,7 +61,7 @@ fn write_memory_mm(ctx: &WriteContext) -> bool {
     }
 }
 
-pub fn handler_write(command: &mut DriverCommandProcessMemoryWrite) -> anyhow::Result<()> {
+pub fn handler_write(command: &mut DriverCommandMemoryWrite) -> anyhow::Result<()> {
     let buffer = unsafe {
         if !seh::probe_read(command.buffer as u64, command.count, 0x01) {
             anyhow::bail!("{}", obfstr!("output buffer is not writeable"))

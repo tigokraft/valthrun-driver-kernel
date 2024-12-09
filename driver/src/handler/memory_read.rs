@@ -2,7 +2,7 @@ use alloc::vec::Vec;
 
 use kapi::Process;
 use valthrun_driver_protocol::{
-    command::DriverCommandProcessMemoryRead,
+    command::DriverCommandMemoryRead,
     types::MemoryAccessResult,
 };
 use winapi::{
@@ -70,7 +70,7 @@ fn read_memory_physical(ctx: &mut ReadContext) -> bool {
     pmem::read_process_memory(ctx.process, ctx.target_address, ctx.read_buffer).is_ok()
 }
 
-pub fn handler_read(command: &mut DriverCommandProcessMemoryRead) -> anyhow::Result<()> {
+pub fn handler_read(command: &mut DriverCommandMemoryRead) -> anyhow::Result<()> {
     let out_buffer = unsafe { core::slice::from_raw_parts_mut(command.buffer, command.count) };
     if !seh::probe_write(
         out_buffer as *const _ as *const () as u64,

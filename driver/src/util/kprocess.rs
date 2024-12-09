@@ -4,6 +4,31 @@ use kapi::Process;
 
 use crate::offsets::get_nt_offsets;
 
+pub fn iter(mut consumer: impl FnMut(&Process)) {
+    #[allow(non_snake_case)]
+    let PsGetNextProcess = get_nt_offsets().PsGetNextProcess;
+
+    let mut current_peprocess = core::ptr::null_mut();
+    loop {
+        current_peprocess = unsafe { PsGetNextProcess(current_peprocess) };
+        if current_peprocess.is_null() {
+            break;
+        }
+
+        let process = Process::from_raw(current_peprocess, false);
+
+        // let active_threads = unsafe {
+        //     current_peprocess
+        //         /* The ActiveThreads comes after the thread list head. Thread list head has a size of 0x10. */
+        //         .byte_offset(EPROCESS_ThreadListHead as isize + 0x10)
+        //         .cast::<u32>()
+        //         .read_volatile()
+        // };
+
+        consumer(&process);
+    }
+}
+
 pub fn find_processes_by_name(target_name: &str) -> anyhow::Result<Vec<Process>> {
     #[allow(non_snake_case)]
     let PsGetNextProcess = get_nt_offsets().PsGetNextProcess;
