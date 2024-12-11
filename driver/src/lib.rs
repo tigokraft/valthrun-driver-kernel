@@ -16,6 +16,7 @@ use core::{
 use device::ValthrunDevice;
 use handler::{
     handler_get_modules,
+    handler_get_processes,
     HandlerRegistry,
 };
 use kb::KeyboardInput;
@@ -235,6 +236,7 @@ pub fn internal_driver_entry(driver: &mut DRIVER_OBJECT) -> NTSTATUS {
     handler.register(&handler_write);
 
     handler.register(&handler_get_modules);
+    handler.register(&handler_get_processes);
     handler.register(&handler_protection_toggle);
 
     handler.register(&handler_mouse_move);
