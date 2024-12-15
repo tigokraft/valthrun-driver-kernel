@@ -64,6 +64,9 @@ jobs:
     runs-on: windows-latest
     needs: check-fmt
 
+    outputs:
+      artifact-id: ${{ steps.uefi-driver-artifact.outputs.artifact-id }}
+
     steps:
       - name: Install toolchain
         uses: dtolnay/rust-toolchain@master
@@ -84,22 +87,30 @@ jobs:
         run: ./.github/workflows/build-driver-uefi.ps1
 
       - uses: actions/upload-artifact@v4
-        id: uefi-driver-upload
+        id: uefi-driver-artifact
         with:
           name: valthrun-driver-uefi
           path: |
             target/x86_64-pc-windows-msvc/release/driver_uefi.dll
             target/x86_64-pc-windows-msvc/release/driver_uefi.pdb
 
+  upstream-uefi-loader:
+    runs-on: windows-latest
+    needs: build-uefi
+
+    steps:
+      - uses: actions/checkout@v4
       - name: Trigger ISO build
+        shell: pwsh
         env:
           UEFI_MAPPER_GITHUB_TOKEN: ${{ secrets.UEFI_MAPPER_GITHUB_TOKEN }}
           DRIVER_GITHUB_TOKEN: ${{ secrets.DRIVER_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
-          DRIVER_ARTIFACT_ID: ${{ steps.uefi-driver-upload.outputs.artifact-id }}
+          DRIVER_ARTIFACT_ID: ${{ needs.build-uefi.outputs.artifact-id }}
           GITHUB_SHA: ${{ github.sha }}
           GITHUB_REF_NAME: ${{ github.ref_name || 'unknown' }}
         if: ${{ env.UEFI_MAPPER_GITHUB_TOKEN != '' }} && github.ref == 'ref/head/master'
-        run: ./.github/workflows/invoke-mapper.ps1
+        run: |
+          .\.github\workflows\invoke-mapper.ps1
 
   build-driver-interface:
     runs-on: windows-latest
