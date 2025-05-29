@@ -25,8 +25,8 @@ utils-kernelbase = { version = "0.1.0", path = "../utils/kernelbase" }
 lazy_link = "0.1.1"
 
 [dependencies.compiler_builtins]
-git = "https://github.com/rust-lang/compiler-builtins"
 features = ["mem"]
+version = "0.1.132"
 
 [dependencies.winapi]
 git = "https://github.com/Trantect/winapi-rs.git"
