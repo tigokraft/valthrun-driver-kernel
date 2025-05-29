@@ -2,7 +2,6 @@
 #![feature(sync_unsafe_cell)]
 #![feature(result_flattening)]
 #![feature(linkage)]
-#![feature(naked_functions)]
 #![feature(core_intrinsics)]
 #![allow(internal_features)]
 #![allow(dead_code)]

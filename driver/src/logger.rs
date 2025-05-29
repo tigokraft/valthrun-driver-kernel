@@ -11,7 +11,7 @@ use obfstr::obfstr;
 use winapi::shared::ntdef::NTSTATUS;
 
 type DbgPrintEx =
-    unsafe extern "C" fn(ComponentId: u32, Level: u32, Format: *const u8, ...) -> NTSTATUS;
+    unsafe extern "C" fn(component_id: u32, level: u32, format: *const u8, ...) -> NTSTATUS;
 
 pub struct KernelLogger {
     dbg_print_ex: DbgPrintEx,

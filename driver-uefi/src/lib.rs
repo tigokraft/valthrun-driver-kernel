@@ -1,7 +1,6 @@
 #![no_std]
 #![allow(internal_features)]
 #![feature(core_intrinsics)]
-#![feature(naked_functions)]
 
 use alloc::format;
 
