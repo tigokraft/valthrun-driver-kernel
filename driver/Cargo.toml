@@ -44,6 +44,7 @@ kapi-kmodule = { path = "../utils/kapi-kmodule" }
 kdef = { path = "../utils/kdef" }
 seh = { path = "../utils/seh" }
 utils-pattern = { version = "0.1.0", path = "../utils/pattern" }
+pelite = { version = "0.10.0", default-features = false }
 
 [dependencies.winapi]
 git = "https://github.com/Trantect/winapi-rs.git"

@@ -26,6 +26,7 @@ use metrics::{
 };
 use mouse::MouseInput;
 use obfstr::obfstr;
+use status::CSTATUS_DRIVER_INIT_FAILED_PP;
 use vtk_wsk::WskInstance;
 use winapi::{
     km::wdm::DRIVER_OBJECT,
@@ -210,7 +211,7 @@ pub fn internal_driver_entry(driver: &mut DRIVER_OBJECT) -> NTSTATUS {
             obfstr!("Failed to initialized process protection:"),
             error
         );
-        return CSTATUS_DRIVER_INIT_FAILED;
+        return CSTATUS_DRIVER_INIT_FAILED_PP;
     };
 
     let device = match ValthrunDevice::create(driver) {

@@ -11,3 +11,4 @@ pub const CSTATUS_DRIVER_PREINIT_FAILED: NTSTATUS = custom_status(0x02);
 pub const CSTATUS_DRIVER_INIT_FAILED: NTSTATUS = custom_status(0x03);
 pub const CSTATUS_DRIVER_ALREADY_LOADED: NTSTATUS = custom_status(0x04);
 pub const CSTATUS_DRIVER_BOOTSTRAP_FAILED: NTSTATUS = custom_status(0x05);
+pub const CSTATUS_DRIVER_INIT_FAILED_PP: NTSTATUS = custom_status(0x06);

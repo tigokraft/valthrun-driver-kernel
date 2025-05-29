@@ -3,6 +3,10 @@ use alloc::{
     string::ToString,
     vec::Vec,
 };
+use core::{
+    mem,
+    slice,
+};
 
 use anyhow::{
     anyhow,
@@ -29,6 +33,19 @@ use kdef::{
 use log::Level;
 use obfstr::obfstr;
 use once_cell::race::OnceBox;
+use pelite::{
+    image::{
+        IMAGE_DIRECTORY_ENTRY_LOAD_CONFIG,
+        IMAGE_GUARDCF64,
+        IMAGE_GUARD_CF_INSTRUMENTED,
+        IMAGE_LOAD_CONFIG_DIRECTORY64,
+    },
+    pe::{
+        Pe,
+        PeObject,
+        PeView,
+    },
+};
 use utils_pattern::ByteSequencePattern;
 use winapi::shared::ntdef::{
     PVOID,
@@ -177,6 +194,23 @@ pub fn finalize() {
     }
 }
 
+fn get_pe_guard_config<'a>(view: &dyn PeObject<'a>) -> Option<&'a IMAGE_GUARDCF64> {
+    let dict_load_config = view
+        .data_directory()
+        .get(IMAGE_DIRECTORY_ENTRY_LOAD_CONFIG)?;
+
+    if (dict_load_config.Size as usize) <
+        mem::size_of::<IMAGE_LOAD_CONFIG_DIRECTORY64>() + mem::size_of::<IMAGE_GUARDCF64>()
+    {
+        return None;
+    }
+
+    view.derva(
+        dict_load_config.VirtualAddress + mem::size_of::<IMAGE_LOAD_CONFIG_DIRECTORY64>() as u32,
+    )
+    .ok()
+}
+
 #[allow(unused)]
 pub fn initialize() -> anyhow::Result<()> {
     let mut context = process_protection_state().lock();
@@ -194,10 +228,30 @@ pub fn initialize() -> anyhow::Result<()> {
 
         let (jmp_module, jmp_target) = KModule::query_modules()?
             .into_iter()
-            .filter(|module| module.file_name.ends_with(".sys"))
             .filter(KModule::is_base_data_valid)
             .find_map(|module| {
-                // log::debug!("Scanning {} ({:X} - {:X})", module.file_name, module.base_address, module.base_address + module.module_size);
+                let pe_view = PeView::from_bytes(unsafe {
+                    slice::from_raw_parts(module.base_address as *const u8, module.module_size)
+                })
+                .ok()?;
+
+                if let Some(config) = self::get_pe_guard_config(&pe_view) {
+                    if (config.GuardFlags & IMAGE_GUARD_CF_INSTRUMENTED) > 0 {
+                        log::debug!(
+                            "Skipping {} (0x{:X}) because CFG is enabled.",
+                            module.file_name,
+                            module.base_address
+                        );
+                        return None;
+                    }
+                }
+
+                log::debug!(
+                    "Scanning {} ({:X} - {:X})",
+                    module.file_name,
+                    module.base_address,
+                    module.base_address + module.module_size
+                );
                 let sections = match module.find_code_sections() {
                     Ok(sections) => sections,
                     Err(_) => return None,
@@ -223,11 +277,11 @@ pub fn initialize() -> anyhow::Result<()> {
             })
             .with_context(|| obfstr!("failed to find any valid ob callback").to_string())?;
 
-        // log::debug!(
-        //     "Found callback target in {} at {:X}",
-        //     jmp_module.file_path,
-        //     jmp_target
-        // );
+        log::debug!(
+            "Found ObRegisterCallback target in {} at {:X}",
+            jmp_module.file_path,
+            jmp_target
+        );
 
         let mut operation_reg = core::mem::zeroed::<_OB_OPERATION_REGISTRATION>();
         operation_reg.ObjectType = ObjectType::PsProcessType.resolve_system_type();
