@@ -16,6 +16,27 @@ use crate::{
     utils::search_binary_pattern,
 };
 
+fn find_rdata_page_new(address_kidivideerrorfault: u64) -> Option<u64> {
+    // PAGE:00000001409D73BC 48 8D 35 3D A0 62 FF                          lea     rsi, IrpHandlingTable
+    // PAGE:00000001409D73C3                               loc_1409D73C3:                          ; CODE XREF: PiDaDispatch+C8↓j
+    // PAGE:00000001409D73C3 48 8B 44 C6 08                                mov     rax, [rsi+rax*8+8]
+    const DUMMY: u8 = 0xAA;
+    let pattern = [
+        0x48, 0x8D, 0x35, DUMMY, DUMMY, DUMMY, DUMMY, 0x48, 0x8B, 0x44, 0xC6,
+    ];
+
+    /* backwards scan for code pattern to skip the gap between .text and .rdata */
+    let address = search_binary_pattern(
+        address_kidivideerrorfault,
+        Some(0x400000),
+        &pattern,
+        DUMMY,
+        0x01,
+    )?;
+    let offset = unsafe { *((address + 0x03) as *const i32) } as i64;
+    Some(((address + 0x07) as i64 + offset) as u64)
+}
+
 /// Find the NT kernel base address.
 ///
 /// This is quite tricky as recent Windows versions contain a gap between the .text / KVASCODE section
@@ -48,7 +69,9 @@ fn find_ntoskrnl_image() -> u64 {
         // KVASCODE:0000000000993171 E9 8A 50 A1 FF                                jmp     KiDivideErrorFault
         let pattern = [0x0F, 0xAE, 0xE8, 0xE9];
 
-        let address = search_binary_pattern(idt_handler, &pattern, 0x00, 0x01) + 0x03;
+        let address = search_binary_pattern(idt_handler, None, &pattern, 0x00, 0x01)
+            .unwrap_or_default() +
+            0x03;
         let offset = unsafe { *((address + 0x01) as *const i32) } as i64;
         (address + 0x05) as i64 + offset
     } as u64;
@@ -58,7 +81,9 @@ fn find_ntoskrnl_image() -> u64 {
      * Note:
      * We assume, that the PAGE page will be followed after the .text page which is generally the case.
      */
-    let rdata_page = {
+    let rdata_page = if let Some(address) = self::find_rdata_page_new(text_page) {
+        address
+    } else {
         // PAGE:0000000000678AC7 48 8D 05 32 26 99 FF                          lea     rax, aAllowdevelopme ; "AllowDevelopmentWithoutDevLicense"
         // PAGE:0000000000678ACE 49 C7 43 E8 42 00 44 00                       mov     qword ptr [r11-18h], 440042h
         // PAGE:0000000000678AD6 49 8D 53 08                                   lea     rdx, [r11+8]
@@ -70,10 +95,11 @@ fn find_ntoskrnl_image() -> u64 {
         ];
 
         /* backwards scan for code pattern to skip the gap between .text and .rdata */
-        let address = search_binary_pattern(text_page, &pattern, DUMMY, 0x01);
+        let address =
+            search_binary_pattern(text_page, None, &pattern, DUMMY, 0x01).unwrap_or_default();
         let offset = unsafe { *((address + 0x03) as *const i32) } as i64;
-        (address + 0x07) as i64 + offset
-    } as u64;
+        ((address + 0x07) as i64 + offset) as u64
+    };
 
     /*
      * From the .rdata section search upwards untill we found the

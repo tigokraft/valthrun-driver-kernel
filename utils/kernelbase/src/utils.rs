@@ -1,8 +1,17 @@
-use core::slice;
+use core::{
+    slice,
+    usize,
+};
 
-pub fn search_binary_pattern(address: u64, pattern: &[u8], dummy: u8, direction: i64) -> u64 {
+pub fn search_binary_pattern(
+    address: u64,
+    limit: Option<usize>,
+    pattern: &[u8],
+    dummy: u8,
+    direction: i64,
+) -> Option<u64> {
     let mut address = address as i64;
-    loop {
+    for _ in 0..limit.unwrap_or(usize::MAX) {
         let buffer = unsafe { slice::from_raw_parts(address as *const u8, pattern.len()) };
 
         let is_match = pattern
@@ -12,9 +21,11 @@ pub fn search_binary_pattern(address: u64, pattern: &[u8], dummy: u8, direction:
             .is_none();
 
         if is_match {
-            return address as u64;
+            return Some(address as u64);
         }
 
         address += direction;
     }
+
+    None
 }
