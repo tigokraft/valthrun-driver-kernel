@@ -34,7 +34,7 @@ use kdef::{
 };
 use obfstr::obfstr;
 use utils_pattern::Signature;
-use valthrun_driver_protocol::command::MouseState;
+use vtd_protocol::command::MouseState;
 use winapi::{
     km::wdm::DRIVER_OBJECT,
     shared::ntdef::{

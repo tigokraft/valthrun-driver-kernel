@@ -24,7 +24,7 @@ pub use metrics::*;
 
 mod module;
 pub use module::*;
-use valthrun_driver_protocol::{
+use vtd_protocol::{
     command::DriverCommand,
     utils::str_to_fixed_buffer,
     CommandResult,

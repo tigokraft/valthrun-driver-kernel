@@ -363,7 +363,7 @@ dependencies = [
 
 [[package]]
 name = "driver"
-version = "0.3.2"
+version = "0.3.3"
 dependencies = [
  "aes-gcm",
  "anyhow",
@@ -390,26 +390,26 @@ dependencies = [
  "thiserror-core",
  "utils-imports",
  "utils-pattern",
- "valthrun-driver-protocol",
+ "vtd-protocol",
  "vtk-wsk",
  "winapi",
 ]
 
 [[package]]
 name = "driver-interface-kernel"
-version = "0.3.2"
+version = "0.3.3"
 dependencies = [
  "anyhow",
  "env_logger",
  "log",
  "obfstr",
- "valthrun-driver-protocol",
+ "vtd-protocol",
  "windows",
 ]
 
 [[package]]
 name = "driver-standalone"
-version = "0.3.2"
+version = "0.3.3"
 dependencies = [
  "anyhow",
  "compiler_builtins",
@@ -430,7 +430,7 @@ dependencies = [
 
 [[package]]
 name = "driver-uefi"
-version = "0.3.2"
+version = "0.3.3"
 dependencies = [
  "anyhow",
  "bindgen 0.69.4",
@@ -1507,17 +1507,18 @@ name = "utils-pattern"
 version = "0.1.0"
 
 [[package]]
-name = "valthrun-driver-protocol"
-version = "0.1.0"
-dependencies = [
- "bitflags 2.9.1",
-]
-
-[[package]]
 name = "version_check"
 version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
+
+[[package]]
+name = "vtd-protocol"
+version = "0.1.0"
+source = "git+https://github.com/Valthrun/valthrun-driver?rev=3931af3#3931af331f88fe96df94e49f1427125d67a0f440"
+dependencies = [
+ "bitflags 2.9.1",
+]
 
 [[package]]
 name = "vtk-wsk"

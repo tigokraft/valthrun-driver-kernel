@@ -5,7 +5,7 @@ use anyhow::{
     Context,
 };
 use obfstr::obfstr;
-use valthrun_driver_protocol::command::DriverCommandMetricsReportSend;
+use vtd_protocol::command::DriverCommandMetricsReportSend;
 
 use crate::METRICS_CLIENT;
 

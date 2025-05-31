@@ -1,8 +1,6 @@
 [workspace]
 resolver = "2"
 members = [
-    "valthrun-driver-protocol",
-
     "utils/kernelbase",
     "utils/wdk-locator",
     "utils/kalloc",
@@ -23,6 +21,9 @@ members = [
 [workspace.package]
 version = "0.3.3"
 edition = "2021"
+
+[workspace.dependencies]
+vtd-protocol = { git = "https://github.com/Valthrun/valthrun-driver", rev = "3931af3" }
 
 [profile.dev]
 # Opt-Level of 1 is required to keep stack size small.

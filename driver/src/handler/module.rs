@@ -5,7 +5,7 @@ use core::{
 
 use kapi::Process;
 use obfstr::obfstr;
-use valthrun_driver_protocol::{
+use vtd_protocol::{
     command::{
         DriverCommandProcessList,
         DriverCommandProcessModules,

@@ -1,7 +1,7 @@
 use alloc::vec::Vec;
 
 use kapi::Process;
-use valthrun_driver_protocol::{
+use vtd_protocol::{
     command::DriverCommandMemoryRead,
     types::MemoryAccessResult,
 };

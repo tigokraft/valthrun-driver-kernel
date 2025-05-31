@@ -8,7 +8,7 @@ use obfstr::{
     obfcstr,
     obfstr,
 };
-use valthrun_driver_protocol::{
+use vtd_protocol::{
     command::{
         DriverCommand,
         DriverCommandInitialize,

@@ -17,7 +17,7 @@ use kdef::{
     IRP_MJ_SHUTDOWN,
 };
 use obfstr::obfstr;
-use valthrun_driver_protocol::CommandResult;
+use vtd_protocol::CommandResult;
 use winapi::{
     km::{
         ntifs::DEVICE_FLAGS,

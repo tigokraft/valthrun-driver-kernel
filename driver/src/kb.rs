@@ -24,7 +24,7 @@ use kdef::{
 };
 use obfstr::obfstr;
 use utils_pattern::Signature;
-use valthrun_driver_protocol::command::KeyboardState;
+use vtd_protocol::command::KeyboardState;
 use winapi::{
     km::wdm::DRIVER_OBJECT,
     shared::ntdef::{

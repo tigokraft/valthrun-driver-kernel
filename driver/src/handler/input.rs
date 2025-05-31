@@ -1,6 +1,6 @@
 use core::mem::size_of;
 
-use valthrun_driver_protocol::command::{
+use vtd_protocol::command::{
     DriverCommandInputKeyboard,
     DriverCommandInputMouse,
     KeyboardState,

@@ -1,7 +1,7 @@
 use kapi::Process;
 use kdef::ProcessProtectionInformation;
 use obfstr::obfstr;
-use valthrun_driver_protocol::command::{
+use vtd_protocol::command::{
     DriverCommandProcessProtection,
     ProcessProtectionMode,
 };

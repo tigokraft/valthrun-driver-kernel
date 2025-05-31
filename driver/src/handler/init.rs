@@ -1,5 +1,5 @@
 use obfstr::obfstr;
-use valthrun_driver_protocol::{
+use vtd_protocol::{
     command::{
         DriverCommandInitialize,
         InitializeResult,
