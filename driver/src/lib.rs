@@ -59,7 +59,11 @@ use crate::{
         CSTATUS_DRIVER_INIT_FAILED,
         CSTATUS_DRIVER_PREINIT_FAILED,
     },
-    util::BoxButtons,
+    util::{
+        MB_ICONERROR,
+        MB_OK,
+        MB_SYSTEMMODAL,
+    },
     winver::{
         initialize_os_info,
         os_info,
@@ -161,10 +165,10 @@ pub fn internal_driver_entry(driver: &mut DRIVER_OBJECT) -> NTSTATUS {
                     &format!("Error: {error:?}"),
                     "",
                     obfstr!("For more information please refer to"),
-                    obfstr!("https://wiki.valth.run/link/vtkd-1"),
+                    obfstr!("https://wiki.valth.run/link/vtdk-1"),
                 ]
                 .join("\n"),
-                BoxButtons::Ok,
+                MB_OK | MB_ICONERROR | MB_SYSTEMMODAL,
             );
             log::error!(
                 "{} {error_code:X}: {error:#}",
@@ -172,7 +176,7 @@ pub fn internal_driver_entry(driver: &mut DRIVER_OBJECT) -> NTSTATUS {
             );
             log::error!(
                 "{}",
-                obfstr!("For more information please refer to https://wiki.valth.run/link/vtkd-1")
+                obfstr!("For more information please refer to https://wiki.valth.run/link/vtdk-1")
             );
             error_code
         }

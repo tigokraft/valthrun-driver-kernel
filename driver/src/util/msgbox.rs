@@ -26,17 +26,20 @@ extern "C" {
     ) -> NTSTATUS;
 }
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
-#[repr(C)]
-pub enum BoxButtons {
-    Ok = 0,
-    OkCancel = 1,
-    AbortRetryIgnore = 2,
-    YesNoCancel = 3,
-    YesNo = 4,
-    RetryCancel = 5,
-    CancelTryContinue = 6,
-}
+pub const MB_OK: u32 = 0x00000000;
+pub const MB_OKCANCEL: u32 = 0x00000001;
+pub const MB_ABORTRETRYIGNORE: u32 = 0x00000002;
+pub const MB_YESNOCANCEL: u32 = 0x00000003;
+pub const MB_YESNO: u32 = 0x00000004;
+pub const MB_RETRYCANCEL: u32 = 0x00000005;
+pub const MB_CANCELTRYCONTINUE: u32 = 0x00000006;
+
+pub const MB_ICONERROR: u32 = 0x00000010;
+pub const MB_ICONEXCLAMATION: u32 = 0x00000030;
+
+pub const MB_DEFBUTTON3: u32 = 0x00000200;
+
+pub const MB_SYSTEMMODAL: u32 = 0x00001000;
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 #[repr(C)]
@@ -58,7 +61,7 @@ fn is_msgbox_supported() -> bool {
     Process::current().get_id() >= 0x04
 }
 
-pub fn show_msgbox(title: &str, message: &str, buttons: BoxButtons) -> ErrorResponse {
+pub fn show_msgbox(title: &str, message: &str, buttons: u32) -> ErrorResponse {
     let title = title.encode_utf16().collect::<Vec<_>>();
     let title = UNICODE_STRING::from_bytes_unchecked(&title);
 
@@ -68,7 +71,7 @@ pub fn show_msgbox(title: &str, message: &str, buttons: BoxButtons) -> ErrorResp
     let parameters = [
         &message as *const _ as *const c_void,
         &title as *const _ as *const c_void,
-        buttons as u32 as *const c_void,
+        buttons as *const c_void,
     ];
 
     let mut response = ErrorResponse::Invalid;

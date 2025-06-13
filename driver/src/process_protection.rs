@@ -58,6 +58,14 @@ use crate::{
         ObUnRegisterCallbacks,
     },
     offsets::get_nt_offsets,
+    util::{
+        self,
+        ErrorResponse,
+        MB_DEFBUTTON3,
+        MB_ICONEXCLAMATION,
+        MB_SYSTEMMODAL,
+        MB_YESNOCANCEL,
+    },
 };
 
 struct ProtectionState {
@@ -211,78 +219,122 @@ fn get_pe_guard_config<'a>(view: &dyn PeObject<'a>) -> Option<&'a IMAGE_GUARDCF6
     .ok()
 }
 
+fn find_callback_target(filter_cfg: bool) -> anyhow::Result<Option<usize>> {
+    let pattern = ByteSequencePattern::parse(obfstr!("FF E1"))
+        .with_context(|| obfstr!("failed to compile jmp rcx pattern").to_string())?;
+
+    #[allow(non_snake_case)]
+    let MmVerifyCallbackFunctionFlags = get_nt_offsets().MmVerifyCallbackFunctionFlags;
+
+    log::trace!("Searching for a valid ObRegisterCallback jump target (filter_cfg = {filter_cfg})");
+    for module in KModule::query_modules()? {
+        if !module.is_base_data_valid() {
+            continue;
+        }
+
+        if filter_cfg {
+            let image = unsafe {
+                slice::from_raw_parts(module.base_address as *const u8, module.module_size)
+            };
+
+            let Ok(pe_view) = PeView::from_bytes(image) else {
+                continue;
+            };
+
+            if let Some(config) = self::get_pe_guard_config(&pe_view) {
+                if (config.GuardFlags & IMAGE_GUARD_CF_INSTRUMENTED) > 0 {
+                    log::debug!(
+                        "  -> skipping {} (0x{:X}) because CFG is enabled.",
+                        module.file_name,
+                        module.base_address
+                    );
+                    continue;
+                }
+            }
+        }
+
+        log::trace!(
+            "  -> scanning {} ({:X} - {:X})",
+            module.file_name,
+            module.base_address,
+            module.base_address + module.module_size
+        );
+        let Ok(sections) = module.find_code_sections() else {
+            continue;
+        };
+
+        let Some(jmp_target) = sections
+            .iter()
+            .filter(|section| section.is_data_valid())
+            .filter(|section| {
+                // log::debug!(" Testing {} at {:X} ({:X} bytes)", section.name, section.raw_data_address(), section.size_of_raw_data);
+                unsafe { MmVerifyCallbackFunctionFlags(section.raw_data_address() as PVOID, 0x20) }
+            })
+            .find_map(|section| {
+                // log::debug!("  Searching pattern");
+                section.find_pattern(&pattern)
+            })
+        else {
+            continue;
+        };
+
+        log::debug!(
+            "Found ObRegisterCallback target in {} at {:X}",
+            module.file_path,
+            jmp_target
+        );
+        return Ok(Some(jmp_target));
+    }
+
+    Ok(None)
+}
+
 #[allow(unused)]
-pub fn initialize() -> anyhow::Result<()> {
+pub fn initialize() -> anyhow::Result<bool> {
     let mut context = process_protection_state().lock();
     if context.is_some() {
         anyhow::bail!("{}", obfstr!("process protection already initialized"));
     }
 
+    let jmp_target = if let Some(target) = self::find_callback_target(true)? {
+        target
+    } else {
+        let result = util::show_msgbox(
+            obfstr!("Valthrun Kernel Driver"),
+            &[
+                obfstr!("Failed to find a CFG compatible jump target for ObRegisterCallbacks."),
+                obfstr!(""),
+                obfstr!("Would you like to ignore the CFG compatibility?"),
+                obfstr!("This will cause a BSOD when your kernel has CFG enabled."),
+                obfstr!(""),
+                obfstr!("For more information please refer to"),
+                obfstr!("https://wiki.valth.run/link/vtdk-2"),
+                obfstr!(""),
+                obfstr!("Press \"No\" to disable the process protection module."),
+            ]
+            .join("\n"),
+            MB_YESNOCANCEL | MB_DEFBUTTON3 | MB_ICONEXCLAMATION | MB_SYSTEMMODAL,
+        );
+        match result {
+            ErrorResponse::Yes => {
+                if let Some(target) = self::find_callback_target(false)? {
+                    target
+                } else {
+                    anyhow::bail!("failed to find a jump target")
+                }
+            }
+            ErrorResponse::No => {
+                log::info!("Process protection disabled.");
+                return Ok(false);
+            }
+            _ => {
+                anyhow::bail!("failed to find a CFG compatible jump target")
+            }
+        }
+    };
+
     let mut reg_handle = core::ptr::null_mut();
     *context = unsafe {
-        let pattern = ByteSequencePattern::parse(obfstr!("FF E1"))
-            .with_context(|| obfstr!("failed to compile jmp rcx pattern").to_string())?;
-
-        #[allow(non_snake_case)]
-        let MmVerifyCallbackFunctionFlags = get_nt_offsets().MmVerifyCallbackFunctionFlags;
-
-        let (jmp_module, jmp_target) = KModule::query_modules()?
-            .into_iter()
-            .filter(KModule::is_base_data_valid)
-            .find_map(|module| {
-                let pe_view = PeView::from_bytes(unsafe {
-                    slice::from_raw_parts(module.base_address as *const u8, module.module_size)
-                })
-                .ok()?;
-
-                if let Some(config) = self::get_pe_guard_config(&pe_view) {
-                    if (config.GuardFlags & IMAGE_GUARD_CF_INSTRUMENTED) > 0 {
-                        log::debug!(
-                            "Skipping {} (0x{:X}) because CFG is enabled.",
-                            module.file_name,
-                            module.base_address
-                        );
-                        return None;
-                    }
-                }
-
-                log::debug!(
-                    "Scanning {} ({:X} - {:X})",
-                    module.file_name,
-                    module.base_address,
-                    module.base_address + module.module_size
-                );
-                let sections = match module.find_code_sections() {
-                    Ok(sections) => sections,
-                    Err(_) => return None,
-                };
-
-                let jmp_target = sections
-                    .iter()
-                    .filter(|section| section.is_data_valid())
-                    .filter(|section| {
-                        // log::debug!(" Testing {} at {:X} ({:X} bytes)", section.name, section.raw_data_address(), section.size_of_raw_data);
-                        MmVerifyCallbackFunctionFlags(section.raw_data_address() as PVOID, 0x20)
-                    })
-                    .find_map(|section| {
-                        // log::debug!("  Searching pattern");
-                        section.find_pattern(&pattern)
-                    });
-
-                if let Some(target) = jmp_target {
-                    Some((module, target))
-                } else {
-                    None
-                }
-            })
-            .with_context(|| obfstr!("failed to find any valid ob callback").to_string())?;
-
-        log::debug!(
-            "Found ObRegisterCallback target in {} at {:X}",
-            jmp_module.file_path,
-            jmp_target
-        );
-
         let mut operation_reg = core::mem::zeroed::<_OB_OPERATION_REGISTRATION>();
         operation_reg.ObjectType = ObjectType::PsProcessType.resolve_system_type();
         operation_reg.Operations = OB_OPERATION_HANDLE_CREATE | OB_OPERATION_HANDLE_DUPLICATE;
@@ -317,5 +369,5 @@ pub fn initialize() -> anyhow::Result<()> {
         })
     };
 
-    Ok(())
+    Ok(true)
 }
