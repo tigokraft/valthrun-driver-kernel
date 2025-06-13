@@ -114,59 +114,6 @@ extern "C" fn execute_command(
             }
         };
 
-        /*
-         * Testing for the old pre v0.3.0 driver.
-         * The function code 0x01 was assigned to a health check which required a
-         * zero sized struct as input and a one byte long struct as output.
-         *
-         * The function code 0x01 is now assigned to DriverCommandProcessModules
-         * which requires a different length hence this should fail for the new driver.
-         */
-        {
-            let in_buffer = [0u8; 0x00];
-            let mut out_buffer = [0u8; 0x01];
-            let success = unsafe {
-                const FUNCTION_ID_HEALTH_CHECK: u32 = 0x01;
-                let control_code = {
-                    (0x00000022 << 16) | // FILE_DEVICE_UNKNOWN
-                    (0x00000000 << 14) | // FILE_SPECIAL_ACCESS
-                    (0x00000001 << 13) | // Custom access code
-                    ((FUNCTION_ID_HEALTH_CHECK & 0x3FF) << 02) |
-                    (0x00000003 << 00)
-                };
-
-                DeviceIoControl(
-                    handle,
-                    control_code,
-                    Some(in_buffer.as_ptr() as *const c_void),
-                    in_buffer.len() as u32,
-                    Some(out_buffer.as_mut_ptr() as *mut c_void),
-                    out_buffer.len() as u32,
-                    None,
-                    None,
-                )
-            };
-
-            log::debug!(
-                "Pre v0.3.0 driver detection resulted in {} - {}",
-                success.as_bool(),
-                out_buffer[0]
-            );
-            if success.as_bool() && out_buffer[0] > 0 {
-                /* old driver is still present... */
-                str_to_fixed_buffer(error_message, &[
-                    obfstr!(""),
-                    obfstr!("** PLEASE READ CAREFULLY **"),
-                    obfstr!("You have loaded an older version of the Valthrun Kernel Driver."),
-                    obfstr!("Please update to the latest version of the Valthrun Kernel Driver."),
-                    obfstr!(""),
-                    obfstr!("For more information please refer to"),
-                    obfstr!("https://wiki.valth.run/troubleshooting/overlay/driver_kernel_pre_v3_0_0"),
-                ].join("\n"));
-                return CommandResult::Error.bits();
-            }
-        }
-
         {
             let mut driver_handle = DRIVER_INTERFACE.write().unwrap();
             *driver_handle = handle;
