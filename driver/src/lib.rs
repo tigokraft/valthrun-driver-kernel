@@ -6,12 +6,17 @@
 #![allow(internal_features)]
 #![allow(dead_code)]
 
-use alloc::boxed::Box;
+use alloc::{
+    boxed::Box,
+    format,
+    string::String,
+};
 use core::{
     cell::SyncUnsafeCell,
     time::Duration,
 };
 
+use anyhow::Context;
 use device::ValthrunDevice;
 use handler::{
     handler_get_modules,
@@ -24,7 +29,10 @@ use metrics::{
     MetricsHeartbeat,
 };
 use mouse::MouseInput;
-use obfstr::obfstr;
+use obfstr::{
+    obfstr,
+    obfstring,
+};
 use status::CSTATUS_DRIVER_INIT_FAILED_PP;
 use vtk_wsk::WskInstance;
 use winapi::{
@@ -51,6 +59,7 @@ use crate::{
         CSTATUS_DRIVER_INIT_FAILED,
         CSTATUS_DRIVER_PREINIT_FAILED,
     },
+    util::BoxButtons,
     winver::{
         initialize_os_info,
         os_info,
@@ -134,92 +143,85 @@ pub extern "system" fn driver_unload() {
 }
 
 pub fn internal_driver_entry(driver: &mut DRIVER_OBJECT) -> NTSTATUS {
-    if let Err(error) = initialize_os_info() {
-        log::error!("{}: {}", obfstr!("Failed to load OS version info"), error);
-        return CSTATUS_DRIVER_PREINIT_FAILED;
-    }
+    let mut error_code = STATUS_SUCCESS;
 
+    match self::inner_driver_entry(driver, &mut error_code) {
+        Ok(_) => STATUS_SUCCESS,
+        Err(error) => {
+            util::show_msgbox(
+                obfstr!("Valthrun Kernel Driver"),
+                &[
+                    &format!(
+                        "{} {}:",
+                        obfstr!("Failed to initialize the Valthrun Kernel Driver version"),
+                        env!("CARGO_PKG_VERSION")
+                    ),
+                    "",
+                    &format!("Code: 0x{error_code:X}"),
+                    &format!("Error: {error:?}"),
+                    "",
+                    obfstr!("For more information please refer to"),
+                    obfstr!("https://wiki.valth.run/link/vtkd-1"),
+                ]
+                .join("\n"),
+                BoxButtons::Ok,
+            );
+            log::error!(
+                "{} {error_code:X}: {error:#}",
+                obfstr!("Initialisation failed with")
+            );
+            log::error!(
+                "{}",
+                obfstr!("For more information please refer to https://wiki.valth.run/link/vtkd-1")
+            );
+            error_code
+        }
+    }
+}
+
+pub fn inner_driver_entry(
+    driver: &mut DRIVER_OBJECT,
+    error_code: &mut NTSTATUS,
+) -> anyhow::Result<()> {
+    *error_code = CSTATUS_DRIVER_PREINIT_FAILED;
+    initialize_os_info().with_context(|| obfstring!("initialize OS version information"))?;
     log::info!("WinVer {}", os_info().dwBuildNumber);
-    if let Err(error) = kapi::initialize(Some(driver)) {
-        log::error!("{}: {:#}", obfstr!("Failed to initialize SEH"), error);
-        return CSTATUS_DRIVER_INIT_FAILED;
-    }
 
-    match WskInstance::create(1 << 8) {
-        Ok(wsk) => {
-            unsafe { *WSK.get() = Some(wsk) };
-        }
-        Err(err) => {
-            log::error!("{}: {:#}", obfstr!("WSK initialize error"), err);
-            return CSTATUS_DRIVER_INIT_FAILED;
-        }
-    }
+    *error_code = CSTATUS_DRIVER_INIT_FAILED;
+    kapi::initialize(Some(driver)).with_context(|| obfstring!("initialize SEH"))?;
 
-    match metrics::initialize() {
-        Err(error) => {
-            log::error!("{}: {:#}", obfstr!("Failed to initialize metrics"), error);
-            return CSTATUS_DRIVER_INIT_FAILED;
-        }
-        Ok(client) => {
-            unsafe { *METRICS_CLIENT.get() = Some(client) };
-        }
-    }
+    unsafe {
+        *WSK.get() =
+            Some(WskInstance::create(1 << 8).with_context(|| obfstring!("initialize WSK"))?)
+    };
+    unsafe {
+        *METRICS_CLIENT.get() =
+            Some(metrics::initialize().with_context(|| obfstring!("initialize metrics"))?);
 
-    unsafe { *METRICS_HEARTBEAT.get() = Some(MetricsHeartbeat::new(Duration::from_secs(60 * 60))) };
-
-    if let Err(error) = initialize_nt_offsets() {
-        log::error!(
-            "{}: {:#}",
-            obfstr!("Failed to initialize NT_OFFSETS"),
-            error
-        );
-        return CSTATUS_DRIVER_INIT_FAILED;
-    }
-
-    match kb::create_keyboard_input() {
-        Err(error) => {
-            log::error!(
-                "{} {:#}",
-                obfstr!("Failed to initialize keyboard input:"),
-                error
-            );
-            return CSTATUS_DRIVER_INIT_FAILED;
-        }
-        Ok(keyboard) => {
-            unsafe { *KEYBOARD_INPUT.get() = Some(keyboard) };
-        }
-    }
-
-    match mouse::create_mouse_input() {
-        Err(error) => {
-            log::error!(
-                "{} {:#}",
-                obfstr!("Failed to initialize mouse input:"),
-                error
-            );
-            return CSTATUS_DRIVER_INIT_FAILED;
-        }
-        Ok(mouse) => {
-            unsafe { *MOUSE_INPUT.get() = Some(mouse) };
-        }
-    }
-
-    if let Err(error) = process_protection::initialize() {
-        log::error!(
-            "{} {:#}",
-            obfstr!("Failed to initialized process protection:"),
-            error
-        );
-        return CSTATUS_DRIVER_INIT_FAILED_PP;
+        *METRICS_HEARTBEAT.get() = Some(MetricsHeartbeat::new(Duration::from_secs(60 * 60)));
     };
 
-    let device = match ValthrunDevice::create(driver) {
-        Ok(device) => device,
-        Err(error) => {
-            log::error!("{} {:#}", obfstr!("Failed to initialize device:"), error);
-            return CSTATUS_DRIVER_INIT_FAILED;
-        }
+    initialize_nt_offsets().with_context(|| obfstring!("initialize NT_OFFSETS"))?;
+    unsafe {
+        *KEYBOARD_INPUT.get() =
+            Some(kb::create_keyboard_input().with_context(|| obfstring!("initialize keyboard"))?)
     };
+
+    unsafe {
+        *MOUSE_INPUT.get() =
+            Some(mouse::create_mouse_input().with_context(|| obfstring!("initialize mouse"))?)
+    };
+
+    {
+        /* extra error code for process protection */
+        *error_code = CSTATUS_DRIVER_INIT_FAILED_PP;
+        process_protection::initialize()
+            .with_context(|| obfstring!("initialize process protection"))?;
+        *error_code = CSTATUS_DRIVER_INIT_FAILED;
+    }
+
+    let device =
+        ValthrunDevice::create(driver).with_context(|| obfstring!("create Valthrun device"))?;
     log::debug!(
         "{} device Object at 0x{:X} (Handle at 0x{:X})",
         obfstr!("Valthrun"),
@@ -247,7 +249,7 @@ pub fn internal_driver_entry(driver: &mut DRIVER_OBJECT) -> NTSTATUS {
     unsafe { *REQUEST_HANDLER.get() = Some(handler) };
 
     log::info!("Driver Initialized");
-    STATUS_SUCCESS
+    Ok(())
 }
 
 pub fn metrics_client() -> Option<&'static MetricsClient> {

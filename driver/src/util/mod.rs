@@ -10,4 +10,7 @@ pub use rng::*;
 mod io;
 pub use io::*;
 
+mod msgbox;
+pub use msgbox::*;
+
 pub mod kprocess;
