@@ -1,17 +1,13 @@
 #![no_std]
 #![allow(internal_features)]
 #![feature(core_intrinsics)]
-#![feature(naked_functions)]
 
 use alloc::format;
 
 use driver::{
     get_logger_instance,
     metrics::RECORD_TYPE_DRIVER_STATUS,
-    status::{
-        CSTATUS_DRIVER_ALREADY_LOADED,
-        CSTATUS_DRIVER_PREINIT_FAILED,
-    },
+    status::CSTATUS_DRIVER_ALREADY_LOADED,
 };
 use imports::IoCreateDriver;
 use kalloc::NonPagedAllocator;
@@ -79,7 +75,7 @@ pub extern "system" fn driver_entry(
                         obfstr!("Failed to create new driver for manually mapped driver:"),
                         code
                     );
-                    CSTATUS_DRIVER_PREINIT_FAILED
+                    code
                 }
             } else {
                 STATUS_SUCCESS
