@@ -1485,6 +1485,7 @@ dependencies = [
  "log",
  "obfstr",
  "paste",
+ "pelite",
  "thiserror-core",
  "utils-kernelbase",
  "winapi",
