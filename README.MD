@@ -9,6 +9,7 @@ This is the implementation for the Valthrun driver protocol as a kernel driver.
 - Visual Studio 2022
 - Windows Kernel Development Kit
 - Cargo Make (`cargo install --force cargo-make`)
+- LLVM (will throw an error building without it)
 
 ### Build the driver
 
